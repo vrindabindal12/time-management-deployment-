@@ -87,6 +87,36 @@ export interface ReportData {
   total_entries: number;
 }
 
+export interface ProjectRate {
+  id: number;
+  project_id: number;
+  designation: string;
+  gross_rate: number;
+  discount: number;
+  net_rate: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: number;
+  client_id: number;
+  name: string;
+  code: string;
+  created_at: string;
+  updated_at: string;
+  rates: ProjectRate[];
+}
+
+export interface Client {
+  id: number;
+  name: string;
+  code: string;
+  created_at: string;
+  updated_at: string;
+  projects?: Project[];
+}
+
 export interface LoginResponse {
   token: string;
   employee: Employee;
@@ -241,6 +271,84 @@ export const employeeApi = {
       punches: data.work_entries,
       total_hours: data.total_hours,
     };
+  },
+};
+
+export const clientApi = {
+  getClients: async (): Promise<Client[]> => {
+    const response = await api.get('/clients');
+    return response.data;
+  },
+
+  createClient: async (name: string, code: string): Promise<Client> => {
+    const response = await api.post('/clients', { name, code });
+    return response.data;
+  },
+
+  getClient: async (clientId: number): Promise<Client> => {
+    const response = await api.get(`/clients/${clientId}`);
+    return response.data;
+  },
+
+  updateClient: async (clientId: number, data: Partial<Pick<Client, 'name' | 'code'>>): Promise<Client> => {
+    const response = await api.put(`/clients/${clientId}`, data);
+    return response.data;
+  },
+
+  deleteClient: async (clientId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/clients/${clientId}`);
+    return response.data;
+  },
+};
+
+export const projectApi = {
+  getClientProjects: async (clientId: number): Promise<Project[]> => {
+    const response = await api.get(`/clients/${clientId}/projects`);
+    return response.data;
+  },
+
+  createProject: async (clientId: number, name: string, code: string): Promise<Project> => {
+    const response = await api.post(`/clients/${clientId}/projects`, { name, code });
+    return response.data;
+  },
+
+  getProject: async (projectId: number): Promise<Project> => {
+    const response = await api.get(`/projects/${projectId}`);
+    return response.data;
+  },
+
+  updateProject: async (projectId: number, data: Partial<Pick<Project, 'name' | 'code'>>): Promise<Project> => {
+    const response = await api.put(`/projects/${projectId}`, data);
+    return response.data;
+  },
+
+  deleteProject: async (projectId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/projects/${projectId}`);
+    return response.data;
+  },
+
+  getProjectRates: async (projectId: number): Promise<ProjectRate[]> => {
+    const response = await api.get(`/projects/${projectId}/rates`);
+    return response.data;
+  },
+
+  createProjectRate: async (projectId: number, designation: string, grossRate: number, discount: number = 0): Promise<ProjectRate> => {
+    const response = await api.post(`/projects/${projectId}/rates`, {
+      designation,
+      gross_rate: grossRate,
+      discount
+    });
+    return response.data;
+  },
+
+  updateProjectRate: async (rateId: number, data: Partial<Pick<ProjectRate, 'designation' | 'gross_rate' | 'discount'>>): Promise<ProjectRate> => {
+    const response = await api.put(`/rates/${rateId}`, data);
+    return response.data;
+  },
+
+  deleteProjectRate: async (rateId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/rates/${rateId}`);
+    return response.data;
   },
 };
 
