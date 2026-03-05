@@ -1,11 +1,14 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import os
+import csv
+import io
 from functools import wraps
+from openpyxl import Workbook
 
 app = Flask(__name__)
 
@@ -62,7 +65,7 @@ class Punch(db.Model):
     project_name = db.Column(db.String(200), nullable=False)
     work_date = db.Column(db.Date, nullable=False)
     hours_worked = db.Column(db.Float, nullable=False)
-    description = db.Column(db.Text, nullable=True)
+    description = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by_admin = db.Column(db.Boolean, default=False)
@@ -80,9 +83,128 @@ class Punch(db.Model):
             'updated_by_admin': self.updated_by_admin
         }
 
+
+def get_filtered_work_entries(employee_id):
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    project_name = (request.args.get('project_name') or '').strip()
+
+    query = Punch.query.filter_by(employee_id=employee_id)
+
+    if start_date:
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            query = query.filter(Punch.work_date >= start)
+        except ValueError:
+            pass
+
+    if end_date:
+        try:
+            end = datetime.strptime(end_date, '%Y-%m-%d').date()
+            query = query.filter(Punch.work_date <= end)
+        except ValueError:
+            pass
+
+    if project_name:
+        query = query.filter(Punch.project_name.ilike(f'%{project_name}%'))
+
+    return query.order_by(Punch.work_date.desc(), Punch.id.desc()).all()
+
+
+def build_export_rows(employee, work_entries):
+    rows = []
+    for entry in work_entries:
+        rows.append({
+            'ID': entry.id,
+            'Employee Name': employee.name,
+            'Employee Email': employee.email,
+            'Project Name': entry.project_name,
+            'Work Date': entry.work_date.isoformat() if entry.work_date else '',
+            'Hours Worked': round(entry.hours_worked, 2),
+            'Description': entry.description or '',
+            'Updated By Admin': 'Yes' if entry.updated_by_admin else 'No',
+            'Created At': entry.created_at.isoformat() if entry.created_at else '',
+            'Updated At': entry.updated_at.isoformat() if entry.updated_at else ''
+        })
+    return rows
+
+
+def create_csv_response(filename, rows):
+    output = io.StringIO()
+    fieldnames = [
+        'ID', 'Employee Name', 'Employee Email', 'Project Name',
+        'Work Date', 'Hours Worked', 'Description', 'Updated By Admin',
+        'Created At', 'Updated At'
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+
+    data = io.BytesIO(output.getvalue().encode('utf-8'))
+    output.close()
+    data.seek(0)
+
+    return send_file(
+        data,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='text/csv'
+    )
+
+
+def create_excel_response(filename, rows):
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = 'Work History'
+
+    headers = [
+        'ID', 'Employee Name', 'Employee Email', 'Project Name',
+        'Work Date', 'Hours Worked', 'Description', 'Updated By Admin',
+        'Created At', 'Updated At'
+    ]
+    worksheet.append(headers)
+
+    for row in rows:
+        worksheet.append([row.get(header, '') for header in headers])
+
+    data = io.BytesIO()
+    workbook.save(data)
+    data.seek(0)
+
+    return send_file(
+        data,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+def export_work_history(employee, work_entries):
+    fmt = (request.args.get('format') or 'csv').strip().lower()
+    rows = build_export_rows(employee, work_entries)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    safe_name = employee.name.replace(' ', '_')
+
+    if fmt == 'excel':
+        filename = f'work_history_{safe_name}_{timestamp}.xlsx'
+        return create_excel_response(filename, rows)
+    if fmt == 'csv':
+        filename = f'work_history_{safe_name}_{timestamp}.csv'
+        return create_csv_response(filename, rows)
+
+    return jsonify({'error': 'Invalid format. Use csv or excel'}), 400
+
 # Initialize database
 with app.app_context():
     db.create_all()
+    # Backfill legacy rows where description may be null from older schema versions.
+    legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
+    if legacy_null_descriptions:
+        for entry in legacy_null_descriptions:
+            entry.description = ''
+        db.session.commit()
+
     # Create admin user if not exists
     admin = Employee.query.filter_by(email=ADMIN_EMAIL).first()
     if not admin:
@@ -231,11 +353,13 @@ def create_employee(current_user):
 @app.route('/api/add-work', methods=['POST'])
 @token_required
 def add_work(current_user):
-    data = request.json
+    data = request.json or {}
+    project_name = (data.get('project_name') or '').strip()
+    description = (data.get('description') or '').strip()
     
     # Validate required fields
-    if not data.get('project_name') or not data.get('hours_worked') or not data.get('work_date'):
-        return jsonify({'error': 'Project name, hours worked, and work date are required'}), 400
+    if not project_name or not data.get('hours_worked') or not data.get('work_date') or not description:
+        return jsonify({'error': 'Project name, description, hours worked, and work date are required'}), 400
     
     try:
         hours_worked = float(data['hours_worked'])
@@ -252,10 +376,10 @@ def add_work(current_user):
     # Employee can only add work for themselves
     work_entry = Punch(
         employee_id=current_user.id,
-        project_name=data['project_name'],
+        project_name=project_name,
         work_date=work_date,
         hours_worked=hours_worked,
-        description=data.get('description', ''),
+        description=description,
         updated_by_admin=False
     )
     
@@ -267,27 +391,7 @@ def add_work(current_user):
 @app.route('/api/my-work', methods=['GET'])
 @token_required
 def get_my_work(current_user):
-    # Get query parameters for filtering
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
-    query = Punch.query.filter_by(employee_id=current_user.id)
-    
-    if start_date:
-        try:
-            start = datetime.strptime(start_date, '%Y-%m-%d').date()
-            query = query.filter(Punch.work_date >= start)
-        except ValueError:
-            pass
-    
-    if end_date:
-        try:
-            end = datetime.strptime(end_date, '%Y-%m-%d').date()
-            query = query.filter(Punch.work_date <= end)
-        except ValueError:
-            pass
-    
-    work_entries = query.order_by(Punch.work_date.desc()).all()
+    work_entries = get_filtered_work_entries(current_user.id)
     total_hours = sum(entry.hours_worked for entry in work_entries)
     
     return jsonify({
@@ -295,6 +399,13 @@ def get_my_work(current_user):
         'work_entries': [entry.to_dict() for entry in work_entries],
         'total_hours': round(total_hours, 2)
     })
+
+
+@app.route('/api/my-work/export', methods=['GET'])
+@token_required
+def export_my_work(current_user):
+    work_entries = get_filtered_work_entries(current_user.id)
+    return export_work_history(current_user, work_entries)
 
 @app.route('/api/work/<int:work_id>', methods=['PUT'])
 @token_required
@@ -309,7 +420,10 @@ def edit_work(current_user, work_id):
     
     # Update fields if provided
     if 'project_name' in data:
-        work_entry.project_name = data['project_name']
+        project_name = (data.get('project_name') or '').strip()
+        if not project_name:
+            return jsonify({'error': 'Project name is required'}), 400
+        work_entry.project_name = project_name
     
     if 'hours_worked' in data:
         try:
@@ -327,7 +441,10 @@ def edit_work(current_user, work_id):
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
     if 'description' in data:
-        work_entry.description = data['description']
+        description = (data.get('description') or '').strip()
+        if not description:
+            return jsonify({'error': 'Description is required'}), 400
+        work_entry.description = description
     
     work_entry.updated_by_admin = True
     work_entry.updated_at = datetime.utcnow()
@@ -404,28 +521,8 @@ def get_employee_work(current_user, employee_id):
     employee = Employee.query.get(employee_id)
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
-    
-    # Get query parameters for filtering
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
-    query = Punch.query.filter_by(employee_id=employee_id)
-    
-    if start_date:
-        try:
-            start = datetime.strptime(start_date, '%Y-%m-%d').date()
-            query = query.filter(Punch.work_date >= start)
-        except ValueError:
-            pass
-    
-    if end_date:
-        try:
-            end = datetime.strptime(end_date, '%Y-%m-%d').date()
-            query = query.filter(Punch.work_date <= end)
-        except ValueError:
-            pass
-    
-    work_entries = query.order_by(Punch.work_date.desc()).all()
+
+    work_entries = get_filtered_work_entries(employee_id)
     total_hours = sum(entry.hours_worked for entry in work_entries)
     
     return jsonify({
@@ -433,6 +530,18 @@ def get_employee_work(current_user, employee_id):
         'work_entries': [entry.to_dict() for entry in work_entries],
         'total_hours': round(total_hours, 2)
     })
+
+
+@app.route('/api/employee/<int:employee_id>/work/export', methods=['GET'])
+@token_required
+@admin_required
+def export_employee_work(current_user, employee_id):
+    employee = Employee.query.get(employee_id)
+    if not employee:
+        return jsonify({'error': 'Employee not found'}), 404
+
+    work_entries = get_filtered_work_entries(employee_id)
+    return export_work_history(employee, work_entries)
 
 @app.route('/api/employee/<int:employee_id>/punches', methods=['GET'])
 @token_required

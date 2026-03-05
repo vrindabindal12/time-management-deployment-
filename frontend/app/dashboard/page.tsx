@@ -55,6 +55,18 @@ export default function Dashboard() {
     setSuccess(null);
     
     try {
+      if (!projectName.trim()) {
+        setError('Project name is required');
+        setLoading(false);
+        return;
+      }
+
+      if (!description.trim()) {
+        setError('Description is required');
+        setLoading(false);
+        return;
+      }
+
       const hours = parseFloat(hoursWorked);
       if (isNaN(hours) || hours <= 0 || hours > 24) {
         setError('Hours must be between 0 and 24');
@@ -182,10 +194,11 @@ export default function Dashboard() {
 
             <div>
               <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                Description (Optional)
+                Description *
               </label>
               <textarea
                 id="description"
+                required
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}

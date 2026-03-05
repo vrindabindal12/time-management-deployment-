@@ -3,13 +3,16 @@
 import { useState, useEffect } from 'react';
 import { employeeApi, getCurrentUser, isAuthenticated } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 export default function MyHistory() {
   const [user, setUser] = useState<any>(null);
   const [workData, setWorkData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState<'csv' | 'excel' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -23,11 +26,19 @@ export default function MyHistory() {
     loadWorkHistory();
   }, [router]);
 
-  const loadWorkHistory = async () => {
+  const loadWorkHistory = async (filters?: { startDate?: string; endDate?: string; projectName?: string }) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await employeeApi.getMyWork();
+      const effectiveStartDate = (filters?.startDate ?? startDate) || undefined;
+      const effectiveEndDate = (filters?.endDate ?? endDate) || undefined;
+      const effectiveProjectName = (filters?.projectName ?? projectFilter.trim()) || undefined;
+
+      const data = await employeeApi.getMyWork(
+        effectiveStartDate,
+        effectiveEndDate,
+        effectiveProjectName
+      );
       setWorkData(data);
     } catch (err) {
       setError('Failed to load work history');
@@ -38,6 +49,23 @@ export default function MyHistory() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
+  };
+
+  const handleDownload = async (format: 'csv' | 'excel') => {
+    setDownloading(format);
+    setError(null);
+    try {
+      await employeeApi.exportMyWork(
+        format,
+        startDate || undefined,
+        endDate || undefined,
+        projectFilter.trim() || undefined
+      );
+    } catch (err) {
+      setError(`Failed to download ${format.toUpperCase()} file`);
+    } finally {
+      setDownloading(null);
+    }
   };
 
   if (!user) {
@@ -66,9 +94,72 @@ export default function MyHistory() {
           </div>
         ) : workData ? (
           <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">Filters</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="text"
+                  value={projectFilter}
+                  onChange={(e) => setProjectFilter(e.target.value)}
+                  placeholder="Project name"
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => loadWorkHistory()}
+                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={() => {
+                      setStartDate('');
+                      setEndDate('');
+                      setProjectFilter('');
+                      loadWorkHistory({ startDate: '', endDate: '', projectName: '' });
+                    }}
+                    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">{workData.employee.name}</h2>
-              <p className="text-gray-600 mb-4">{workData.employee.email}</p>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">{workData.employee.name}</h2>
+                  <p className="text-gray-600">{workData.employee.email}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDownload('csv')}
+                    disabled={downloading !== null}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition disabled:bg-gray-400"
+                  >
+                    {downloading === 'csv' ? 'Downloading CSV...' : 'Download CSV'}
+                  </button>
+                  <button
+                    onClick={() => handleDownload('excel')}
+                    disabled={downloading !== null}
+                    className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg transition disabled:bg-gray-400"
+                  >
+                    {downloading === 'excel' ? 'Downloading Excel...' : 'Download Excel'}
+                  </button>
+                </div>
+              </div>
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-2xl font-bold text-blue-600">
                   Total Hours: {workData.total_hours.toFixed(2)}

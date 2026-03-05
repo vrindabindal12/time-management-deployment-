@@ -9,6 +9,17 @@ const api = axios.create({
   },
 });
 
+const triggerFileDownload = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 // Add token to requests if available
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
@@ -62,6 +73,13 @@ export interface EmployeeWork {
   total_hours: number;
 }
 
+// Legacy compatibility type used by older history page.
+export interface EmployeePunches {
+  employee: Employee;
+  punches: any[];
+  total_hours: number;
+}
+
 export interface ReportData {
   employee: Employee;
   total_hours: number;
@@ -110,22 +128,44 @@ export const employeeApi = {
     return response.data;
   },
 
-  getMyWork: async (startDate?: string, endDate?: string): Promise<EmployeeWork> => {
+  getMyWork: async (startDate?: string, endDate?: string, projectName?: string): Promise<EmployeeWork> => {
     const params: any = {};
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
+    if (projectName) params.project_name = projectName;
     const response = await api.get('/my-work', { params });
     return response.data;
   },
 
-  addWork: async (projectName: string, workDate: string, hoursWorked: number, description?: string): Promise<WorkEntry> => {
+  addWork: async (projectName: string, workDate: string, hoursWorked: number, description: string): Promise<WorkEntry> => {
     const response = await api.post('/add-work', {
-      project_name: projectName,
+      project_name: projectName.trim(),
       work_date: workDate,
       hours_worked: hoursWorked,
-      description: description || ''
+      description: description.trim()
     });
     return response.data;
+  },
+
+  exportMyWork: async (
+    format: 'csv' | 'excel' = 'csv',
+    startDate?: string,
+    endDate?: string,
+    projectName?: string
+  ): Promise<void> => {
+    const params: any = { format };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    if (projectName) params.project_name = projectName;
+
+    const response = await api.get('/my-work/export', {
+      params,
+      responseType: 'blob',
+    });
+
+    const extension = format === 'excel' ? 'xlsx' : 'csv';
+    const filename = `my_work_history.${extension}`;
+    triggerFileDownload(response.data, filename);
   },
 
   getEmployeeStatus: async (employeeId: number): Promise<EmployeeStatus> => {
@@ -133,12 +173,40 @@ export const employeeApi = {
     return response.data;
   },
 
-  getEmployeeWork: async (employeeId: number, startDate?: string, endDate?: string): Promise<EmployeeWork> => {
+  getEmployeeWork: async (
+    employeeId: number,
+    startDate?: string,
+    endDate?: string,
+    projectName?: string
+  ): Promise<EmployeeWork> => {
     const params: any = {};
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
+    if (projectName) params.project_name = projectName;
     const response = await api.get(`/employee/${employeeId}/work`, { params });
     return response.data;
+  },
+
+  exportEmployeeWork: async (
+    employeeId: number,
+    format: 'csv' | 'excel' = 'csv',
+    startDate?: string,
+    endDate?: string,
+    projectName?: string
+  ): Promise<void> => {
+    const params: any = { format };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    if (projectName) params.project_name = projectName;
+
+    const response = await api.get(`/employee/${employeeId}/work/export`, {
+      params,
+      responseType: 'blob',
+    });
+
+    const extension = format === 'excel' ? 'xlsx' : 'csv';
+    const filename = `employee_${employeeId}_work_history.${extension}`;
+    triggerFileDownload(response.data, filename);
   },
 
   editWork: async (workId: number, data: Partial<WorkEntry>): Promise<WorkEntry> => {
@@ -157,21 +225,33 @@ export const employeeApi = {
   },
 
   // Backward compatibility
-  getMyPunches: async (): Promise<EmployeeWork> => {
-    return employeeApi.getMyWork();
+  getMyPunches: async (): Promise<EmployeePunches> => {
+    const data = await employeeApi.getMyWork();
+    return {
+      employee: data.employee,
+      punches: data.work_entries,
+      total_hours: data.total_hours,
+    };
   },
 
-  getEmployeePunches: async (employeeId: number): Promise<EmployeeWork> => {
-    return employeeApi.getEmployeeWork(employeeId);
+  getEmployeePunches: async (employeeId: number): Promise<EmployeePunches> => {
+    const data = await employeeApi.getEmployeeWork(employeeId);
+    return {
+      employee: data.employee,
+      punches: data.work_entries,
+      total_hours: data.total_hours,
+    };
   },
 };
 
 export const getCurrentUser = (): Employee | null => {
+  if (typeof window === 'undefined') return null;
   const userStr = localStorage.getItem('user');
   return userStr ? JSON.parse(userStr) : null;
 };
 
 export const isAuthenticated = (): boolean => {
+  if (typeof window === 'undefined') return false;
   return !!localStorage.getItem('token');
 };
 

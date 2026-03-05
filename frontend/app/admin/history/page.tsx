@@ -2,16 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { employeeApi, Employee, isAuthenticated, isAdmin as checkIsAdmin } from '@/lib/api';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function AdminHistory() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeeNameFilter, setEmployeeNameFilter] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<number | null>(null);
   const [workData, setWorkData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState<'csv' | 'excel' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
   
   // Edit modal state
   const [editingEntry, setEditingEntry] = useState<any>(null);
@@ -57,11 +61,23 @@ export default function AdminHistory() {
     }
   };
 
-  const loadWorkHistory = async (employeeId: number) => {
+  const loadWorkHistory = async (
+    employeeId: number,
+    filters?: { startDate?: string; endDate?: string; projectName?: string }
+  ) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await employeeApi.getEmployeeWork(employeeId);
+      const effectiveStartDate = (filters?.startDate ?? startDate) || undefined;
+      const effectiveEndDate = (filters?.endDate ?? endDate) || undefined;
+      const effectiveProjectName = (filters?.projectName ?? projectFilter.trim()) || undefined;
+
+      const data = await employeeApi.getEmployeeWork(
+        employeeId,
+        effectiveStartDate,
+        effectiveEndDate,
+        effectiveProjectName
+      );
       setWorkData(data);
     } catch (err) {
       setError('Failed to load work history');
@@ -146,6 +162,38 @@ export default function AdminHistory() {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const handleDownload = async (format: 'csv' | 'excel') => {
+    if (!selectedEmployee) {
+      setError('Please select an employee first');
+      return;
+    }
+
+    setDownloading(format);
+    setError(null);
+    try {
+      await employeeApi.exportEmployeeWork(
+        selectedEmployee,
+        format,
+        startDate || undefined,
+        endDate || undefined,
+        projectFilter.trim() || undefined
+      );
+    } catch (err) {
+      setError(`Failed to download ${format.toUpperCase()} file`);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const filteredEmployees = employees.filter((employee) => {
+    if (!employeeNameFilter.trim()) return true;
+    const query = employeeNameFilter.trim().toLowerCase();
+    return (
+      employee.name.toLowerCase().includes(query) ||
+      employee.email.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
       <div className="max-w-6xl mx-auto">
@@ -166,17 +214,71 @@ export default function AdminHistory() {
         {/* Employee Selection */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Employee</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+            <input
+              type="text"
+              value={employeeNameFilter}
+              onChange={(e) => setEmployeeNameFilter(e.target.value)}
+              placeholder="Employee name or email"
+              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="text"
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              placeholder="Project name"
+              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
           <select
             value={selectedEmployee || ''}
-            onChange={(e) => setSelectedEmployee(Number(e.target.value))}
+            onChange={(e) => setSelectedEmployee(e.target.value ? Number(e.target.value) : null)}
             className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {employees.map((employee) => (
+            {filteredEmployees.map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.name} ({employee.email})
               </option>
             ))}
           </select>
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => {
+                if (selectedEmployee) {
+                  loadWorkHistory(selectedEmployee);
+                }
+              }}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition"
+            >
+              Apply Filters
+            </button>
+            <button
+              onClick={() => {
+                setEmployeeNameFilter('');
+                setStartDate('');
+                setEndDate('');
+                setProjectFilter('');
+                if (selectedEmployee) {
+                  loadWorkHistory(selectedEmployee, { startDate: '', endDate: '', projectName: '' });
+                }
+              }}
+              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition"
+            >
+              Reset Filters
+            </button>
+          </div>
         </div>
 
         {/* Work Records */}
@@ -187,10 +289,30 @@ export default function AdminHistory() {
         ) : workData ? (
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                {workData.employee.name}
-              </h2>
-              <p className="text-gray-600 mb-4">{workData.employee.email}</p>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                    {workData.employee.name}
+                  </h2>
+                  <p className="text-gray-600">{workData.employee.email}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDownload('csv')}
+                    disabled={downloading !== null || loading}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition disabled:bg-gray-400"
+                  >
+                    {downloading === 'csv' ? 'Downloading CSV...' : 'Download CSV'}
+                  </button>
+                  <button
+                    onClick={() => handleDownload('excel')}
+                    disabled={downloading !== null || loading}
+                    className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg transition disabled:bg-gray-400"
+                  >
+                    {downloading === 'excel' ? 'Downloading Excel...' : 'Download Excel'}
+                  </button>
+                </div>
+              </div>
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-2xl font-bold text-blue-600">
                   Total Hours: {workData.total_hours.toFixed(2)}
