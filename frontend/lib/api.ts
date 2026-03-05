@@ -53,6 +53,8 @@ export interface WorkEntry {
   id: number;
   employee_id: number;
   project_name: string;
+  project_code: string | null;
+  project_id: number | null;
   work_date: string;
   hours_worked: number;
   description: string;
@@ -167,13 +169,14 @@ export const employeeApi = {
     return response.data;
   },
 
-  addWork: async (projectName: string, workDate: string, hoursWorked: number, description: string): Promise<WorkEntry> => {
-    const response = await api.post('/add-work', {
-      project_name: projectName.trim(),
-      work_date: workDate,
-      hours_worked: hoursWorked,
-      description: description.trim()
-    });
+  addWork: async (workData: {
+    project_name?: string;
+    project_code?: string;
+    work_date: string;
+    hours_worked: number;
+    description: string;
+  }): Promise<WorkEntry> => {
+    const response = await api.post('/add-work', workData);
     return response.data;
   },
 
@@ -251,6 +254,16 @@ export const employeeApi = {
 
   getReport: async (): Promise<ReportData[]> => {
     const response = await api.get('/report');
+    return response.data;
+  },
+
+  getProjectByCode: async (code: string): Promise<Project> => {
+    const response = await api.get(`/projects/by-code/${code.trim().toUpperCase()}`);
+    return response.data;
+  },
+
+  getAllProjects: async (): Promise<Project[]> => {
+    const response = await api.get('/projects/all');
     return response.data;
   },
 

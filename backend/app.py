@@ -63,6 +63,8 @@ class Punch(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     project_name = db.Column(db.String(200), nullable=False)
+    project_code = db.Column(db.String(50), nullable=True)  # New field for project code
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)  # New field for project FK
     work_date = db.Column(db.Date, nullable=False)
     hours_worked = db.Column(db.Float, nullable=False)
     description = db.Column(db.Text, nullable=False)
@@ -75,6 +77,8 @@ class Punch(db.Model):
             'id': self.id,
             'employee_id': self.employee_id,
             'project_name': self.project_name,
+            'project_code': self.project_code,
+            'project_id': self.project_id,
             'work_date': self.work_date.isoformat() if self.work_date else None,
             'hours_worked': self.hours_worked,
             'description': self.description,
@@ -415,12 +419,27 @@ def create_employee(current_user):
 @token_required
 def add_work(current_user):
     data = request.json or {}
+    
+    # Support both project_name (legacy) and project_code (new)
+    project_code = (data.get('project_code') or '').strip()
     project_name = (data.get('project_name') or '').strip()
     description = (data.get('description') or '').strip()
     
+    # Determine how to get project info
+    project_id = None
+    if project_code:
+        # Look up project by code
+        project = Project.query.filter_by(code=project_code.upper()).first()
+        if not project:
+            return jsonify({'error': f'Project with code {project_code} not found'}), 400
+        project_name = project.name
+        project_id = project.id
+    elif not project_name:
+        return jsonify({'error': 'Either project_name or project_code is required'}), 400
+    
     # Validate required fields
-    if not project_name or not data.get('hours_worked') or not data.get('work_date') or not description:
-        return jsonify({'error': 'Project name, description, hours worked, and work date are required'}), 400
+    if not data.get('hours_worked') or not data.get('work_date') or not description:
+        return jsonify({'error': 'Description, hours worked, and work date are required'}), 400
     
     try:
         hours_worked = float(data['hours_worked'])
@@ -438,6 +457,8 @@ def add_work(current_user):
     work_entry = Punch(
         employee_id=current_user.id,
         project_name=project_name,
+        project_code=project_code if project_code else None,
+        project_id=project_id,
         work_date=work_date,
         hours_worked=hours_worked,
         description=description,
@@ -479,8 +500,19 @@ def edit_work(current_user, work_id):
     
     data = request.json
     
-    # Update fields if provided
-    if 'project_name' in data:
+    # Handle project_code first (takes priority over project_name)
+    if 'project_code' in data:
+        project_code = (data.get('project_code') or '').strip()
+        if project_code:
+            project = Project.query.filter_by(code=project_code.upper()).first()
+            if not project:
+                return jsonify({'error': f'Project with code {project_code} not found'}), 400
+            work_entry.project_code = project_code.upper()
+            work_entry.project_name = project.name
+            work_entry.project_id = project.id
+    
+    # Update project_name if provided (and no project_code)
+    if 'project_name' in data and 'project_code' not in data:
         project_name = (data.get('project_name') or '').strip()
         if not project_name:
             return jsonify({'error': 'Project name is required'}), 400
@@ -939,6 +971,35 @@ def delete_project_rate(current_user, rate_id):
     db.session.commit()
     
     return jsonify({'message': 'Rate deleted successfully'}), 200
+
+# ==================== PROJECT CODE LOOKUP ROUTES ====================
+@app.route('/api/projects/by-code/<code>', methods=['GET'])
+@token_required
+def get_project_by_code(current_user, code):
+    """Get project by its code"""
+    project = Project.query.filter_by(code=code.strip().upper()).first()
+    
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    
+    return jsonify(project.to_dict())
+
+@app.route('/api/projects/all', methods=['GET'])
+@token_required
+def get_all_projects(current_user):
+    """Get all projects (for dropdown lists)"""
+    projects = Project.query.all()
+    result = []
+    for project in projects:
+        client = Client.query.get(project.client_id)
+        result.append({
+            'id': project.id,
+            'code': project.code,
+            'name': project.name,
+            'client_id': project.client_id,
+            'client_name': client.name if client else None,
+        })
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

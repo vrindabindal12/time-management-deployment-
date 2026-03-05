@@ -13,7 +13,11 @@ export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   
   // Form fields
+  const [projectCode, setProjectCode] = useState('');
   const [projectName, setProjectName] = useState('');
+  const [projects, setProjects] = useState<any[]>([]);
+  const [filteredProjects, setFilteredProjects] = useState<any[]>([]);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
   const [hoursWorked, setHoursWorked] = useState('');
   const [description, setDescription] = useState('');
@@ -34,6 +38,7 @@ export default function Dashboard() {
 
     setUser(currentUser);
     loadStatus();
+    loadProjects();
 
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -48,6 +53,40 @@ export default function Dashboard() {
     }
   };
 
+  const loadProjects = async () => {
+    try {
+      const data = await employeeApi.getAllProjects();
+      setProjects(data);
+    } catch (err: any) {
+      console.error('Failed to load projects:', err);
+    }
+  };
+
+  const handleProjectCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const code = e.target.value;
+    setProjectCode(code);
+    
+    if (!code.trim()) {
+      setProjectName('');
+      setFilteredProjects([]);
+      setShowProjectDropdown(false);
+      return;
+    }
+    
+    const filtered = projects.filter(p => 
+      p.code.toUpperCase().includes(code.toUpperCase())
+    );
+    setFilteredProjects(filtered);
+    setShowProjectDropdown(filtered.length > 0);
+  };
+
+  const selectProject = (project: any) => {
+    setProjectCode(project.code);
+    setProjectName(project.name);
+    setFilteredProjects([]);
+    setShowProjectDropdown(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -55,8 +94,14 @@ export default function Dashboard() {
     setSuccess(null);
     
     try {
+      if (!projectCode.trim()) {
+        setError('Project code is required');
+        setLoading(false);
+        return;
+      }
+
       if (!projectName.trim()) {
-        setError('Project name is required');
+        setError('Please select a valid project');
         setLoading(false);
         return;
       }
@@ -74,9 +119,15 @@ export default function Dashboard() {
         return;
       }
 
-      await employeeApi.addWork(projectName, workDate, hours, description);
+      await employeeApi.addWork({
+        project_code: projectCode.trim(),
+        work_date: workDate,
+        hours_worked: hours,
+        description: description.trim()
+      });
       
       // Reset form
+      setProjectCode('');
       setProjectName('');
       setWorkDate(new Date().toISOString().split('T')[0]);
       setHoursWorked('');
@@ -142,20 +193,50 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Add Work Entry</h2>
           
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="projectName" className="block text-sm font-medium text-gray-700 mb-1">
-                Project Name *
+            <div className="relative">
+              <label htmlFor="projectCode" className="block text-sm font-medium text-gray-700 mb-1">
+                Project Code *
               </label>
               <input
-                id="projectName"
+                id="projectCode"
                 type="text"
                 required
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
+                value={projectCode}
+                onChange={handleProjectCodeChange}
+                onFocus={() => projectCode && setShowProjectDropdown(true)}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter project name"
+                placeholder="Enter or select project code (e.g., LD-001-BD001)"
+                autoComplete="off"
               />
+              
+              {/* Project Selection Dropdown */}
+              {showProjectDropdown && filteredProjects.length > 0 && (
+                <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 z-10">
+                  {filteredProjects.map((project) => (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => selectProject(project)}
+                      className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                    >
+                      <div className="font-semibold text-gray-800">{project.code}</div>
+                      <div className="text-sm text-gray-600">{project.name}</div>
+                      {project.client_name && (
+                        <div className="text-xs text-gray-500">{project.client_name}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {/* Auto-populated Project Name */}
+            {projectName && (
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                <p className="text-sm text-gray-600">Selected Project:</p>
+                <p className="font-semibold text-blue-900">{projectName}</p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
