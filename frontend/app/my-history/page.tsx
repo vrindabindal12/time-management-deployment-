@@ -70,8 +70,8 @@ export default function MyHistory() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-cyan-100 flex items-center justify-center px-4">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 backdrop-blur p-8 shadow-xl">
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="glass-panel rounded-2xl p-8">
           <p className="text-slate-600 font-medium">Loading your history...</p>
         </div>
       </div>
@@ -79,7 +79,7 @@ export default function MyHistory() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_10%_10%,#e0f2fe_0%,#f8fafc_35%,#eef2ff_70%,#f5f3ff_100%)] py-8 px-4">
+    <div className="min-h-screen py-8 px-4">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6">
           <p className="text-sm font-semibold tracking-[0.24em] text-cyan-700 uppercase">Work Journal</p>
@@ -88,17 +88,17 @@ export default function MyHistory() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4">
+          <div className="glass-panel bg-red-50/80 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="bg-white/80 backdrop-blur rounded-2xl shadow-xl border border-white p-10 text-center">
+          <div className="glass-panel rounded-2xl p-10 text-center">
             <p className="text-slate-600 font-medium">Loading work entries...</p>
           </div>
         ) : workData ? (
-          <div className="rounded-3xl border border-white/60 bg-white/85 backdrop-blur-xl shadow-2xl shadow-slate-200/70 overflow-hidden">
+          <div className="glass-panel rounded-3xl overflow-hidden">
             <div className="p-6 md:p-8 border-b border-slate-100 bg-gradient-to-r from-white to-slate-50">
               <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                 <div>
@@ -135,7 +135,7 @@ export default function MyHistory() {
             </div>
 
             <div className="p-6 md:p-8">
-              <div className="mb-6 p-4 md:p-5 rounded-2xl border border-slate-200 bg-slate-50/70">
+              <div className="mb-6 p-4 md:p-5 rounded-2xl glass-subtle border border-white/60">
                 <h3 className="text-sm font-bold tracking-[0.18em] uppercase text-slate-700 mb-4">Filters</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <input
@@ -160,7 +160,7 @@ export default function MyHistory() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => loadWorkHistory()}
-                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-white px-3 py-2.5 rounded-xl transition font-semibold"
+                    className="flex-1 glass-primary-btn hover:brightness-95 text-white px-3 py-2.5 rounded-xl transition font-semibold"
                   >
                     Apply
                   </button>
@@ -171,7 +171,7 @@ export default function MyHistory() {
                       setProjectFilter('');
                       loadWorkHistory({ startDate: '', endDate: '', projectName: '' });
                     }}
-                    className="flex-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-3 py-2.5 rounded-xl transition font-semibold"
+                    className="flex-1 glass-subtle border border-white/60 hover:bg-white/80 text-slate-700 px-3 py-2.5 rounded-xl transition font-semibold"
                   >
                     Reset
                   </button>

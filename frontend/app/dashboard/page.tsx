@@ -144,31 +144,33 @@ export default function Dashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <p className="text-gray-600">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="glass-panel rounded-2xl p-8">
+          <p className="text-slate-600">Loading...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+    <div className="min-h-screen py-8 px-4">
       <div className="max-w-4xl mx-auto">
         {/* Welcome Message */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">Welcome, {user.name}!</h2>
-          <p className="text-gray-600 mt-1">{user.email}</p>
-          <p className="text-gray-500 text-sm mt-2">Current Time: {currentTime.toLocaleString()}</p>
+        <div className="glass-panel rounded-3xl p-6 mb-6">
+          <h2 className="text-2xl font-black text-slate-900">Welcome, {user.name}!</h2>
+          <p className="text-slate-600 mt-1">{user.email}</p>
+          <p className="text-slate-500 text-sm mt-2">Current Time: {currentTime.toLocaleString()}</p>
         </div>
 
         {/* Today's Summary */}
         {status && (
-          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Today's Work</h2>
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-2xl font-bold text-blue-600">
+          <div className="glass-panel rounded-3xl p-6 mb-6">
+            <h2 className="text-xl font-semibold text-slate-800 mb-4">Today's Work</h2>
+            <div className="glass-subtle p-4 rounded-xl">
+              <p className="text-2xl font-bold text-blue-700">
                 Total Hours Today: {status.today_hours.toFixed(2)}
               </p>
-              <p className="text-sm text-gray-600 mt-2">
+              <p className="text-sm text-slate-600 mt-2">
                 {status.today_entries.length} {status.today_entries.length === 1 ? 'entry' : 'entries'} logged
               </p>
             </div>
@@ -177,20 +179,20 @@ export default function Dashboard() {
 
         {/* Success/Error Messages */}
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="glass-panel bg-red-50/80 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4">
             {error}
           </div>
         )}
         
         {success && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+          <div className="glass-panel bg-emerald-50/80 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl mb-4">
             {success}
           </div>
         )}
 
         {/* Add Work Entry Form */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Add Work Entry</h2>
+        <div className="glass-panel rounded-3xl p-6 mb-6">
+          <h2 className="text-xl font-semibold text-slate-800 mb-4">Add Work Entry</h2>
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="relative">
@@ -204,25 +206,25 @@ export default function Dashboard() {
                 value={projectCode}
                 onChange={handleProjectCodeChange}
                 onFocus={() => projectCode && setShowProjectDropdown(true)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-300 bg-white/80 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter or select project code (e.g., LD-001-BD001)"
                 autoComplete="off"
               />
               
               {/* Project Selection Dropdown */}
               {showProjectDropdown && filteredProjects.length > 0 && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 z-10">
+                <div className="absolute top-full left-0 right-0 glass-panel border border-white/70 rounded-xl mt-1 z-10 overflow-hidden">
                   {filteredProjects.map((project) => (
                     <button
                       key={project.id}
                       type="button"
                       onClick={() => selectProject(project)}
-                      className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                      className="w-full text-left px-4 py-2 hover:bg-blue-50/60 border-b border-white/60 last:border-b-0"
                     >
-                      <div className="font-semibold text-gray-800">{project.code}</div>
-                      <div className="text-sm text-gray-600">{project.name}</div>
+                      <div className="font-semibold text-slate-800">{project.code}</div>
+                      <div className="text-sm text-slate-600">{project.name}</div>
                       {project.client_name && (
-                        <div className="text-xs text-gray-500">{project.client_name}</div>
+                        <div className="text-xs text-slate-500">{project.client_name}</div>
                       )}
                     </button>
                   ))}
@@ -232,8 +234,8 @@ export default function Dashboard() {
 
             {/* Auto-populated Project Name */}
             {projectName && (
-              <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                <p className="text-sm text-gray-600">Selected Project:</p>
+              <div className="glass-subtle p-3 rounded-xl border border-white/60">
+                <p className="text-sm text-slate-600">Selected Project:</p>
                 <p className="font-semibold text-blue-900">{projectName}</p>
               </div>
             )}
@@ -250,7 +252,7 @@ export default function Dashboard() {
                   value={workDate}
                   onChange={(e) => setWorkDate(e.target.value)}
                   max={new Date().toISOString().split('T')[0]}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-slate-300 bg-white/80 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -267,7 +269,7 @@ export default function Dashboard() {
                   required
                   value={hoursWorked}
                   onChange={(e) => setHoursWorked(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-slate-300 bg-white/80 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g., 8"
                 />
               </div>
@@ -283,7 +285,7 @@ export default function Dashboard() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-300 bg-white/80 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="What did you work on?"
               />
             </div>
@@ -291,13 +293,13 @@ export default function Dashboard() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="w-full glass-primary-btn hover:brightness-95 text-white font-semibold py-3 px-6 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Submitting...' : 'Submit Work Entry'}
             </button>
           </form>
 
-          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="mt-4 p-3 glass-subtle border border-white/60 rounded-xl">
             <p className="text-sm text-yellow-800">
               <strong>Note:</strong> Once submitted, you cannot edit your entries. Only admins can make changes.
             </p>

@@ -21,6 +21,16 @@ export default function AdminDashboard() {
   const [employeeStatus, setEmployeeStatus] = useState<any>(null);
   const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false);
   const [employeeForm, setEmployeeForm] = useState({ name: '', email: '', password: '' });
+  const [deleteEmployeeModal, setDeleteEmployeeModal] = useState<{
+    open: boolean;
+    employeeId: number | null;
+    employeeName: string;
+  }>({
+    open: false,
+    employeeId: null,
+    employeeName: '',
+  });
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
 
   // Client & Project states
   const [clients, setClients] = useState<Client[]>([]);
@@ -143,6 +153,53 @@ export default function AdminDashboard() {
       await loadEmployees();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create employee');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openDeleteEmployeeModal = (employeeId: number, employeeName: string) => {
+    setDeleteEmployeeModal({
+      open: true,
+      employeeId,
+      employeeName,
+    });
+    setDeleteConfirmationText('');
+  };
+
+  const closeDeleteEmployeeModal = () => {
+    setDeleteEmployeeModal({
+      open: false,
+      employeeId: null,
+      employeeName: '',
+    });
+    setDeleteConfirmationText('');
+  };
+
+  const handleDeleteEmployee = async () => {
+    if (!deleteEmployeeModal.employeeId) return;
+
+    if (deleteConfirmationText !== 'DELETE') {
+      setError('Please type DELETE exactly to confirm.');
+      clearError();
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await employeeApi.deleteEmployee(deleteEmployeeModal.employeeId);
+      await loadEmployees();
+
+      if (selectedEmployee === deleteEmployeeModal.employeeId) {
+        setSelectedEmployee(null);
+        setEmployeeStatus(null);
+      }
+      closeDeleteEmployeeModal();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete employee');
+      clearError();
     } finally {
       setLoading(false);
     }
@@ -274,38 +331,40 @@ export default function AdminDashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <p className="text-gray-600">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="glass-panel rounded-2xl p-8">
+          <p className="text-slate-700 font-medium">Loading...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+    <div className="min-h-screen py-8 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Welcome Message */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">Admin Dashboard</h2>
-          <p className="text-gray-600 mt-1">Welcome, {user.name}</p>
-          <p className="text-gray-500 text-sm mt-2">Current Time: {currentTime.toLocaleString()}</p>
+        <div className="glass-panel rounded-3xl p-6 mb-6">
+          <h2 className="text-3xl font-black text-slate-900">Admin Dashboard</h2>
+          <p className="text-slate-600 mt-1">Welcome, {user.name}</p>
+          <p className="text-slate-500 text-sm mt-2">Current Time: {currentTime.toLocaleString()}</p>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="glass-panel bg-red-50/80 border border-red-200 text-red-700 px-4 py-3 rounded-2xl mb-4">
             {error}
           </div>
         )}
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow-lg mb-6 border-b border-gray-200">
+        <div className="glass-panel rounded-2xl mb-6 border-b border-white/50">
           <div className="flex">
             <button
               onClick={() => setActiveTab('employees')}
               className={`flex-1 px-6 py-4 font-semibold transition text-center ${
                 activeTab === 'employees'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800 border-b-2 border-transparent'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
               }`}
             >
               Employee Management
@@ -314,8 +373,8 @@ export default function AdminDashboard() {
               onClick={() => setActiveTab('clients')}
               className={`flex-1 px-6 py-4 font-semibold transition text-center ${
                 activeTab === 'clients'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800 border-b-2 border-transparent'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
               }`}
             >
               Clients & Projects
@@ -327,19 +386,19 @@ export default function AdminDashboard() {
         {activeTab === 'employees' && (
           <div className="space-y-6">
             {/* Add Employee Section */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="glass-panel rounded-3xl p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-800">Employee Management</h2>
+                <h2 className="text-xl font-semibold text-slate-800">Employee Management</h2>
                 <button
                   onClick={() => setShowAddEmployeeForm(!showAddEmployeeForm)}
-                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition"
+                  className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition"
                 >
                   {showAddEmployeeForm ? 'Cancel' : '+ Add New Employee'}
                 </button>
               </div>
 
               {showAddEmployeeForm && (
-                <form onSubmit={handleAddEmployee} className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <form onSubmit={handleAddEmployee} className="mb-6 p-4 glass-subtle rounded-2xl border border-white/60">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <input
                       type="text"
@@ -347,7 +406,7 @@ export default function AdminDashboard() {
                       value={employeeForm.name}
                       onChange={(e) => setEmployeeForm({ ...employeeForm, name: e.target.value })}
                       required
-                      className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="border border-slate-300 rounded-xl px-4 py-2 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <input
                       type="email"
@@ -355,7 +414,7 @@ export default function AdminDashboard() {
                       value={employeeForm.email}
                       onChange={(e) => setEmployeeForm({ ...employeeForm, email: e.target.value })}
                       required
-                      className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="border border-slate-300 rounded-xl px-4 py-2 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <input
                       type="password"
@@ -364,13 +423,13 @@ export default function AdminDashboard() {
                       onChange={(e) => setEmployeeForm({ ...employeeForm, password: e.target.value })}
                       required
                       minLength={6}
-                      className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="border border-slate-300 rounded-xl px-4 py-2 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition disabled:bg-gray-400"
+                    className="glass-primary-btn hover:brightness-95 text-white px-6 py-2 rounded-xl transition disabled:opacity-50"
                   >
                     {loading ? 'Adding...' : 'Add Employee'}
                   </button>
@@ -380,35 +439,49 @@ export default function AdminDashboard() {
               {/* Employee List */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {employees.map((employee) => (
-                  <button
+                  <div
                     key={employee.id}
                     onClick={() => setSelectedEmployee(employee.id)}
-                    className={`text-left p-4 rounded-lg border-2 transition ${
+                    className={`text-left p-4 rounded-lg border-2 transition cursor-pointer ${
                       selectedEmployee === employee.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300'
+                        ? 'border-blue-500 bg-blue-50/70'
+                        : 'border-white/60 bg-white/45 hover:border-blue-300'
                     }`}
                   >
-                    <p className="font-semibold text-gray-800">{employee.name}</p>
-                    <p className="text-sm text-gray-600">{employee.email}</p>
-                    {employee.is_admin && (
-                      <span className="inline-block mt-2 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
-                        Admin
-                      </span>
-                    )}
-                  </button>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-800">{employee.name}</p>
+                        <p className="text-sm text-gray-600">{employee.email}</p>
+                        {employee.is_admin && (
+                          <span className="inline-block mt-2 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                            Admin
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDeleteEmployeeModal(employee.id, employee.name);
+                        }}
+                        disabled={loading}
+                        className="px-3 py-1 text-xs font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
 
               {employees.length === 0 && !showAddEmployeeForm && (
-                <p className="text-gray-500 text-center py-4">No employees found.</p>
+                <p className="text-slate-500 text-center py-4">No employees found.</p>
               )}
             </div>
 
             {/* Employee Status */}
             {employeeStatus && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              <div className="glass-panel rounded-3xl p-6">
+                <h2 className="text-xl font-semibold text-slate-800 mb-4">
                   {employeeStatus.employee.name}'s Status
                 </h2>
                 <div className="mb-4">
@@ -424,11 +497,11 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 {employeeStatus.today_entries.length > 0 && (
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <p className="text-gray-700 font-semibold mb-2">Today's Entries:</p>
+                  <div className="glass-subtle p-4 rounded-xl">
+                    <p className="text-slate-700 font-semibold mb-2">Today's Entries:</p>
                     <ul className="space-y-2">
                       {employeeStatus.today_entries.map((entry: any) => (
-                        <li key={entry.id} className="text-sm text-gray-600">
+                        <li key={entry.id} className="text-sm text-slate-600">
                           <span className="font-medium">{entry.project_name}</span> - {entry.hours_worked}h
                         </li>
                       ))}
@@ -444,19 +517,19 @@ export default function AdminDashboard() {
         {activeTab === 'clients' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* LEFT: Clients */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="glass-panel rounded-3xl p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-800">Clients</h2>
+                <h2 className="text-xl font-semibold text-slate-800">Clients</h2>
                 <button
                   onClick={() => setShowAddClientForm(!showAddClientForm)}
-                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm transition"
+                  className="glass-primary-btn hover:brightness-95 text-white px-3 py-1 rounded text-sm transition"
                 >
                   {showAddClientForm ? 'Cancel' : '+ Add'}
                 </button>
               </div>
 
               {showAddClientForm && (
-                <form onSubmit={handleAddClient} className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                <form onSubmit={handleAddClient} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-bold text-yellow-700 mb-1">CLIENT NAME</label>
@@ -466,7 +539,7 @@ export default function AdminDashboard() {
                         value={clientForm.name}
                         onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
                         required
-                        className="w-full border border-yellow-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-yellow-500"
                       />
                     </div>
                     <div>
@@ -477,14 +550,14 @@ export default function AdminDashboard() {
                         value={clientForm.code}
                         onChange={(e) => setClientForm({ ...clientForm, code: e.target.value.toUpperCase() })}
                         required
-                        className="w-full border border-yellow-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-yellow-500"
                       />
                     </div>
                   </div>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="mt-3 w-full bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded text-sm transition disabled:bg-gray-400"
+                    className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
                   >
                     {loading ? 'Adding...' : 'Add Client'}
                   </button>
@@ -499,7 +572,7 @@ export default function AdminDashboard() {
                     className={`p-3 rounded-lg border-2 cursor-pointer transition ${
                       selectedClient === client.id
                         ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300 bg-gray-50'
+                        : 'border-white/60 hover:border-blue-300 bg-white/45'
                     }`}
                   >
                     <div className="flex justify-between items-start">
@@ -513,9 +586,9 @@ export default function AdminDashboard() {
                           handleDeleteClient(client.id);
                         }}
                         disabled={loading}
-                        className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition disabled:opacity-50"
+                        className="ml-2 px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
                       >
-                        × Delete
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -523,7 +596,7 @@ export default function AdminDashboard() {
               </div>
 
               {clients.length === 0 && !showAddClientForm && (
-                <p className="text-gray-500 text-center py-4">No clients found.</p>
+                <p className="text-slate-500 text-center py-4">No clients found.</p>
               )}
             </div>
 
@@ -531,19 +604,19 @@ export default function AdminDashboard() {
             <div className="space-y-6">
               {/* Projects Section */}
               {selectedClient && (
-                <div className="bg-white rounded-lg shadow-lg p-6">
+                <div className="glass-panel rounded-3xl p-6">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800">New Project Details</h3>
+                    <h3 className="text-lg font-semibold text-slate-800">New Project Details</h3>
                     <button
                       onClick={() => setShowAddProjectForm(!showAddProjectForm)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition"
+                      className="glass-primary-btn hover:brightness-95 text-white px-3 py-1 rounded text-sm transition"
                     >
                       {showAddProjectForm ? 'Cancel' : '+ Add'}
                     </button>
                   </div>
 
                   {showAddProjectForm && (
-                    <form onSubmit={handleAddProject} className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <form onSubmit={handleAddProject} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                       <div className="space-y-3">
                         <div>
                           <label className="block text-xs font-bold text-blue-700 mb-1">PROJECT NAME</label>
@@ -553,7 +626,7 @@ export default function AdminDashboard() {
                             value={projectForm.name}
                             onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
                             required
-                            className="w-full border border-blue-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
                           />
                         </div>
                         <div>
@@ -564,14 +637,14 @@ export default function AdminDashboard() {
                             value={projectForm.code}
                             onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value.toUpperCase() })}
                             required
-                            className="w-full border border-blue-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
                           />
                         </div>
                       </div>
                       <button
                         type="submit"
                         disabled={loading}
-                        className="mt-3 w-full bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm transition disabled:bg-gray-400"
+                        className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
                       >
                         {loading ? 'Adding...' : 'Add Project'}
                       </button>
@@ -586,7 +659,7 @@ export default function AdminDashboard() {
                         className={`p-3 rounded-lg border-2 cursor-pointer transition ${
                           selectedProject === project.id
                             ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-blue-300 bg-gray-50'
+                            : 'border-white/60 hover:border-blue-300 bg-white/45'
                         }`}
                       >
                         <div className="flex justify-between items-start">
@@ -600,7 +673,7 @@ export default function AdminDashboard() {
                               handleDeleteProject(project.id);
                             }}
                             disabled={loading}
-                            className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition disabled:opacity-50"
+                            className="ml-2 px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
                           >
                             Delete
                           </button>
@@ -610,35 +683,35 @@ export default function AdminDashboard() {
                   </div>
 
                   {projects.length === 0 && !showAddProjectForm && (
-                    <p className="text-gray-500 text-center py-4">No projects found.</p>
+                    <p className="text-slate-500 text-center py-4">No projects found.</p>
                   )}
                 </div>
               )}
 
               {/* Project Rates Section */}
               {selectedProject && (
-                <div className="bg-white rounded-lg shadow-lg p-6">
+                <div className="glass-panel rounded-3xl p-6">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-bold text-yellow-700 bg-yellow-100 px-3 py-2 rounded flex-1">
+                    <h3 className="text-sm font-bold text-yellow-800 glass-subtle px-3 py-2 rounded-lg flex-1">
                       GROSS RATES (Standard per hour)
                     </h3>
                     <button
                       onClick={() => setShowAddRateForm(!showAddRateForm)}
-                      className="ml-2 bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm transition"
+                      className="ml-2 glass-primary-btn hover:brightness-95 text-white px-3 py-1 rounded text-sm transition"
                     >
                       {showAddRateForm ? 'Cancel' : '+ Add'}
                     </button>
                   </div>
 
                   {showAddRateForm && (
-                    <form onSubmit={handleAddRate} className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                    <form onSubmit={handleAddRate} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                       <div className="space-y-3">
                         <div>
                           <label className="block text-xs font-bold text-purple-700 mb-1">DESIGNATION</label>
                           <select
                             value={rateForm.designation}
                             onChange={(e) => setRateForm({ ...rateForm, designation: e.target.value })}
-                            className="w-full border border-purple-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-purple-500"
                           >
                             {DESIGNATIONS.map((d) => (
                               <option key={d} value={d}>{d}</option>
@@ -656,7 +729,7 @@ export default function AdminDashboard() {
                               required
                               step="0.01"
                               min="0"
-                              className="w-full border border-purple-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-purple-500"
                             />
                           </div>
                           <div>
@@ -669,7 +742,7 @@ export default function AdminDashboard() {
                               step="0.1"
                               min="0"
                               max="100"
-                              className="w-full border border-purple-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-purple-500"
                             />
                           </div>
                         </div>
@@ -677,7 +750,7 @@ export default function AdminDashboard() {
                       <button
                         type="submit"
                         disabled={loading}
-                        className="mt-3 w-full bg-purple-500 hover:bg-purple-600 text-white px-3 py-2 rounded text-sm transition disabled:bg-gray-400"
+                        className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
                       >
                         {loading ? 'Adding...' : 'Add Rate'}
                       </button>
@@ -687,7 +760,7 @@ export default function AdminDashboard() {
                   <div className="space-y-2">
                     {projectRates.length > 0 ? (
                       projectRates.map((rate) => (
-                        <div key={rate.id} className="p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-gray-100 transition">
+                        <div key={rate.id} className="p-3 border border-white/60 rounded-xl bg-white/55 hover:bg-white/75 transition">
                           <div className="grid grid-cols-4 gap-2 items-center text-sm">
                             <div>
                               <p className="font-bold text-gray-700">{rate.designation}</p>
@@ -709,30 +782,69 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => handleDeleteRate(rate.id)}
                                 disabled={loading}
-                                className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition disabled:opacity-50"
+                                className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
                               >
-                                ×
+                                Del
                               </button>
                             </div>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500 text-center py-4">No rates found.</p>
+                      <p className="text-slate-500 text-center py-4">No rates found.</p>
                     )}
                   </div>
                 </div>
               )}
 
               {!selectedClient && (
-                <div className="min-h-64 bg-white rounded-lg shadow-lg p-6 flex items-center justify-center">
-                  <p className="text-gray-500">Select a client to view/manage projects</p>
+                <div className="min-h-64 glass-panel rounded-3xl p-6 flex items-center justify-center">
+                  <p className="text-slate-500">Select a client to view/manage projects</p>
                 </div>
               )}
             </div>
           </div>
         )}
       </div>
+
+      {deleteEmployeeModal.open && (
+        <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-md flex items-center justify-center px-4">
+          <div className="w-full max-w-md rounded-3xl glass-panel p-6">
+            <h3 className="text-xl font-bold text-slate-900">Confirm Employee Deletion</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will permanently delete{' '}
+              <span className="font-semibold text-slate-900">{deleteEmployeeModal.employeeName}</span> and all linked work entries.
+            </p>
+            <p className="mt-4 text-sm font-semibold text-red-600">
+              Type <span className="px-2 py-0.5 rounded bg-red-100 text-red-700">DELETE</span> to continue.
+            </p>
+            <input
+              type="text"
+              value={deleteConfirmationText}
+              onChange={(e) => setDeleteConfirmationText(e.target.value)}
+              placeholder="Type DELETE"
+              className="mt-3 w-full border border-slate-300 bg-white/80 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400"
+            />
+            <div className="mt-5 flex gap-2 justify-end">
+              <button
+                onClick={closeDeleteEmployeeModal}
+                disabled={loading}
+                className="px-4 py-2 rounded-xl glass-subtle border border-white/60 text-slate-700 hover:bg-white/70 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteEmployee}
+                disabled={loading || deleteConfirmationText !== 'DELETE'}
+                className="px-4 py-2 rounded-xl glass-danger-btn hover:brightness-95 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Deleting...' : 'Delete Employee'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

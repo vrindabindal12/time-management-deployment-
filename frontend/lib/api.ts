@@ -160,6 +160,11 @@ export const employeeApi = {
     return response.data;
   },
 
+  deleteEmployee: async (employeeId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/employees/${employeeId}`);
+    return response.data;
+  },
+
   getMyStatus: async (): Promise<EmployeeStatus> => {
     const response = await api.get('/my-status');
     return response.data;

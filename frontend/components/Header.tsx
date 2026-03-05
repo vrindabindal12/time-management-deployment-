@@ -30,14 +30,14 @@ export default function Header() {
   const navItems = isAdminUser ? adminNavItems : employeeNavItems;
 
   return (
-    <header className="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 shadow-lg">
+    <header className="sticky top-0 z-40 glass-panel border-b border-white/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
           {/* Company Logo/Name */}
           <div className="flex items-center space-x-3">
-            <div className="bg-white rounded-lg p-2 shadow-md">
+            <div className="glass-pill rounded-xl p-2.5">
               <svg
-                className="w-8 h-8 text-blue-900"
+                className="w-8 h-8 text-sky-700"
                 fill="currentColor"
                 viewBox="0 0 24 24"
               >
@@ -46,10 +46,10 @@ export default function Header() {
               </svg>
             </div>
             <div>
-              <h1 className="text-white font-bold text-xl md:text-2xl tracking-tight">
+              <h1 className="text-slate-900 font-bold text-xl md:text-2xl tracking-tight">
                 BKP Cygnus Consulting Inc.
               </h1>
-              <p className="text-blue-200 text-xs md:text-sm">Time Tracking System</p>
+              <p className="text-slate-600 text-xs md:text-sm">Time Tracking System</p>
             </div>
           </div>
 
@@ -61,8 +61,8 @@ export default function Header() {
                 href={item.path}
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   pathname === item.path
-                    ? 'bg-white text-blue-900 shadow-md'
-                    : 'text-white hover:bg-blue-700 hover:shadow-md'
+                    ? 'glass-pill text-blue-900 shadow-md'
+                    : 'text-slate-700 hover:bg-white/55 hover:shadow-md'
                 }`}
               >
                 {item.name}
@@ -71,16 +71,16 @@ export default function Header() {
             
             {/* User Info & Logout */}
             {user && (
-              <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-blue-700">
+              <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-slate-300">
                 <div className="hidden md:block text-right">
-                  <p className="text-white text-sm font-medium">{user.name}</p>
-                  <p className="text-blue-200 text-xs">
+                  <p className="text-slate-900 text-sm font-medium">{user.name}</p>
+                  <p className="text-slate-500 text-xs">
                     {isAdminUser ? 'Administrator' : 'Employee'}
                   </p>
                 </div>
                 <button
                   onClick={logout}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg"
+                  className="glass-danger-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200"
                 >
                   Logout
                 </button>

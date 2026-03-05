@@ -63,15 +63,15 @@ export default function History() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+    <div className="min-h-screen py-8 px-4">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+        <div className="glass-panel rounded-3xl p-6 mb-6">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-gray-800">Employee Punch History</h1>
+            <h1 className="text-3xl font-black text-slate-900">Employee Punch History</h1>
             <Link
               href="/admin"
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition"
+              className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition"
             >
               Back to Admin
             </Link>
@@ -80,18 +80,18 @@ export default function History() {
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="glass-panel bg-red-50/80 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4">
             {error}
           </div>
         )}
 
         {/* Employee Selection */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Employee</h2>
+        <div className="glass-panel rounded-3xl p-6 mb-6">
+          <h2 className="text-xl font-semibold text-slate-800 mb-4">Select Employee</h2>
           <select
             value={selectedEmployee || ''}
             onChange={(e) => setSelectedEmployee(Number(e.target.value))}
-            className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-slate-300 bg-white/80 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {employees.map((employee) => (
               <option key={employee.id} value={employee.id}>
@@ -103,65 +103,65 @@ export default function History() {
 
         {/* Punch Records */}
         {loading ? (
-          <div className="bg-white rounded-lg shadow-lg p-6 text-center">
-            <p className="text-gray-600">Loading...</p>
+          <div className="glass-panel rounded-3xl p-6 text-center">
+            <p className="text-slate-600">Loading...</p>
           </div>
         ) : punchData ? (
-          <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="glass-panel rounded-3xl p-6">
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">
                 {punchData.employee.name}
               </h2>
-              <p className="text-gray-600 mb-4">{punchData.employee.email}</p>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-2xl font-bold text-blue-600">
+              <p className="text-slate-600 mb-4">{punchData.employee.email}</p>
+              <div className="glass-subtle p-4 rounded-xl">
+                <p className="text-2xl font-bold text-blue-700">
                   Total Hours: {punchData.total_hours.toFixed(2)}
                 </p>
               </div>
             </div>
 
             {/* Punch Records Table */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-2xl border border-white/60 bg-white/55">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-slate-100/80">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-[0.14em]">
                       #
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-[0.14em]">
                       Punch In
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-[0.14em]">
                       Punch Out
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-[0.14em]">
                       Hours Worked
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-[0.14em]">
                       Status
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white/70 divide-y divide-slate-100">
                   {punchData.punches.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={5} className="px-6 py-4 text-center text-slate-500">
                         No punch records found
                       </td>
                     </tr>
                   ) : (
                     punchData.punches.map((punch, index) => (
-                      <tr key={punch.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <tr key={punch.id} className="hover:bg-slate-50/70">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                           {punchData.punches.length - index}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                           {formatDateTime(punch.punch_in)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                           {punch.punch_out ? formatDateTime(punch.punch_out) : '-'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                           {punch.total_hours ? `${punch.total_hours.toFixed(2)} hrs` : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

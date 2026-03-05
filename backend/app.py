@@ -550,6 +550,22 @@ def create_employee(current_user):
     
     return jsonify(employee.to_dict()), 201
 
+@app.route('/api/employees/<int:employee_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_employee(current_user, employee_id):
+    employee = Employee.query.get(employee_id)
+
+    if not employee:
+        return jsonify({'error': 'Employee not found'}), 404
+
+    # Delete related work entries first to avoid foreign key constraint issues.
+    Punch.query.filter_by(employee_id=employee_id).delete(synchronize_session=False)
+    db.session.delete(employee)
+    db.session.commit()
+
+    return jsonify({'message': 'Employee deleted successfully'}), 200
+
 @app.route('/api/add-work', methods=['POST'])
 @token_required
 def add_work(current_user):
