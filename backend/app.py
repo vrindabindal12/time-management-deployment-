@@ -83,6 +83,67 @@ class Punch(db.Model):
             'updated_by_admin': self.updated_by_admin
         }
 
+class Client(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False, unique=True)
+    code = db.Column(db.String(50), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    projects = db.relationship('Project', backref='client', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class Project(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    code = db.Column(db.String(50), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    rates = db.relationship('ProjectRate', backref='project', lazy=True, cascade='all, delete-orphan')
+
+    __table_args__ = (db.UniqueConstraint('client_id', 'code', name='uq_client_project_code'),)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_id': self.client_id,
+            'name': self.name,
+            'code': self.code,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'rates': [rate.to_dict() for rate in self.rates]
+        }
+
+class ProjectRate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    designation = db.Column(db.String(100), nullable=False)  # Managing Director, Associate Director, Senior Consultant
+    gross_rate = db.Column(db.Float, nullable=False)
+    discount = db.Column(db.Float, default=0.0)  # Stored as percentage (0-100)
+    net_rate = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'project_id': self.project_id,
+            'designation': self.designation,
+            'gross_rate': self.gross_rate,
+            'discount': self.discount,
+            'net_rate': self.net_rate,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 
 def get_filtered_work_entries(employee_id):
     start_date = request.args.get('start_date')
@@ -572,6 +633,312 @@ def get_report(current_user):
         })
     
     return jsonify(report)
+
+# ==================== CLIENT ROUTES ====================
+@app.route('/api/clients', methods=['GET'])
+@token_required
+@admin_required
+def get_clients(current_user):
+    clients = Client.query.all()
+    return jsonify([client.to_dict() for client in clients])
+
+@app.route('/api/clients', methods=['POST'])
+@token_required
+@admin_required
+def create_client(current_user):
+    data = request.json
+    
+    if not data.get('name') or not data.get('code'):
+        return jsonify({'error': 'Client name and code are required'}), 400
+    
+    existing_name = Client.query.filter_by(name=data['name']).first()
+    if existing_name:
+        return jsonify({'error': 'Client with this name already exists'}), 400
+    
+    existing_code = Client.query.filter_by(code=data['code']).first()
+    if existing_code:
+        return jsonify({'error': 'Client with this code already exists'}), 400
+    
+    client = Client(
+        name=data['name'].strip(),
+        code=data['code'].strip().upper()
+    )
+    
+    db.session.add(client)
+    db.session.commit()
+    
+    return jsonify(client.to_dict()), 201
+
+@app.route('/api/clients/<int:client_id>', methods=['GET'])
+@token_required
+@admin_required
+def get_client(current_user, client_id):
+    client = Client.query.get(client_id)
+    
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    return jsonify({
+        **client.to_dict(),
+        'projects': [project.to_dict() for project in client.projects]
+    })
+
+@app.route('/api/clients/<int:client_id>', methods=['PUT'])
+@token_required
+@admin_required
+def update_client(current_user, client_id):
+    client = Client.query.get(client_id)
+    
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    data = request.json
+    
+    if 'name' in data:
+        new_name = data['name'].strip()
+        if not new_name:
+            return jsonify({'error': 'Client name cannot be empty'}), 400
+        
+        existing = Client.query.filter_by(name=new_name).first()
+        if existing and existing.id != client_id:
+            return jsonify({'error': 'Client with this name already exists'}), 400
+        
+        client.name = new_name
+    
+    if 'code' in data:
+        new_code = data['code'].strip().upper()
+        if not new_code:
+            return jsonify({'error': 'Client code cannot be empty'}), 400
+        
+        existing = Client.query.filter_by(code=new_code).first()
+        if existing and existing.id != client_id:
+            return jsonify({'error': 'Client with this code already exists'}), 400
+        
+        client.code = new_code
+    
+    client.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify(client.to_dict())
+
+@app.route('/api/clients/<int:client_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_client(current_user, client_id):
+    client = Client.query.get(client_id)
+    
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    db.session.delete(client)
+    db.session.commit()
+    
+    return jsonify({'message': 'Client deleted successfully'}), 200
+
+# ==================== PROJECT ROUTES ====================
+@app.route('/api/clients/<int:client_id>/projects', methods=['GET'])
+@token_required
+@admin_required
+def get_client_projects(current_user, client_id):
+    client = Client.query.get(client_id)
+    
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    return jsonify([project.to_dict() for project in client.projects])
+
+@app.route('/api/clients/<int:client_id>/projects', methods=['POST'])
+@token_required
+@admin_required
+def create_project(current_user, client_id):
+    client = Client.query.get(client_id)
+    
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    data = request.json
+    
+    if not data.get('name') or not data.get('code'):
+        return jsonify({'error': 'Project name and code are required'}), 400
+    
+    # Check if project code already exists for this client
+    existing = Project.query.filter_by(client_id=client_id, code=data['code']).first()
+    if existing:
+        return jsonify({'error': 'Project with this code already exists for this client'}), 400
+    
+    project = Project(
+        client_id=client_id,
+        name=data['name'].strip(),
+        code=data['code'].strip().upper()
+    )
+    
+    db.session.add(project)
+    db.session.commit()
+    
+    return jsonify(project.to_dict()), 201
+
+@app.route('/api/projects/<int:project_id>', methods=['GET'])
+@token_required
+@admin_required
+def get_project(current_user, project_id):
+    project = Project.query.get(project_id)
+    
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    
+    return jsonify(project.to_dict())
+
+@app.route('/api/projects/<int:project_id>', methods=['PUT'])
+@token_required
+@admin_required
+def update_project(current_user, project_id):
+    project = Project.query.get(project_id)
+    
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    
+    data = request.json
+    
+    if 'name' in data:
+        new_name = data['name'].strip()
+        if not new_name:
+            return jsonify({'error': 'Project name cannot be empty'}), 400
+        project.name = new_name
+    
+    if 'code' in data:
+        new_code = data['code'].strip().upper()
+        if not new_code:
+            return jsonify({'error': 'Project code cannot be empty'}), 400
+        
+        existing = Project.query.filter_by(client_id=project.client_id, code=new_code).first()
+        if existing and existing.id != project_id:
+            return jsonify({'error': 'Project with this code already exists for this client'}), 400
+        
+        project.code = new_code
+    
+    project.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify(project.to_dict())
+
+@app.route('/api/projects/<int:project_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_project(current_user, project_id):
+    project = Project.query.get(project_id)
+    
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    
+    db.session.delete(project)
+    db.session.commit()
+    
+    return jsonify({'message': 'Project deleted successfully'}), 200
+
+# ==================== PROJECT RATE ROUTES ====================
+@app.route('/api/projects/<int:project_id>/rates', methods=['GET'])
+@token_required
+@admin_required
+def get_project_rates(current_user, project_id):
+    project = Project.query.get(project_id)
+    
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    
+    return jsonify([rate.to_dict() for rate in project.rates])
+
+@app.route('/api/projects/<int:project_id>/rates', methods=['POST'])
+@token_required
+@admin_required
+def create_project_rate(current_user, project_id):
+    project = Project.query.get(project_id)
+    
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    
+    data = request.json
+    
+    if not data.get('designation') or data.get('gross_rate') is None:
+        return jsonify({'error': 'Designation and gross rate are required'}), 400
+    
+    try:
+        gross_rate = float(data['gross_rate'])
+        discount = float(data.get('discount', 0))
+        
+        if gross_rate < 0:
+            return jsonify({'error': 'Gross rate must be positive'}), 400
+        
+        if discount < 0 or discount > 100:
+            return jsonify({'error': 'Discount must be between 0 and 100'}), 400
+        
+        # Calculate net rate: gross_rate * (1 - discount/100)
+        net_rate = gross_rate * (1 - discount / 100)
+        
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid rate values'}), 400
+    
+    rate = ProjectRate(
+        project_id=project_id,
+        designation=data['designation'].strip(),
+        gross_rate=gross_rate,
+        discount=discount,
+        net_rate=round(net_rate, 2)
+    )
+    
+    db.session.add(rate)
+    db.session.commit()
+    
+    return jsonify(rate.to_dict()), 201
+
+@app.route('/api/rates/<int:rate_id>', methods=['PUT'])
+@token_required
+@admin_required
+def update_project_rate(current_user, rate_id):
+    rate = ProjectRate.query.get(rate_id)
+    
+    if not rate:
+        return jsonify({'error': 'Rate not found'}), 404
+    
+    data = request.json
+    
+    if 'designation' in data:
+        designation = data['designation'].strip()
+        if not designation:
+            return jsonify({'error': 'Designation cannot be empty'}), 400
+        rate.designation = designation
+    
+    if 'gross_rate' in data or 'discount' in data:
+        gross_rate = float(data.get('gross_rate', rate.gross_rate))
+        discount = float(data.get('discount', rate.discount))
+        
+        if gross_rate < 0:
+            return jsonify({'error': 'Gross rate must be positive'}), 400
+        
+        if discount < 0 or discount > 100:
+            return jsonify({'error': 'Discount must be between 0 and 100'}), 400
+        
+        rate.gross_rate = gross_rate
+        rate.discount = discount
+        rate.net_rate = round(gross_rate * (1 - discount / 100), 2)
+    
+    rate.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify(rate.to_dict())
+
+@app.route('/api/rates/<int:rate_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_project_rate(current_user, rate_id):
+    rate = ProjectRate.query.get(rate_id)
+    
+    if not rate:
+        return jsonify({'error': 'Rate not found'}), 404
+    
+    db.session.delete(rate)
+    db.session.commit()
+    
+    return jsonify({'message': 'Rate deleted successfully'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
