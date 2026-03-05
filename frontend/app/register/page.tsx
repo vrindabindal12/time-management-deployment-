@@ -12,6 +12,7 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,12 +33,13 @@ export default function Register() {
     }
 
     try {
-      await authApi.register(name, email, password);
-      // Auto login after registration
-      const loginResponse = await authApi.login(email, password);
-      localStorage.setItem('token', loginResponse.token);
-      localStorage.setItem('user', JSON.stringify(loginResponse.employee));
-      router.push('/dashboard');
+      const response = await authApi.register(name, email, password);
+      setSuccess(true);
+      // Clear form
+      setName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Registration failed. Please try again.');
     } finally {
@@ -60,7 +62,35 @@ export default function Register() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {success && (
+            <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-green-800">
+                    Registration Successful!
+                  </h3>
+                  <div className="mt-2 text-sm text-green-700">
+                    <p>
+                      We've sent a verification email to your email address. Please check your email and click the verification link to activate your account.
+                    </p>
+                    <p className="mt-2">
+                      <Link href="/login" className="text-green-800 underline hover:text-green-900">
+                        Go to Login
+                      </Link>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!success && (
+            <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                 Full Name
@@ -130,6 +160,7 @@ export default function Register() {
               {loading ? 'Creating Account...' : 'Register'}
             </button>
           </form>
+          )}
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">

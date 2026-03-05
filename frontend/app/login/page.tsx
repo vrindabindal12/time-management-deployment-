@@ -10,12 +10,17 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showResendVerification, setShowResendVerification] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setShowResendVerification(false);
+    setResendMessage(null);
 
     try {
       const response = await authApi.login(email, password);
@@ -29,9 +34,29 @@ export default function Login() {
         router.push('/dashboard');
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed. Please try again.');
+      const errorMessage = err.response?.data?.error || 'Login failed. Please try again.';
+      setError(errorMessage);
+      
+      // Check if it's a verification error
+      if (errorMessage.includes('verify your email')) {
+        setShowResendVerification(true);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendLoading(true);
+    setResendMessage(null);
+
+    try {
+      await authApi.resendVerification(email);
+      setResendMessage('Verification email sent! Please check your email.');
+    } catch (err: any) {
+      setResendMessage(err.response?.data?.error || 'Failed to resend verification email.');
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -46,7 +71,23 @@ export default function Login() {
 
           {error && (
             <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              {error}
+              <p>{error}</p>
+              {showResendVerification && (
+                <div className="mt-3 pt-3 border-t border-red-300">
+                  <button
+                    onClick={handleResendVerification}
+                    disabled={resendLoading}
+                    className="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition disabled:bg-red-400 disabled:cursor-not-allowed"
+                  >
+                    {resendLoading ? 'Sending...' : 'Resend Verification Email'}
+                  </button>
+                  {resendMessage && (
+                    <p className={`mt-2 text-sm ${resendMessage.includes('sent') ? 'text-green-600' : 'text-red-600'}`}>
+                      {resendMessage}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

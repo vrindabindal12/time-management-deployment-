@@ -130,8 +130,13 @@ export const authApi = {
     return response.data;
   },
 
-  register: async (name: string, email: string, password: string): Promise<{ message: string; employee: Employee }> => {
+  register: async (name: string, email: string, password: string): Promise<{ message: string; email_sent?: boolean }> => {
     const response = await api.post('/register', { name, email, password });
+    return response.data;
+  },
+
+  resendVerification: async (email: string): Promise<{ message: string }> => {
+    const response = await api.post('/resend-verification', { email });
     return response.data;
   },
 

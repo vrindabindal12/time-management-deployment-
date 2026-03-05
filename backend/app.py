@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from flask_mail import Mail, Message
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
@@ -33,6 +34,17 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # CORS configuration
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 CORS(app, origins=[FRONTEND_URL, 'http://localhost:3000'], supports_credentials=True)
+
+# Mail configuration
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
+app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'False').lower() == 'true'
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config['MAIL_USERNAME'])
+
+mail = Mail(app)
 
 db = SQLAlchemy(app)
 
@@ -147,6 +159,65 @@ class ProjectRate(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+
+def send_verification_email(employee):
+    verification_url = f"{FRONTEND_URL}/verify-email?token={employee.verification_token}"
+    
+    msg = Message(
+        subject='Verify Your Email - Time Tracking System',
+        recipients=[employee.email],
+        body=f'''Hello {employee.name},
+
+Thank you for registering with our Time Tracking System!
+
+Please click the following link to verify your email address:
+{verification_url}
+
+This link will expire in 24 hours.
+
+If you did not register for this account, please ignore this email.
+
+Best regards,
+Time Tracking System Team
+''',
+        html=f'''
+<html>
+<body>
+    <h2>Hello {employee.name},</h2>
+    
+    <p>Thank you for registering with our Time Tracking System!</p>
+    
+    <p>Please click the button below to verify your email address:</p>
+    
+    <p style="margin: 20px 0;">
+        <a href="{verification_url}" 
+           style="background-color: #4CAF50; color: white; padding: 12px 24px; 
+                  text-decoration: none; border-radius: 4px; display: inline-block;">
+            Verify Email Address
+        </a>
+    </p>
+    
+    <p><strong>Important:</strong> This link will expire in 24 hours.</p>
+    
+    <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
+    <p><a href="{verification_url}">{verification_url}</a></p>
+    
+    <p>If you did not register for this account, please ignore this email.</p>
+    
+    <br>
+    <p>Best regards,<br>
+    Time Tracking System Team</p>
+</body>
+</html>
+'''
+    )
+    
+    try:
+        mail.send(msg)
+        print(f"Verification email sent to {employee.email}")
+    except Exception as e:
+        print(f"Failed to send verification email to {employee.email}: {str(e)}")
 
 
 def get_filtered_work_entries(employee_id):
@@ -353,19 +424,83 @@ def register():
     
     existing_employee = Employee.query.filter_by(email=data['email']).first()
     if existing_employee:
-        return jsonify({'error': 'Employee with this email already exists'}), 400
+        if existing_employee.is_verified:
+            return jsonify({'error': 'Employee with this email already exists'}), 400
+        else:
+            # Resend verification email for unverified account
+            verification_token = existing_employee.generate_verification_token()
+            db.session.commit()
+            send_verification_email(existing_employee)
+            return jsonify({
+                'message': 'Verification email sent. Please check your email to verify your account.',
+                'email_sent': True
+            }), 200
     
     employee = Employee(
         name=data['name'],
         email=data['email'],
-        is_admin=False
+        is_admin=False,
+        is_verified=False
     )
     employee.set_password(data['password'])
+    
+    # Generate verification token
+    verification_token = employee.generate_verification_token()
     
     db.session.add(employee)
     db.session.commit()
     
-    return jsonify({'message': 'Employee registered successfully', 'employee': employee.to_dict()}), 201
+    # Send verification email
+    send_verification_email(employee)
+    
+    return jsonify({
+        'message': 'Registration successful. Please check your email to verify your account.',
+        'email_sent': True
+    }), 201
+
+@app.route('/api/verify-email/<token>', methods=['GET'])
+def verify_email(token):
+    employee = Employee.query.filter_by(verification_token=token).first()
+    
+    if not employee:
+        return jsonify({'error': 'Invalid verification token'}), 400
+    
+    if employee.verification_token_expires < datetime.utcnow():
+        return jsonify({'error': 'Verification token has expired. Please request a new verification email.'}), 400
+    
+    if employee.is_verified:
+        return jsonify({'message': 'Email already verified. You can now log in.'}), 200
+    
+    employee.is_verified = True
+    employee.verification_token = None
+    employee.verification_token_expires = None
+    db.session.commit()
+    
+    return jsonify({'message': 'Email verified successfully! You can now log in.'}), 200
+
+@app.route('/api/resend-verification', methods=['POST'])
+def resend_verification():
+    data = request.json
+    
+    if not data.get('email'):
+        return jsonify({'error': 'Email is required'}), 400
+    
+    employee = Employee.query.filter_by(email=data['email']).first()
+    
+    if not employee:
+        return jsonify({'error': 'No account found with this email address'}), 404
+    
+    if employee.is_verified:
+        return jsonify({'error': 'This email is already verified'}), 400
+    
+    # Generate new verification token
+    verification_token = employee.generate_verification_token()
+    db.session.commit()
+    
+    # Send verification email
+    send_verification_email(employee)
+    
+    return jsonify({'message': 'Verification email sent. Please check your email.'}), 200
 
 @app.route('/api/change-password', methods=['POST'])
 @token_required
