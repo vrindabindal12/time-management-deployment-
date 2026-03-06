@@ -78,7 +78,7 @@ const buildEmployeeProfileEdit = (employee: Employee): EmployeeProfileEdit => ({
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState('employees');
+  const [activeTab, setActiveTab] = useState('onboarding');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +86,7 @@ export default function AdminDashboard() {
   const router = useRouter();
 
   // Employee states
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<number | null>(null);
   const [employeeStatus, setEmployeeStatus] = useState<any>(null);
   const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false);
@@ -97,6 +97,9 @@ export default function AdminDashboard() {
   const [employeeProfileEdits, setEmployeeProfileEdits] = useState<Record<number, EmployeeProfileEdit>>({});
   const [savingEmployeeProfileId, setSavingEmployeeProfileId] = useState<number | null>(null);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
+  const [employeeCardOrder, setEmployeeCardOrder] = useState<number[]>([]);
+  const [draggingEmployeeId, setDraggingEmployeeId] = useState<number | null>(null);
+  const [dragOverEmployeeId, setDragOverEmployeeId] = useState<number | null>(null);
   const [deleteEmployeeModal, setDeleteEmployeeModal] = useState<{
     open: boolean;
     employeeId: number | null;
@@ -188,6 +191,20 @@ export default function AdminDashboard() {
   }, [selectedProject]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedOrder = localStorage.getItem('admin_employee_card_order');
+    if (!savedOrder) return;
+    try {
+      const parsed = JSON.parse(savedOrder);
+      if (Array.isArray(parsed)) {
+        setEmployeeCardOrder(parsed.map((v) => Number(v)).filter((v) => Number.isFinite(v)));
+      }
+    } catch {
+      // Ignore invalid persisted order.
+    }
+  }, []);
+
+  useEffect(() => {
     const loadDashboardCounts = async () => {
       try {
         const allProjects = await employeeApi.getAllProjects();
@@ -205,6 +222,16 @@ export default function AdminDashboard() {
     try {
       const data = await employeeApi.getEmployees();
       setEmployees(data);
+      const nonAdminIds = data.filter((employee: Employee) => !employee.is_admin).map((employee: Employee) => employee.id);
+      setEmployeeCardOrder((prev) => {
+        const kept = prev.filter((id) => nonAdminIds.includes(id));
+        const appended = nonAdminIds.filter((id) => !kept.includes(id));
+        const next = [...kept, ...appended];
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('admin_employee_card_order', JSON.stringify(next));
+        }
+        return next;
+      });
       const nextProfileEdits: Record<number, EmployeeProfileEdit> = {};
       data.forEach((employee: Employee) => {
         nextProfileEdits[employee.id] = buildEmployeeProfileEdit(employee);
@@ -660,6 +687,36 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleEmployeeCardDrop = (targetEmployeeId: number) => {
+    if (draggingEmployeeId === null || draggingEmployeeId === targetEmployeeId) {
+      setDragOverEmployeeId(null);
+      return;
+    }
+
+    setEmployeeCardOrder((prev) => {
+      const current = prev.length ? [...prev] : employees.filter((employee) => !employee.is_admin).map((employee) => employee.id);
+      const fromIndex = current.indexOf(draggingEmployeeId);
+      const toIndex = current.indexOf(targetEmployeeId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      current.splice(fromIndex, 1);
+      current.splice(toIndex, 0, draggingEmployeeId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('admin_employee_card_order', JSON.stringify(current));
+      }
+      return current;
+    });
+
+    setDragOverEmployeeId(null);
+  };
+
+  const nonAdminEmployees = employees.filter((employee) => !employee.is_admin);
+  const orderedEmployeeCards = [
+    ...employeeCardOrder
+      .map((employeeId) => nonAdminEmployees.find((employee) => employee.id === employeeId))
+      .filter((employee): employee is Employee => Boolean(employee)),
+    ...nonAdminEmployees.filter((employee) => !employeeCardOrder.includes(employee.id)),
+  ];
+
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
@@ -709,16 +766,6 @@ export default function AdminDashboard() {
         <div className="glass-panel rounded-2xl mb-6 border-b border-white/50">
           <div className="flex">
             <button
-              onClick={() => setActiveTab('employees')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'employees'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
-            >
-              Employee Management
-            </button>
-            <button
               onClick={() => setActiveTab('onboarding')}
               className={`flex-1 px-6 py-4 font-semibold transition text-center ${
                 activeTab === 'onboarding'
@@ -726,7 +773,7 @@ export default function AdminDashboard() {
                   : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
               }`}
             >
-              Employee Onboarding
+              Employee Management
             </button>
             <button
               onClick={() => setActiveTab('clients')}
@@ -825,7 +872,7 @@ export default function AdminDashboard() {
 
               {/* Employee List */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {employees.map((employee) => (
+                {employees.filter((employee: Employee) => !employee.is_admin).map((employee) => (
                   <div
                     key={employee.id}
                     onClick={() => setSelectedEmployee(employee.id)}
@@ -839,11 +886,6 @@ export default function AdminDashboard() {
                       <div>
                         <p className="font-semibold text-gray-800">{employee.name}</p>
                         <p className="text-sm text-gray-600">{employee.email}</p>
-                        {employee.is_admin && (
-                          <span className="inline-block mt-2 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
-                            Admin
-                          </span>
-                        )}
                       </div>
                       <button
                         onClick={(e) => {
@@ -860,7 +902,7 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              {employees.length === 0 && !showAddEmployeeForm && (
+              {employees.filter((employee: Employee) => !employee.is_admin).length === 0 && !showAddEmployeeForm && (
                 <p className="text-slate-500 text-center py-4">No employees found.</p>
               )}
             </div>
@@ -905,7 +947,7 @@ export default function AdminDashboard() {
             <div className="glass-panel rounded-3xl p-6">
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-800">Employee Onboarding</h2>
+                  <h2 className="text-xl font-semibold text-slate-800">Employee Management</h2>
                   <p className="text-sm text-slate-600 mt-1">Create employee + compensation/promotion profile in one step.</p>
                 </div>
                 <button
@@ -1027,70 +1069,148 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {employees.map((employee: Employee) => (
+              {orderedEmployeeCards.map((employee: Employee) => (
                 <div
                   key={employee.id}
                   style={{ perspective: '1000px' }}
-                  className="transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01]"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dragOverEmployeeId !== employee.id) {
+                      setDragOverEmployeeId(employee.id);
+                    }
+                  }}
+                  onDrop={() => handleEmployeeCardDrop(employee.id)}
+                  className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${
+                    draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
+                  } ${
+                    dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
+                  }`}
                 >
                   <div
-                    className="relative h-80 w-full transition-transform duration-700"
+                    className="relative h-[29rem] w-full transition-transform duration-700"
                     style={{
                       transformStyle: 'preserve-3d',
                       transform: flippedCards[employee.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
                     }}
                   >
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => toggleCardFlip(employee.id)}
-                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl hover:shadow-2xl overflow-hidden border border-white/60 bg-gradient-to-br from-cyan-100/70 via-white/70 to-indigo-100/70 backdrop-blur-xl"
-                      style={{ backfaceVisibility: 'hidden' }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleCardFlip(employee.id);
+                        }
+                      }}
+                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl hover:shadow-2xl overflow-hidden border border-white/60 bg-gradient-to-br from-cyan-100/75 via-white/70 to-indigo-100/75 backdrop-blur-xl"
+                      style={{
+                        backfaceVisibility: 'hidden',
+                        pointerEvents: flippedCards[employee.id] ? 'none' : 'auto',
+                      }}
                     >
+                      <div
+                        draggable
+                        onClick={(e) => e.stopPropagation()}
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          setDraggingEmployeeId(employee.id);
+                        }}
+                        onDragEnd={(e) => {
+                          e.stopPropagation();
+                          setDraggingEmployeeId(null);
+                          setDragOverEmployeeId(null);
+                        }}
+                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab active:cursor-grabbing"
+                        title="Drag to reorder"
+                      >
+                        Drag
+                      </div>
                       <div className="absolute -top-14 -right-10 w-36 h-36 bg-cyan-300/30 rounded-full blur-2xl" />
                       <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
-                      <p className="text-xs uppercase tracking-[0.2em] text-cyan-700 font-bold">Employee Card</p>
-                      <h3 className="text-xl font-black text-slate-900 mt-2">{employee.name}</h3>
+                      <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-700 font-bold">Employee Profile</p>
+                      <h3 className="text-2xl font-black text-slate-900 mt-2 leading-tight">{employee.name}</h3>
                       <p className="text-slate-600 text-sm mt-1">{employee.email}</p>
-                      <div className="mt-6 rounded-xl bg-white/70 border border-white/70 p-3 space-y-2">
-                        <p className="text-xs text-slate-500">ID: <span className="font-semibold text-slate-900">{employee.employee_code || 'Not set'}</span></p>
-                        <p className="text-xs text-slate-500">Designation: <span className="font-semibold text-slate-900">{employee.designation || 'Not set'}</span></p>
-                        <p className="text-xs text-slate-500">Reporting Manager: <span className="font-semibold text-slate-900">{employee.reporting_manager || 'Not set'}</span></p>
-                        <p className="text-xs text-slate-500">Hourly Rate: <span className="font-semibold text-slate-900">{employee.current_hourly_rate ?? '-'}</span></p>
+                      <div className="mt-5 rounded-2xl bg-white/72 border border-white/70 p-4">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-semibold">Emp ID</p>
+                        <p className="text-lg font-black text-slate-900 mt-1">{employee.employee_code || 'Not set'}</p>
+                        <p className="text-xs text-slate-500 mt-2">Designation</p>
+                        <p className="text-sm font-semibold text-slate-800">{employee.designation || 'Not set'}</p>
                       </div>
-                      <p className="text-xs text-slate-500 mt-5">Click to flip for details</p>
-                    </button>
+                      <p className="text-xs text-slate-500 mt-4">Click to flip for key details</p>
+                    </div>
 
                     <div
-                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl overflow-hidden border border-white/60 bg-gradient-to-br from-indigo-100/75 via-white/70 to-blue-100/70 backdrop-blur-xl"
-                      style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setFlippedCards((prev) => ({ ...prev, [employee.id]: false }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
+                        }
+                      }}
+                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl overflow-hidden border border-white/60 bg-gradient-to-br from-indigo-100/80 via-white/75 to-blue-100/75 backdrop-blur-xl"
+                      style={{
+                        backfaceVisibility: 'hidden',
+                        transform: 'rotateY(180deg)',
+                        pointerEvents: flippedCards[employee.id] ? 'auto' : 'none',
+                      }}
                     >
+                      <div
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          setDraggingEmployeeId(employee.id);
+                        }}
+                        onDragEnd={(e) => {
+                          e.stopPropagation();
+                          setDraggingEmployeeId(null);
+                          setDragOverEmployeeId(null);
+                        }}
+                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab active:cursor-grabbing"
+                        title="Drag to reorder"
+                      >
+                        Drag
+                      </div>
                       <div className="absolute -top-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
                       <div className="absolute -bottom-14 -right-10 w-36 h-36 bg-blue-300/30 rounded-full blur-2xl" />
-                      <p className="text-xs uppercase tracking-[0.2em] text-indigo-700 font-bold">Employee Details</p>
-                      <div className="mt-3 space-y-1 text-sm text-slate-700">
-                        <p><span className="font-semibold">Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
-                        <p><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
-                        <p><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
-                        {[1, 2, 3, 4, 5].map((idx) => (
-                          <p key={`${employee.id}-view-promo-${idx}`}>
-                            <span className="font-semibold">Promotion {idx}:</span>{' '}
-                            {employee[`promotion_${idx}_date` as keyof Employee] as string || '-'} /{' '}
-                            {employee[`promotion_${idx}_rate` as keyof Employee] as number ?? '-'} /{' '}
-                            {employee[`promotion_${idx}_designation` as keyof Employee] as string || '-'}
-                          </p>
-                        ))}
+                      <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-700 font-bold">Employee Details</p>
+                      <h4 className="text-xl font-black text-slate-900 mt-2">Core Information</h4>
+                      <div className="mt-4 grid grid-cols-1 gap-2.5 text-sm" onClick={(e) => e.stopPropagation()}>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Emp ID:</span> {employee.employee_code || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Designation:</span> {employee.designation || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
                       </div>
-                      <div className="mt-4 flex gap-2">
+                      <div className="mt-5 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          onClick={() => setEditingEmployeeId(employee.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingEmployeeId(employee.id);
+                          }}
                           className="glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm"
                         >
-                          Edit
+                          Edit Full Details
                         </button>
                         <button
                           type="button"
-                          onClick={() => toggleCardFlip(employee.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteEmployeeModal(employee.id, employee.name);
+                          }}
+                          className="px-3 py-2 text-sm font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
+                          }}
                           className="px-3 py-2 rounded-lg bg-white/70 border border-white/70 text-slate-700 text-sm"
                         >
                           Flip Back

@@ -540,6 +540,66 @@ def get_employee_compensation_for_date(employee, work_date):
 
     return float(effective_rate or 0.0), effective_designation
 
+
+def _employee_lookup_keys(employee):
+    keys = set()
+    if employee.name:
+        keys.add(employee.name.strip().lower())
+    if employee.email:
+        keys.add(employee.email.strip().lower())
+    if employee.employee_code:
+        keys.add(employee.employee_code.strip().lower())
+    return keys
+
+
+def build_employee_hierarchy(employee):
+    employees = Employee.query.all()
+    lookup = {}
+    for emp in employees:
+        for key in _employee_lookup_keys(emp):
+            lookup[key] = emp
+
+    # Upward chain: self -> manager -> manager...
+    chain_bottom_up = [employee]
+    seen_ids = {employee.id}
+    current = employee
+
+    while current.reporting_manager:
+        manager_key = current.reporting_manager.strip().lower()
+        manager = lookup.get(manager_key)
+        if not manager or manager.id in seen_ids:
+            break
+        chain_bottom_up.append(manager)
+        seen_ids.add(manager.id)
+        current = manager
+
+    chain_top_down = list(reversed(chain_bottom_up))
+
+    def emp_min_dict(emp):
+        return {
+            'id': emp.id,
+            'name': emp.name,
+            'email': emp.email,
+            'employee_code': emp.employee_code,
+            'designation': emp.designation,
+            'reporting_manager': emp.reporting_manager
+        }
+
+    # Optional context: direct reports under current user.
+    current_keys = _employee_lookup_keys(employee)
+    direct_reports = []
+    for emp in employees:
+        if emp.id == employee.id or not emp.reporting_manager:
+            continue
+        if emp.reporting_manager.strip().lower() in current_keys:
+            direct_reports.append(emp_min_dict(emp))
+
+    return {
+        'chain': [emp_min_dict(emp) for emp in chain_top_down],
+        'direct_reports': direct_reports,
+        'current_employee_id': employee.id
+    }
+
 # Initialize database
 with app.app_context():
     db.create_all()
@@ -1027,6 +1087,13 @@ def get_my_status(current_user):
         'today_entries': [entry.to_dict() for entry in today_entries],
         'today_hours': round(today_hours, 2)
     })
+
+
+@app.route('/api/my-hierarchy', methods=['GET'])
+@token_required
+def get_my_hierarchy(current_user):
+    hierarchy = build_employee_hierarchy(current_user)
+    return jsonify(hierarchy)
 
 @app.route('/api/my-punches', methods=['GET'])
 @token_required
