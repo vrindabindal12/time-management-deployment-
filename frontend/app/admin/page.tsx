@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { employeeApi, clientApi, projectApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
 import type { Client, ClientInvoiceReport, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -125,6 +125,8 @@ export default function AdminDashboard() {
   const [employeeCardOrder, setEmployeeCardOrder] = useState<number[]>([]);
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<number | null>(null);
   const [dragOverEmployeeId, setDragOverEmployeeId] = useState<number | null>(null);
+  const isCardDraggingRef = useRef(false);
+  const suppressFlipUntilRef = useRef(0);
   const [deleteEmployeeModal, setDeleteEmployeeModal] = useState<{
     open: boolean;
     employeeId: number | null;
@@ -818,27 +820,42 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleEmployeeCardDrop = (targetEmployeeId: number) => {
-    if (draggingEmployeeId === null || draggingEmployeeId === targetEmployeeId) {
-      setDragOverEmployeeId(null);
-      return;
-    }
-
+  const moveEmployeeCard = (draggedEmployeeId: number, targetEmployeeId: number) => {
+    if (draggedEmployeeId === targetEmployeeId) return;
     setEmployeeCardOrder((prev) => {
       const current = prev.length ? [...prev] : employees.filter((employee) => !employee.is_admin).map((employee) => employee.id);
-      const fromIndex = current.indexOf(draggingEmployeeId);
+      const fromIndex = current.indexOf(draggedEmployeeId);
       const toIndex = current.indexOf(targetEmployeeId);
       if (fromIndex === -1 || toIndex === -1) return prev;
       current.splice(fromIndex, 1);
-      current.splice(toIndex, 0, draggingEmployeeId);
+      current.splice(toIndex, 0, draggedEmployeeId);
       if (typeof window !== 'undefined') {
         localStorage.setItem('admin_employee_card_order', JSON.stringify(current));
       }
       return current;
     });
+  };
 
+  const handleEmployeeCardDrop = () => {
+    setDragOverEmployeeId(null);
+    setDraggingEmployeeId(null);
+  };
+
+  const handleEmployeeCardDragStart = (employeeId: number, e: React.DragEvent<HTMLDivElement>) => {
+    e.dataTransfer.effectAllowed = 'move';
+    isCardDraggingRef.current = true;
+    suppressFlipUntilRef.current = Date.now() + 80;
+    setDraggingEmployeeId(employeeId);
+  };
+
+  const handleEmployeeCardDragEnd = () => {
+    isCardDraggingRef.current = false;
+    suppressFlipUntilRef.current = Date.now() + 180;
+    setDraggingEmployeeId(null);
     setDragOverEmployeeId(null);
   };
+
+  const canFlipCard = () => !isCardDraggingRef.current && Date.now() >= suppressFlipUntilRef.current;
 
   const nonAdminEmployees = employees.filter((employee) => !employee.is_admin);
   const orderedEmployeeCards = [
@@ -1326,7 +1343,12 @@ export default function AdminDashboard() {
                       setDragOverEmployeeId(employee.id);
                     }
                   }}
-                  onDrop={() => handleEmployeeCardDrop(employee.id)}
+                  onDragEnter={() => {
+                    if (draggingEmployeeId !== null && draggingEmployeeId !== employee.id) {
+                      moveEmployeeCard(draggingEmployeeId, employee.id);
+                    }
+                  }}
+                  onDrop={handleEmployeeCardDrop}
                   className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${
                     draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
                   } ${
@@ -1334,6 +1356,9 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <div
+                    draggable
+                    onDragStart={(e) => handleEmployeeCardDragStart(employee.id, e)}
+                    onDragEnd={handleEmployeeCardDragEnd}
                     className="relative h-[29rem] w-full transition-transform duration-700"
                     style={{
                       transformStyle: 'preserve-3d',
@@ -1343,10 +1368,14 @@ export default function AdminDashboard() {
                     <div
                       role="button"
                       tabIndex={0}
-                      onClick={() => toggleCardFlip(employee.id)}
+                      onClick={() => {
+                        if (!canFlipCard()) return;
+                        toggleCardFlip(employee.id);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
+                          if (!canFlipCard()) return;
                           toggleCardFlip(employee.id);
                         }
                       }}
@@ -1357,19 +1386,9 @@ export default function AdminDashboard() {
                       }}
                     >
                       <div
-                        draggable
                         onClick={(e) => e.stopPropagation()}
-                        onDragStart={(e) => {
-                          e.stopPropagation();
-                          setDraggingEmployeeId(employee.id);
-                        }}
-                        onDragEnd={(e) => {
-                          e.stopPropagation();
-                          setDraggingEmployeeId(null);
-                          setDragOverEmployeeId(null);
-                        }}
-                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab active:cursor-grabbing"
-                        title="Drag to reorder"
+                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
+                        title="Drag from anywhere on card to reorder"
                       >
                         Drag
                       </div>
@@ -1405,10 +1424,14 @@ export default function AdminDashboard() {
                     <div
                       role="button"
                       tabIndex={0}
-                      onClick={() => setFlippedCards((prev) => ({ ...prev, [employee.id]: false }))}
+                      onClick={() => {
+                        if (!canFlipCard()) return;
+                        setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
+                          if (!canFlipCard()) return;
                           setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
                         }
                       }}
@@ -1420,18 +1443,8 @@ export default function AdminDashboard() {
                       }}
                     >
                       <div
-                        draggable
-                        onDragStart={(e) => {
-                          e.stopPropagation();
-                          setDraggingEmployeeId(employee.id);
-                        }}
-                        onDragEnd={(e) => {
-                          e.stopPropagation();
-                          setDraggingEmployeeId(null);
-                          setDragOverEmployeeId(null);
-                        }}
-                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab active:cursor-grabbing"
-                        title="Drag to reorder"
+                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
+                        title="Drag from anywhere on card to reorder"
                       >
                         Drag
                       </div>
