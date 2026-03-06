@@ -49,6 +49,7 @@ export interface Employee {
   is_admin: boolean;
   employee_code?: string | null;
   designation?: string | null;
+  reporting_manager?: string | null;
   start_date?: string | null;
   current_hourly_rate?: number | null;
   promotion_1_date?: string | null;

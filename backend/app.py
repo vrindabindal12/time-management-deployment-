@@ -58,6 +58,7 @@ class Employee(db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     employee_code = db.Column(db.String(50), unique=True, nullable=True)
     designation = db.Column(db.String(120), nullable=True)
+    reporting_manager = db.Column(db.String(120), nullable=True)
     start_date = db.Column(db.Date, nullable=True)
     current_hourly_rate = db.Column(db.Float, nullable=True)
     promotion_1_date = db.Column(db.Date, nullable=True)
@@ -91,6 +92,7 @@ class Employee(db.Model):
             'is_admin': self.is_admin,
             'employee_code': self.employee_code,
             'designation': self.designation,
+            'reporting_manager': self.reporting_manager,
             'start_date': self.start_date.isoformat() if self.start_date else None,
             'current_hourly_rate': self.current_hourly_rate,
             'promotion_1_date': self.promotion_1_date.isoformat() if self.promotion_1_date else None,
@@ -385,6 +387,7 @@ def ensure_employee_schema():
     required_columns = {
         'employee_code': 'TEXT',
         'designation': 'TEXT',
+        'reporting_manager': 'TEXT',
         'start_date': 'DATE',
         'current_hourly_rate': 'FLOAT',
         'promotion_1_date': 'DATE',
@@ -482,6 +485,10 @@ def apply_employee_profile(employee, data):
     if 'designation' in data:
         designation = (data.get('designation') or '').strip()
         employee.designation = designation or None
+
+    if 'reporting_manager' in data:
+        reporting_manager = (data.get('reporting_manager') or '').strip()
+        employee.reporting_manager = reporting_manager or None
 
     if 'start_date' in data:
         employee.start_date = parse_optional_date(data.get('start_date'), 'start_date')
@@ -738,6 +745,8 @@ def create_employee(current_user):
     
     if not data.get('name') or not data.get('email') or not data.get('password'):
         return jsonify({'error': 'Name, email, and password are required'}), 400
+    if not (data.get('reporting_manager') or '').strip():
+        return jsonify({'error': 'Reporting manager is required'}), 400
     
     existing_employee = Employee.query.filter_by(email=data['email']).first()
     if existing_employee:

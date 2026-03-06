@@ -12,6 +12,7 @@ const emptyOnboardingForm = {
   email: '',
   password: '',
   designation: '',
+  reporting_manager: '',
   start_date: '',
   current_hourly_rate: '',
   promotion_1_date: '',
@@ -33,6 +34,7 @@ const emptyOnboardingForm = {
 
 type EmployeeProfileEdit = {
   designation: string;
+  reporting_manager: string;
   start_date: string;
   current_hourly_rate: string;
   promotion_1_date: string;
@@ -54,6 +56,7 @@ type EmployeeProfileEdit = {
 
 const buildEmployeeProfileEdit = (employee: Employee): EmployeeProfileEdit => ({
   designation: employee.designation || '',
+  reporting_manager: employee.reporting_manager || '',
   start_date: employee.start_date || '',
   current_hourly_rate: employee.current_hourly_rate != null ? String(employee.current_hourly_rate) : '',
   promotion_1_date: employee.promotion_1_date || '',
@@ -87,7 +90,7 @@ export default function AdminDashboard() {
   const [selectedEmployee, setSelectedEmployee] = useState<number | null>(null);
   const [employeeStatus, setEmployeeStatus] = useState<any>(null);
   const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false);
-  const [employeeForm, setEmployeeForm] = useState({ name: '', email: '', password: '' });
+  const [employeeForm, setEmployeeForm] = useState({ name: '', email: '', password: '', reporting_manager: '' });
   const [showOnboardingForm, setShowOnboardingForm] = useState(false);
   const [onboardingForm, setOnboardingForm] = useState(emptyOnboardingForm);
   const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
@@ -261,8 +264,10 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      await employeeApi.createEmployee(employeeForm.name, employeeForm.email, employeeForm.password);
-      setEmployeeForm({ name: '', email: '', password: '' });
+      await employeeApi.createEmployee(employeeForm.name, employeeForm.email, employeeForm.password, {
+        reporting_manager: toNullableText(employeeForm.reporting_manager),
+      });
+      setEmployeeForm({ name: '', email: '', password: '', reporting_manager: '' });
       setShowAddEmployeeForm(false);
       await loadEmployees();
     } catch (err: any) {
@@ -294,6 +299,7 @@ export default function AdminDashboard() {
         onboardingForm.password,
         {
           designation: toNullableText(onboardingForm.designation),
+          reporting_manager: toNullableText(onboardingForm.reporting_manager),
           start_date: toNullableText(onboardingForm.start_date),
           current_hourly_rate: toNullableNumber(onboardingForm.current_hourly_rate),
           promotion_1_date: toNullableText(onboardingForm.promotion_1_date),
@@ -339,6 +345,7 @@ export default function AdminDashboard() {
       [employeeId]: {
         ...(prev[employeeId] || {
           designation: '',
+          reporting_manager: '',
           start_date: '',
           current_hourly_rate: '',
           promotion_1_date: '',
@@ -372,6 +379,7 @@ export default function AdminDashboard() {
     try {
       await employeeApi.updateEmployeeProfile(employeeId, {
         designation: toNullableText(edit.designation),
+        reporting_manager: toNullableText(edit.reporting_manager),
         start_date: toNullableText(edit.start_date),
         current_hourly_rate: toNullableNumber(edit.current_hourly_rate),
         promotion_1_date: toNullableText(edit.promotion_1_date),
@@ -796,6 +804,14 @@ export default function AdminDashboard() {
                       minLength={6}
                       className="border border-slate-300 rounded-xl px-4 py-2 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    <input
+                      type="text"
+                      placeholder="Reporting Manager"
+                      value={employeeForm.reporting_manager}
+                      onChange={(e) => setEmployeeForm({ ...employeeForm, reporting_manager: e.target.value })}
+                      required
+                      className="border border-slate-300 rounded-xl px-4 py-2 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
                   <button
                     type="submit"
@@ -936,6 +952,14 @@ export default function AdminDashboard() {
                       className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
                     />
                     <input
+                      type="text"
+                      placeholder="Reporting Manager *"
+                      value={onboardingForm.reporting_manager}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, reporting_manager: e.target.value })}
+                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                      required
+                    />
+                    <input
                       type="date"
                       value={onboardingForm.start_date}
                       onChange={(e) => setOnboardingForm({ ...onboardingForm, start_date: e.target.value })}
@@ -1030,6 +1054,7 @@ export default function AdminDashboard() {
                       <div className="mt-6 rounded-xl bg-white/70 border border-white/70 p-3 space-y-2">
                         <p className="text-xs text-slate-500">ID: <span className="font-semibold text-slate-900">{employee.employee_code || 'Not set'}</span></p>
                         <p className="text-xs text-slate-500">Designation: <span className="font-semibold text-slate-900">{employee.designation || 'Not set'}</span></p>
+                        <p className="text-xs text-slate-500">Reporting Manager: <span className="font-semibold text-slate-900">{employee.reporting_manager || 'Not set'}</span></p>
                         <p className="text-xs text-slate-500">Hourly Rate: <span className="font-semibold text-slate-900">{employee.current_hourly_rate ?? '-'}</span></p>
                       </div>
                       <p className="text-xs text-slate-500 mt-5">Click to flip for details</p>
@@ -1043,6 +1068,7 @@ export default function AdminDashboard() {
                       <div className="absolute -bottom-14 -right-10 w-36 h-36 bg-blue-300/30 rounded-full blur-2xl" />
                       <p className="text-xs uppercase tracking-[0.2em] text-indigo-700 font-bold">Employee Details</p>
                       <div className="mt-3 space-y-1 text-sm text-slate-700">
+                        <p><span className="font-semibold">Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
                         <p><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
                         <p><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
                         {[1, 2, 3, 4, 5].map((idx) => (
@@ -1668,7 +1694,7 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
               <div className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85 text-sm text-slate-700">
                 <span className="text-xs uppercase tracking-[0.12em] text-slate-500">Employee ID</span>
                 <p className="font-semibold text-slate-900">
@@ -1680,6 +1706,13 @@ export default function AdminDashboard() {
                 placeholder="Designation"
                 value={employeeProfileEdits[editingEmployeeId].designation}
                 onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, 'designation', e.target.value)}
+                className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85"
+              />
+              <input
+                type="text"
+                placeholder="Reporting Manager"
+                value={employeeProfileEdits[editingEmployeeId].reporting_manager}
+                onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, 'reporting_manager', e.target.value)}
                 className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85"
               />
               <input
