@@ -17,7 +17,6 @@ export default function Header() {
   const adminNavItems = [
     { name: 'Dashboard', path: '/admin' },
     { name: 'Employee History', path: '/admin/history' },
-    { name: 'Reports', path: '/admin/report' },
     { name: 'Settings', path: '/settings' },
   ];
 

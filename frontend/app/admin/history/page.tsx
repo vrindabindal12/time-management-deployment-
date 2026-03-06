@@ -6,16 +6,16 @@ import { useRouter } from 'next/navigation';
 
 export default function AdminHistory() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [employeeNameFilter, setEmployeeNameFilter] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState<number | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<number | 'ALL'>('ALL');
   const [workData, setWorkData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState<'csv' | 'excel' | null>(null);
+  const [downloading, setDownloading] = useState<'csv' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [projectFilter, setProjectFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('ALL');
+  const [projectOptions, setProjectOptions] = useState<string[]>([]);
   
   // Edit modal state
   const [editingEntry, setEditingEntry] = useState<any>(null);
@@ -44,25 +44,21 @@ export default function AdminHistory() {
   }, [router]);
 
   useEffect(() => {
-    if (selectedEmployee) {
-      loadWorkHistory(selectedEmployee);
-    }
-  }, [selectedEmployee]);
+    loadWorkHistory(selectedEmployee);
+  }, [selectedEmployee, employees]);
 
   const loadEmployees = async () => {
     try {
       const data = await employeeApi.getEmployees();
       setEmployees(data);
-      if (data.length > 0) {
-        setSelectedEmployee(data[0].id);
-      }
+      setSelectedEmployee('ALL');
     } catch (err) {
       setError('Failed to load employees');
     }
   };
 
   const loadWorkHistory = async (
-    employeeId: number,
+    employeeId: number | 'ALL',
     filters?: { startDate?: string; endDate?: string; projectName?: string }
   ) => {
     setLoading(true);
@@ -70,15 +66,69 @@ export default function AdminHistory() {
     try {
       const effectiveStartDate = (filters?.startDate ?? startDate) || undefined;
       const effectiveEndDate = (filters?.endDate ?? endDate) || undefined;
-      const effectiveProjectName = (filters?.projectName ?? projectFilter.trim()) || undefined;
+      const selectedProject = filters?.projectName ?? projectFilter;
+      const effectiveProjectName = selectedProject && selectedProject !== 'ALL' ? selectedProject : undefined;
 
-      const data = await employeeApi.getEmployeeWork(
-        employeeId,
-        effectiveStartDate,
-        effectiveEndDate,
-        effectiveProjectName
-      );
-      setWorkData(data);
+      let projectEntriesSource: any[] = [];
+      if (employeeId === 'ALL') {
+        if (employees.length === 0) {
+          setWorkData(null);
+          return;
+        }
+        const allEmployeeData = await Promise.all(
+          employees.map((employee) =>
+            employeeApi.getEmployeeWork(
+              employee.id,
+              effectiveStartDate,
+              effectiveEndDate,
+              effectiveProjectName
+            )
+          )
+        );
+
+        const combinedEntries = allEmployeeData
+          .flatMap((item) =>
+            item.work_entries.map((entry: any) => ({
+              ...entry,
+              employee_name: item.employee.name,
+              employee_email: item.employee.email,
+            }))
+          )
+          .sort((a: any, b: any) => {
+            if (a.work_date !== b.work_date) {
+              return a.work_date < b.work_date ? 1 : -1;
+            }
+            return (b.id || 0) - (a.id || 0);
+          });
+
+        const totalHours = allEmployeeData.reduce((sum, item) => sum + (item.total_hours || 0), 0);
+        setWorkData({
+          employee: { name: 'All Employees', email: `${employees.length} total` },
+          total_hours: totalHours,
+          work_entries: combinedEntries,
+        });
+        projectEntriesSource = combinedEntries;
+      } else {
+        const data = await employeeApi.getEmployeeWork(
+          employeeId,
+          effectiveStartDate,
+          effectiveEndDate,
+          effectiveProjectName
+        );
+        setWorkData(data);
+        projectEntriesSource = data.work_entries || [];
+      }
+
+      if (!effectiveProjectName) {
+        const uniqueProjectNames = Array.from(
+          new Set(
+            (projectEntriesSource || [])
+              .map((entry: any) => (entry.project_name || '').trim())
+              .filter((name: string) => Boolean(name))
+          )
+        ).sort();
+        setProjectOptions(uniqueProjectNames);
+      }
     } catch (err) {
       setError('Failed to load work history');
     } finally {
@@ -162,37 +212,73 @@ export default function AdminHistory() {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const handleDownload = async (format: 'csv' | 'excel') => {
-    if (!selectedEmployee) {
-      setError('Please select an employee first');
-      return;
-    }
+  const downloadCsvFile = (filename: string, rows: string[][]) => {
+    const escapeCell = (value: string | number | null | undefined) => {
+      const text = String(value ?? '');
+      if (text.includes('"') || text.includes(',') || text.includes('\n')) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    };
+    const csvContent = rows.map((row) => row.map(escapeCell).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
 
-    setDownloading(format);
+  const handleDownloadCsv = async () => {
+    setDownloading('csv');
     setError(null);
     try {
-      await employeeApi.exportEmployeeWork(
-        selectedEmployee,
-        format,
-        startDate || undefined,
-        endDate || undefined,
-        projectFilter.trim() || undefined
-      );
+      if (selectedEmployee === 'ALL') {
+        if (!workData?.work_entries?.length) {
+          setError('No data available to download');
+          return;
+        }
+        const rows: string[][] = [[
+          'Date',
+          'Employee',
+          'Project',
+          'Hours',
+          'Description',
+          'Status',
+        ]];
+
+        workData.work_entries.forEach((entry: any) => {
+          rows.push([
+            formatDate(entry.work_date),
+            entry.employee_name || '-',
+            entry.project_name || '-',
+            Number(entry.hours_worked || 0).toFixed(2),
+            entry.description || '',
+            entry.updated_by_admin ? 'Admin Edited' : 'Original',
+          ]);
+        });
+        rows.push([]);
+        rows.push(['Total Hours', '', '', Number(workData.total_hours || 0).toFixed(2), '', '']);
+
+        downloadCsvFile('all_employees_work_history.csv', rows);
+      } else {
+        await employeeApi.exportEmployeeWork(
+          selectedEmployee,
+          'csv',
+          startDate || undefined,
+          endDate || undefined,
+          projectFilter !== 'ALL' ? projectFilter : undefined
+        );
+      }
     } catch (err) {
-      setError(`Failed to download ${format.toUpperCase()} file`);
+      setError('Failed to download CSV file');
     } finally {
       setDownloading(null);
     }
   };
-
-  const filteredEmployees = employees.filter((employee) => {
-    if (!employeeNameFilter.trim()) return true;
-    const query = employeeNameFilter.trim().toLowerCase();
-    return (
-      employee.name.toLowerCase().includes(query) ||
-      employee.email.toLowerCase().includes(query)
-    );
-  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
@@ -215,13 +301,23 @@ export default function AdminHistory() {
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Employee</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
-            <input
-              type="text"
-              value={employeeNameFilter}
-              onChange={(e) => setEmployeeNameFilter(e.target.value)}
-              placeholder="Employee name or email"
+            <select
+              value={selectedEmployee || ''}
+              onChange={(e) => {
+                const nextId = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value);
+                setSelectedEmployee(nextId);
+                setProjectFilter('ALL');
+                setProjectOptions([]);
+              }}
               className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              <option value="ALL">All Employees</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            </select>
             <input
               type="date"
               value={startDate}
@@ -234,25 +330,19 @@ export default function AdminHistory() {
               onChange={(e) => setEndDate(e.target.value)}
               className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <input
-              type="text"
+            <select
               value={projectFilter}
               onChange={(e) => setProjectFilter(e.target.value)}
-              placeholder="Project name"
               className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              <option value="ALL">All Projects</option>
+              {projectOptions.map((projectName) => (
+                <option key={projectName} value={projectName}>
+                  {projectName}
+                </option>
+              ))}
+            </select>
           </div>
-          <select
-            value={selectedEmployee || ''}
-            onChange={(e) => setSelectedEmployee(e.target.value ? Number(e.target.value) : null)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {filteredEmployees.map((employee) => (
-              <option key={employee.id} value={employee.id}>
-                {employee.name} ({employee.email})
-              </option>
-            ))}
-          </select>
           <div className="flex gap-2 mt-3">
             <button
               onClick={() => {
@@ -266,10 +356,9 @@ export default function AdminHistory() {
             </button>
             <button
               onClick={() => {
-                setEmployeeNameFilter('');
                 setStartDate('');
                 setEndDate('');
-                setProjectFilter('');
+                setProjectFilter('ALL');
                 if (selectedEmployee) {
                   loadWorkHistory(selectedEmployee, { startDate: '', endDate: '', projectName: '' });
                 }
@@ -298,18 +387,11 @@ export default function AdminHistory() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleDownload('csv')}
+                    onClick={handleDownloadCsv}
                     disabled={downloading !== null || loading}
                     className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition disabled:bg-gray-400"
                   >
                     {downloading === 'csv' ? 'Downloading CSV...' : 'Download CSV'}
-                  </button>
-                  <button
-                    onClick={() => handleDownload('excel')}
-                    disabled={downloading !== null || loading}
-                    className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg transition disabled:bg-gray-400"
-                  >
-                    {downloading === 'excel' ? 'Downloading Excel...' : 'Download Excel'}
                   </button>
                 </div>
               </div>
@@ -328,6 +410,11 @@ export default function AdminHistory() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Date
                     </th>
+                    {selectedEmployee === 'ALL' && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Employee
+                      </th>
+                    )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Project
                     </th>
@@ -348,7 +435,7 @@ export default function AdminHistory() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {workData.work_entries.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={selectedEmployee === 'ALL' ? 7 : 6} className="px-6 py-4 text-center text-gray-500">
                         No work entries found
                       </td>
                     </tr>
@@ -358,6 +445,11 @@ export default function AdminHistory() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {formatDate(entry.work_date)}
                         </td>
+                        {selectedEmployee === 'ALL' && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {entry.employee_name || '-'}
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-sm text-gray-900">
                           {entry.project_name}
                         </td>
