@@ -47,6 +47,20 @@ export interface Employee {
   name: string;
   email: string;
   is_admin: boolean;
+  employee_code?: string | null;
+  designation?: string | null;
+  start_date?: string | null;
+  current_hourly_rate?: number | null;
+  promotion_1_date?: string | null;
+  promotion_1_rate?: number | null;
+  promotion_2_date?: string | null;
+  promotion_2_rate?: number | null;
+  promotion_3_date?: string | null;
+  promotion_3_rate?: number | null;
+  promotion_4_date?: string | null;
+  promotion_4_rate?: number | null;
+  promotion_5_date?: string | null;
+  promotion_5_rate?: number | null;
 }
 
 export interface WorkEntry {
@@ -155,8 +169,18 @@ export const employeeApi = {
     return response.data;
   },
 
-  createEmployee: async (name: string, email: string, password: string): Promise<Employee> => {
-    const response = await api.post('/employees', { name, email, password });
+  createEmployee: async (
+    name: string,
+    email: string,
+    password: string,
+    profileData: Partial<Employee> = {}
+  ): Promise<Employee> => {
+    const response = await api.post('/employees', { name, email, password, ...profileData });
+    return response.data;
+  },
+
+  updateEmployeeProfile: async (employeeId: number, profileData: Partial<Employee>): Promise<Employee> => {
+    const response = await api.put(`/employees/${employeeId}/profile`, profileData);
     return response.data;
   },
 

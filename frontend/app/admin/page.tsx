@@ -2,10 +2,30 @@
 
 import { useState, useEffect } from 'react';
 import { employeeApi, clientApi, projectApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
-import type { Client, Project, ProjectRate } from '@/lib/api';
+import type { Client, Employee, Project, ProjectRate } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 const DESIGNATIONS = ['Managing Director', 'Associate Director', 'Senior Consultant'];
+
+const emptyOnboardingForm = {
+  name: '',
+  email: '',
+  password: '',
+  employee_code: '',
+  designation: '',
+  start_date: '',
+  current_hourly_rate: '',
+  promotion_1_date: '',
+  promotion_1_rate: '',
+  promotion_2_date: '',
+  promotion_2_rate: '',
+  promotion_3_date: '',
+  promotion_3_rate: '',
+  promotion_4_date: '',
+  promotion_4_rate: '',
+  promotion_5_date: '',
+  promotion_5_rate: '',
+};
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
@@ -21,6 +41,9 @@ export default function AdminDashboard() {
   const [employeeStatus, setEmployeeStatus] = useState<any>(null);
   const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false);
   const [employeeForm, setEmployeeForm] = useState({ name: '', email: '', password: '' });
+  const [showOnboardingForm, setShowOnboardingForm] = useState(false);
+  const [onboardingForm, setOnboardingForm] = useState(emptyOnboardingForm);
+  const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
   const [deleteEmployeeModal, setDeleteEmployeeModal] = useState<{
     open: boolean;
     employeeId: number | null;
@@ -156,6 +179,59 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toNullableNumber = (value: string) => {
+    const trimmed = value.trim();
+    return trimmed ? parseFloat(trimmed) : null;
+  };
+
+  const toNullableText = (value: string) => {
+    const trimmed = value.trim();
+    return trimmed || null;
+  };
+
+  const handleOnboardEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      await employeeApi.createEmployee(
+        onboardingForm.name.trim(),
+        onboardingForm.email.trim(),
+        onboardingForm.password,
+        {
+          employee_code: toNullableText(onboardingForm.employee_code)?.toUpperCase() || null,
+          designation: toNullableText(onboardingForm.designation),
+          start_date: toNullableText(onboardingForm.start_date),
+          current_hourly_rate: toNullableNumber(onboardingForm.current_hourly_rate),
+          promotion_1_date: toNullableText(onboardingForm.promotion_1_date),
+          promotion_1_rate: toNullableNumber(onboardingForm.promotion_1_rate),
+          promotion_2_date: toNullableText(onboardingForm.promotion_2_date),
+          promotion_2_rate: toNullableNumber(onboardingForm.promotion_2_rate),
+          promotion_3_date: toNullableText(onboardingForm.promotion_3_date),
+          promotion_3_rate: toNullableNumber(onboardingForm.promotion_3_rate),
+          promotion_4_date: toNullableText(onboardingForm.promotion_4_date),
+          promotion_4_rate: toNullableNumber(onboardingForm.promotion_4_rate),
+          promotion_5_date: toNullableText(onboardingForm.promotion_5_date),
+          promotion_5_rate: toNullableNumber(onboardingForm.promotion_5_rate),
+        }
+      );
+
+      setOnboardingForm(emptyOnboardingForm);
+      setShowOnboardingForm(false);
+      await loadEmployees();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to onboard employee');
+      clearError();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleCardFlip = (employeeId: number) => {
+    setFlippedCards((prev) => ({ ...prev, [employeeId]: !prev[employeeId] }));
   };
 
   const openDeleteEmployeeModal = (employeeId: number, employeeName: string) => {
@@ -370,6 +446,16 @@ export default function AdminDashboard() {
               Employee Management
             </button>
             <button
+              onClick={() => setActiveTab('onboarding')}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
+                activeTab === 'onboarding'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+              }`}
+            >
+              Employee Onboarding
+            </button>
+            <button
               onClick={() => setActiveTab('clients')}
               className={`flex-1 px-6 py-4 font-semibold transition text-center ${
                 activeTab === 'clients'
@@ -510,6 +596,174 @@ export default function AdminDashboard() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'onboarding' && (
+          <div className="space-y-6">
+            <div className="glass-panel rounded-3xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-800">Employee Onboarding</h2>
+                  <p className="text-sm text-slate-600 mt-1">Create employee + compensation/promotion profile in one step.</p>
+                </div>
+                <button
+                  onClick={() => setShowOnboardingForm(!showOnboardingForm)}
+                  className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition"
+                >
+                  {showOnboardingForm ? 'Cancel' : '+ Add Employee Profile'}
+                </button>
+              </div>
+
+              {showOnboardingForm && (
+                <form onSubmit={handleOnboardEmployee} className="glass-subtle rounded-2xl border border-white/60 p-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Employee Name *"
+                      value={onboardingForm.name}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, name: e.target.value })}
+                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                      required
+                    />
+                    <input
+                      type="email"
+                      placeholder="Email *"
+                      value={onboardingForm.email}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, email: e.target.value })}
+                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                      required
+                    />
+                    <input
+                      type="password"
+                      placeholder="Password *"
+                      value={onboardingForm.password}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, password: e.target.value })}
+                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                      minLength={6}
+                      required
+                    />
+                    <input
+                      type="text"
+                      placeholder="Employee ID (e.g., BKP-008)"
+                      value={onboardingForm.employee_code}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, employee_code: e.target.value })}
+                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Designation"
+                      value={onboardingForm.designation}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, designation: e.target.value })}
+                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                    />
+                    <input
+                      type="date"
+                      value={onboardingForm.start_date}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, start_date: e.target.value })}
+                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Current Hourly Rate"
+                      value={onboardingForm.current_hourly_rate}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, current_hourly_rate: e.target.value })}
+                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                    {[1, 2, 3, 4, 5].map((idx) => (
+                      <div key={idx} className="rounded-xl border border-white/70 bg-white/60 p-3 space-y-2">
+                        <p className="text-xs font-bold text-slate-600 uppercase">Promotion {idx}</p>
+                        <input
+                          type="date"
+                          value={onboardingForm[`promotion_${idx}_date` as keyof typeof onboardingForm] as string}
+                          onChange={(e) => setOnboardingForm({
+                            ...onboardingForm,
+                            [`promotion_${idx}_date`]: e.target.value,
+                          })}
+                          className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85"
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="Hourly rate"
+                          value={onboardingForm[`promotion_${idx}_rate` as keyof typeof onboardingForm] as string}
+                          onChange={(e) => setOnboardingForm({
+                            ...onboardingForm,
+                            [`promotion_${idx}_rate`]: e.target.value,
+                          })}
+                          className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="glass-primary-btn hover:brightness-95 text-white px-6 py-2 rounded-xl transition disabled:opacity-50"
+                  >
+                    {loading ? 'Saving...' : 'Create Employee Profile'}
+                  </button>
+                </form>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {employees.map((employee: Employee) => (
+                <div key={employee.id} style={{ perspective: '1000px' }}>
+                  <div
+                    className="relative h-80 w-full transition-transform duration-500"
+                    style={{
+                      transformStyle: 'preserve-3d',
+                      transform: flippedCards[employee.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleCardFlip(employee.id)}
+                      className="absolute inset-0 w-full text-left glass-panel rounded-2xl p-5"
+                      style={{ backfaceVisibility: 'hidden' }}
+                    >
+                      <p className="text-xs uppercase tracking-[0.2em] text-cyan-700 font-bold">Employee Card</p>
+                      <h3 className="text-xl font-bold text-slate-900 mt-2">{employee.name}</h3>
+                      <p className="text-slate-600 text-sm mt-1">{employee.email}</p>
+                      <div className="mt-6 rounded-xl bg-white/70 border border-white/70 p-3">
+                        <p className="text-xs text-slate-500">ID</p>
+                        <p className="font-semibold text-slate-900">{employee.employee_code || 'Not set'}</p>
+                        <p className="text-xs text-slate-500 mt-2">Designation</p>
+                        <p className="font-semibold text-slate-900">{employee.designation || 'Not set'}</p>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-5">Click to flip for full details</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleCardFlip(employee.id)}
+                      className="absolute inset-0 w-full text-left glass-panel rounded-2xl p-5"
+                      style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                    >
+                      <p className="text-xs uppercase tracking-[0.2em] text-indigo-700 font-bold">Compensation Details</p>
+                      <div className="mt-2 space-y-1 text-sm text-slate-700">
+                        <p><span className="font-semibold">Start:</span> {employee.start_date || '-'}</p>
+                        <p><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
+                        <p><span className="font-semibold">Promotion 1:</span> {employee.promotion_1_date || '-'} / {employee.promotion_1_rate ?? '-'}</p>
+                        <p><span className="font-semibold">Promotion 2:</span> {employee.promotion_2_date || '-'} / {employee.promotion_2_rate ?? '-'}</p>
+                        <p><span className="font-semibold">Promotion 3:</span> {employee.promotion_3_date || '-'} / {employee.promotion_3_rate ?? '-'}</p>
+                        <p><span className="font-semibold">Promotion 4:</span> {employee.promotion_4_date || '-'} / {employee.promotion_4_rate ?? '-'}</p>
+                        <p><span className="font-semibold">Promotion 5:</span> {employee.promotion_5_date || '-'} / {employee.promotion_5_rate ?? '-'}</p>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-4">Click to flip back</p>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
