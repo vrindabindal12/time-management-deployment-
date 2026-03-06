@@ -1450,7 +1450,7 @@ export default function AdminDashboard() {
         {activeTab === 'clients' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* LEFT: Clients */}
-            <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-amber-50/70 via-white/75 to-orange-100/60">
+            <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/75 to-blue-100/60">
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <h2 className="text-xl font-black text-slate-900">Clients</h2>
@@ -1468,25 +1468,25 @@ export default function AdminDashboard() {
                 <form onSubmit={handleAddClient} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-bold text-yellow-700 mb-1">CLIENT NAME</label>
+                      <label className="block text-xs font-bold text-cyan-700 mb-1">CLIENT NAME</label>
                       <input
                         type="text"
                         placeholder="e.g., Lekadir"
                         value={clientForm.name}
                         onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
                         required
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-yellow-700 mb-1">CLIENT CODE</label>
+                      <label className="block text-xs font-bold text-cyan-700 mb-1">CLIENT CODE</label>
                       <input
                         type="text"
                         placeholder="e.g., LD"
                         value={clientForm.code}
                         onChange={(e) => setClientForm({ ...clientForm, code: e.target.value.toUpperCase() })}
                         required
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
                     </div>
                   </div>
@@ -1501,22 +1501,22 @@ export default function AdminDashboard() {
               )}
 
               {editingClientId !== null && (
-                <form onSubmit={handleUpdateClient} className="mb-4 p-3 rounded-2xl border border-amber-200/70 bg-amber-50/70">
-                  <p className="text-xs uppercase tracking-[0.18em] font-bold text-amber-700 mb-3">Edit Client</p>
+                <form onSubmit={handleUpdateClient} className="mb-4 p-3 rounded-2xl border border-cyan-200/70 bg-cyan-50/70">
+                  <p className="text-xs uppercase tracking-[0.18em] font-bold text-cyan-700 mb-3">Edit Client</p>
                   <div className="space-y-3">
                     <input
                       type="text"
                       value={clientEditForm.name}
                       onChange={(e) => setClientEditForm({ ...clientEditForm, name: e.target.value })}
                       required
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                     />
                     <input
                       type="text"
                       value={clientEditForm.code}
                       onChange={(e) => setClientEditForm({ ...clientEditForm, code: e.target.value.toUpperCase() })}
                       required
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                     />
                   </div>
                   <div className="mt-3 flex gap-2">
@@ -1545,15 +1545,15 @@ export default function AdminDashboard() {
                     onClick={() => setSelectedClient(client.id)}
                     className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
                       selectedClient === client.id
-                        ? 'border-amber-300 bg-gradient-to-br from-amber-100/85 via-white/75 to-orange-100/80 shadow-lg'
-                        : 'border-white/60 hover:border-amber-200 bg-gradient-to-br from-white/80 via-white/70 to-amber-50/70 shadow-md'
+                        ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/80 shadow-lg'
+                        : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
                     }`}
                   >
-                    <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-amber-300/20 blur-2xl" />
-                    <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-orange-300/20 blur-2xl" />
+                    <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-cyan-300/20 blur-2xl" />
+                    <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-blue-300/20 blur-2xl" />
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-amber-700">Client</p>
+                        <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-cyan-700">Client</p>
                         <p className="font-black text-slate-900 text-lg mt-1">{client.name}</p>
                         <p className="text-sm font-mono text-slate-600 mt-1">{client.code}</p>
                       </div>
@@ -1564,7 +1564,7 @@ export default function AdminDashboard() {
                             startEditClient(client);
                           }}
                           disabled={loading}
-                          className="px-2 py-1 text-xs rounded bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200 transition disabled:opacity-50"
+                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-100 text-cyan-800 border border-cyan-200 hover:bg-cyan-200 transition disabled:opacity-50"
                         >
                           Edit
                         </button>
@@ -1574,7 +1574,7 @@ export default function AdminDashboard() {
                             openDeleteEntityModal('client', client.id, client.name);
                           }}
                           disabled={loading}
-                          className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
+                          className="px-3 py-1.5 text-xs font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition disabled:opacity-50"
                         >
                           Delete
                         </button>
@@ -1718,7 +1718,7 @@ export default function AdminDashboard() {
                                 startEditProject(project);
                               }}
                               disabled={loading}
-                              className="px-2 py-1 text-xs rounded bg-cyan-100 text-cyan-800 border border-cyan-200 hover:bg-cyan-200 transition disabled:opacity-50"
+                              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-100 text-cyan-800 border border-cyan-200 hover:bg-cyan-200 transition disabled:opacity-50"
                             >
                               Edit
                             </button>
@@ -1728,7 +1728,7 @@ export default function AdminDashboard() {
                                 openDeleteEntityModal('project', project.id, project.name);
                               }}
                               disabled={loading}
-                              className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
+                              className="px-3 py-1.5 text-xs font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition disabled:opacity-50"
                             >
                               Delete
                             </button>
@@ -1748,7 +1748,7 @@ export default function AdminDashboard() {
               {selectedProject && (
                 <div className="glass-panel rounded-3xl p-6">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-bold text-yellow-800 glass-subtle px-3 py-2 rounded-lg flex-1">
+                    <h3 className="text-sm font-bold text-cyan-800 glass-subtle px-3 py-2 rounded-lg flex-1">
                       GROSS RATES (Standard per hour)
                     </h3>
                     <button
@@ -1763,22 +1763,22 @@ export default function AdminDashboard() {
                     <form onSubmit={handleAddRate} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-xs font-bold text-purple-700 mb-1">EMPLOYEE NAME</label>
+                          <label className="block text-xs font-bold text-cyan-700 mb-1">EMPLOYEE NAME</label>
                           <input
                             type="text"
                             placeholder="e.g., Shashank Jain"
                             value={rateForm.employeeName}
                             onChange={(e) => setRateForm({ ...rateForm, employeeName: e.target.value })}
                             required
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-purple-700 mb-1">DESIGNATION</label>
+                          <label className="block text-xs font-bold text-cyan-700 mb-1">DESIGNATION</label>
                           <select
                             value={rateForm.designation}
                             onChange={(e) => setRateForm({ ...rateForm, designation: e.target.value })}
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                           >
                             {DESIGNATIONS.map((d) => (
                               <option key={d} value={d}>{d}</option>
@@ -1787,7 +1787,7 @@ export default function AdminDashboard() {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="block text-xs font-bold text-purple-700 mb-1">GROSS RATE</label>
+                            <label className="block text-xs font-bold text-cyan-700 mb-1">GROSS RATE</label>
                             <input
                               type="number"
                               placeholder="300"
@@ -1796,11 +1796,11 @@ export default function AdminDashboard() {
                               required
                               step="0.01"
                               min="0"
-                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                             />
                           </div>
                           <div>
-                            <label className="block text-xs font-bold text-purple-700 mb-1">DISCOUNT %</label>
+                            <label className="block text-xs font-bold text-cyan-700 mb-1">DISCOUNT %</label>
                             <input
                               type="number"
                               placeholder="0"
@@ -1809,7 +1809,7 @@ export default function AdminDashboard() {
                               step="0.1"
                               min="0"
                               max="100"
-                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                             />
                           </div>
                         </div>
@@ -1825,20 +1825,20 @@ export default function AdminDashboard() {
                   )}
 
                   {editingRateId !== null && (
-                    <form onSubmit={handleUpdateRate} className="mb-4 p-3 rounded-2xl border border-purple-200/70 bg-purple-50/70">
-                      <p className="text-xs uppercase tracking-[0.18em] font-bold text-purple-700 mb-3">Edit Gross Rate</p>
+                    <form onSubmit={handleUpdateRate} className="mb-4 p-3 rounded-2xl border border-cyan-200/70 bg-cyan-50/70">
+                      <p className="text-xs uppercase tracking-[0.18em] font-bold text-cyan-700 mb-3">Edit Gross Rate</p>
                       <div className="space-y-3">
                         <input
                           type="text"
                           value={rateEditForm.employeeName}
                           onChange={(e) => setRateEditForm({ ...rateEditForm, employeeName: e.target.value })}
                           required
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                         />
                         <select
                           value={rateEditForm.designation}
                           onChange={(e) => setRateEditForm({ ...rateEditForm, designation: e.target.value })}
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                         >
                           {DESIGNATIONS.map((d) => (
                             <option key={d} value={d}>{d}</option>
@@ -1852,7 +1852,7 @@ export default function AdminDashboard() {
                             value={rateEditForm.grossRate}
                             onChange={(e) => setRateEditForm({ ...rateEditForm, grossRate: e.target.value })}
                             required
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                           />
                           <input
                             type="number"
@@ -1861,7 +1861,7 @@ export default function AdminDashboard() {
                             max="100"
                             value={rateEditForm.discount}
                             onChange={(e) => setRateEditForm({ ...rateEditForm, discount: e.target.value })}
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                           />
                         </div>
                       </div>
@@ -1887,8 +1887,8 @@ export default function AdminDashboard() {
                   <div className="space-y-2">
                     {projectRates.length > 0 ? (
                       projectRates.map((rate) => (
-                        <div key={rate.id} className="p-3 border border-white/60 rounded-xl bg-white/55 hover:bg-white/75 transition">
-                          <div className="grid grid-cols-5 gap-2 items-center text-sm">
+                        <div key={rate.id} className="p-4 border border-white/60 rounded-2xl bg-white/60 hover:bg-white/78 transition">
+                          <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1.1fr_.7fr_.7fr_.7fr_auto] gap-4 items-center text-sm">
                             <div>
                               <p className="font-bold text-gray-700">{rate.employee_name || '-'}</p>
                               <p className="text-xs text-gray-500">Employee</p>
@@ -1905,27 +1905,27 @@ export default function AdminDashboard() {
                               <p className="font-bold text-red-600">{rate.discount}%</p>
                               <p className="text-xs text-gray-500">Discount</p>
                             </div>
-                            <div className="flex justify-between items-center">
+                            <div className="text-center">
                               <div>
                                 <p className="font-bold text-green-600">${rate.net_rate}</p>
                                 <p className="text-xs text-gray-500">Net</p>
                               </div>
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => startEditRate(rate)}
-                                  disabled={loading}
-                                  className="px-2 py-1 text-xs rounded bg-purple-100 text-purple-800 border border-purple-200 hover:bg-purple-200 transition disabled:opacity-50"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => openDeleteEntityModal('rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
-                                  disabled={loading}
-                                  className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
-                                >
-                                  Del
-                                </button>
-                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => startEditRate(rate)}
+                                disabled={loading}
+                                className="min-w-[74px] px-4 py-2 text-xs font-semibold rounded-xl bg-cyan-100 text-cyan-800 border border-cyan-200 hover:bg-cyan-200 transition disabled:opacity-50"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => openDeleteEntityModal('rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
+                                disabled={loading}
+                                className="min-w-[74px] px-4 py-2 text-xs font-semibold glass-danger-btn rounded-xl hover:brightness-95 transition disabled:opacity-50"
+                              >
+                                Delete
+                              </button>
                             </div>
                           </div>
                         </div>
