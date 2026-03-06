@@ -126,6 +126,7 @@ export default function AdminDashboard() {
   const [invoiceEndDate, setInvoiceEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [invoiceReport, setInvoiceReport] = useState<ClientInvoiceReport | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceProjectFilter, setInvoiceProjectFilter] = useState('ALL');
   const [payableEmployeeId, setPayableEmployeeId] = useState<number | null>(null);
   const [payableStartDate, setPayableStartDate] = useState(() => {
     const now = new Date();
@@ -134,6 +135,7 @@ export default function AdminDashboard() {
   const [payableEndDate, setPayableEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [payablesReport, setPayablesReport] = useState<EmployeePayablesReport | null>(null);
   const [payablesLoading, setPayablesLoading] = useState(false);
+  const [payablesProjectFilter, setPayablesProjectFilter] = useState('ALL');
 
   // Project states
   const [projects, setProjects] = useState<Project[]>([]);
@@ -763,6 +765,7 @@ export default function AdminDashboard() {
     try {
       const data = await employeeApi.getClientInvoiceReport(invoiceClientId, invoiceStartDate, invoiceEndDate);
       setInvoiceReport(data);
+      setInvoiceProjectFilter('ALL');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load invoice report');
       clearError();
@@ -781,6 +784,7 @@ export default function AdminDashboard() {
         payableEmployeeId || undefined
       );
       setPayablesReport(data);
+      setPayablesProjectFilter('ALL');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load payables report');
       clearError();
@@ -819,6 +823,121 @@ export default function AdminDashboard() {
     ...nonAdminEmployees.filter((employee) => !employeeCardOrder.includes(employee.id)),
   ];
   const selectedClientData = clients.find((client) => client.id === selectedClient) || null;
+  const invoiceProjectOptions = invoiceReport
+    ? Array.from(new Set(invoiceReport.rows.map((row) => row.project_code))).sort()
+    : [];
+  const filteredInvoiceRows = invoiceReport
+    ? invoiceReport.rows.filter((row) => invoiceProjectFilter === 'ALL' || row.project_code === invoiceProjectFilter)
+    : [];
+  const payablesProjectOptions = payablesReport
+    ? Array.from(new Set(payablesReport.rows.map((row) => row.project_code || '-'))).sort()
+    : [];
+  const filteredPayablesRows = payablesReport
+    ? payablesReport.rows.filter((row) => payablesProjectFilter === 'ALL' || (row.project_code || '-') === payablesProjectFilter)
+    : [];
+
+  const downloadCsvFile = (filename: string, rows: string[][]) => {
+    const escapeCell = (value: string | number | null | undefined) => {
+      const text = String(value ?? '');
+      if (text.includes('"') || text.includes(',') || text.includes('\n')) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    };
+
+    const csvContent = rows.map((row) => row.map(escapeCell).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const downloadInvoiceCsv = () => {
+    if (!invoiceReport) return;
+    const rows: string[][] = [[
+      'Project Code',
+      'Employee',
+      'Level',
+      'Project Name',
+      'Date',
+      'Gross Rate',
+      'Discount',
+      'Net Rate',
+      'Hours',
+      'Net Billable',
+      'Task Performed',
+    ]];
+
+    filteredInvoiceRows.forEach((row) => {
+      rows.push([
+        row.project_code,
+        row.employee_name,
+        row.employee_designation,
+        row.project_name,
+        row.work_date,
+        row.gross_rate.toFixed(2),
+        row.discount.toFixed(2),
+        row.net_rate.toFixed(2),
+        row.hours.toFixed(2),
+        row.net_billable.toFixed(2),
+        row.task_performed || '',
+      ]);
+    });
+
+    rows.push([]);
+    rows.push(['Total Hours', invoiceReport.total_hours.toFixed(2)]);
+    rows.push(['Total Billable', invoiceReport.total_net_billable.toFixed(2)]);
+
+    downloadCsvFile(
+      `client_invoice_${invoiceReport.client.code}_${invoiceReport.start_date}_to_${invoiceReport.end_date}.csv`,
+      rows
+    );
+  };
+
+  const downloadPayablesCsv = () => {
+    if (!payablesReport) return;
+    const rows: string[][] = [[
+      'Project Code',
+      'Employee Name',
+      'Employee Code',
+      'Level',
+      'Project Name',
+      'Date',
+      'Rate',
+      'Hours',
+      'Net Payable',
+      'Task Performed',
+    ]];
+
+    filteredPayablesRows.forEach((row) => {
+      rows.push([
+        row.project_code || '',
+        row.employee_name,
+        row.employee_code || '',
+        row.employee_designation,
+        row.project_name,
+        row.work_date,
+        row.rate.toFixed(2),
+        row.hours.toFixed(2),
+        row.net_payable.toFixed(2),
+        row.task_performed || '',
+      ]);
+    });
+
+    rows.push([]);
+    rows.push(['Total Hours', payablesReport.total_hours.toFixed(2)]);
+    rows.push(['Total Payable', payablesReport.total_net_payable.toFixed(2)]);
+
+    downloadCsvFile(
+      `employee_payables_${payablesReport.start_date}_to_${payablesReport.end_date}.csv`,
+      rows
+    );
+  };
 
   if (!user) {
     return (
@@ -1874,20 +1993,52 @@ export default function AdminDashboard() {
 
             {invoiceReport && (
               <div className="glass-panel rounded-3xl p-6">
-                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
-                  <div>
-                    <p className="text-sm text-slate-600">
-                      Client: <span className="font-semibold text-slate-900">{invoiceReport.client.name}</span>
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Period: {invoiceReport.start_date} to {invoiceReport.end_date}
-                    </p>
+                <div className="mb-4 rounded-2xl border border-white/70 bg-white/60 p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-3">
+                    <div>
+                      <p className="text-sm text-slate-600">
+                        Client: <span className="font-semibold text-slate-900">{invoiceReport.client.name}</span>
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        Period: {invoiceReport.start_date} to {invoiceReport.end_date}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-cyan-200/80 bg-gradient-to-br from-cyan-50/80 to-blue-50/80 px-4 py-2 text-right">
+                      <p className="text-xs uppercase tracking-[0.16em] text-cyan-700 font-bold">Currency</p>
+                      <p className="text-lg font-black text-slate-900">CAD$</p>
+                    </div>
+                    <div className="rounded-xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/80 to-blue-50/80 px-4 py-2 text-right">
+                      <p className="text-xs uppercase tracking-[0.16em] text-indigo-700 font-bold">Total Billable</p>
+                      <p className="text-2xl font-black text-slate-900">{invoiceReport.total_net_billable.toFixed(2)}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-slate-600">Currency: <span className="font-semibold">CAD$</span></p>
-                    <p className="text-xl font-black text-slate-900">
-                      Total Billable: {invoiceReport.total_net_billable.toFixed(2)}
-                    </p>
+                  <button
+                    type="button"
+                    onClick={downloadInvoiceCsv}
+                    className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-indigo-200/80 bg-gradient-to-r from-indigo-500 to-blue-500 text-white hover:brightness-95 shadow-md transition"
+                    title="Download Invoice CSV"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M12 3v12" />
+                      <path d="m7 10 5 5 5-5" />
+                      <path d="M5 21h14" />
+                    </svg>
+                    <span className="text-sm font-semibold">Download CSV</span>
+                  </button>
+                  <div className="mt-3 max-w-xs">
+                    <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Project Filter</label>
+                    <select
+                      value={invoiceProjectFilter}
+                      onChange={(e) => setInvoiceProjectFilter(e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
+                    >
+                      <option value="ALL">All</option>
+                      {invoiceProjectOptions.map((projectCode) => (
+                        <option key={projectCode} value={projectCode}>
+                          {projectCode}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -1909,14 +2060,14 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {invoiceReport.rows.length === 0 ? (
+                      {filteredInvoiceRows.length === 0 ? (
                         <tr>
                           <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
                             No invoice entries found for the selected filters
                           </td>
                         </tr>
                       ) : (
-                        invoiceReport.rows.map((row) => (
+                        filteredInvoiceRows.map((row) => (
                           <tr key={row.work_id} className="hover:bg-slate-50/70">
                             <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
@@ -1943,17 +2094,6 @@ export default function AdminDashboard() {
                   </table>
                 </div>
 
-                {invoiceReport.project_totals.length > 0 && (
-                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {invoiceReport.project_totals.map((summary) => (
-                      <div key={summary.project_id} className="glass-subtle rounded-xl border border-white/70 p-3">
-                        <p className="font-semibold text-slate-900">{summary.project_code} - {summary.project_name}</p>
-                        <p className="text-sm text-slate-600">Hours: {summary.total_hours.toFixed(2)}</p>
-                        <p className="text-sm font-semibold text-slate-800">Billable (CAD$): {summary.total_net_billable.toFixed(2)}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -2005,17 +2145,49 @@ export default function AdminDashboard() {
 
             {payablesReport && (
               <div className="glass-panel rounded-3xl p-6">
-                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
-                  <div>
-                    <p className="text-sm text-slate-600">
-                      Period: {payablesReport.start_date} to {payablesReport.end_date}
-                    </p>
+                <div className="mb-4 rounded-2xl border border-white/70 bg-white/60 p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-3">
+                    <div>
+                      <p className="text-sm text-slate-600">
+                        Period: {payablesReport.start_date} to {payablesReport.end_date}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-teal-50/80 px-4 py-2 text-right">
+                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Currency</p>
+                      <p className="text-lg font-black text-slate-900">INR</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-lime-50/80 px-4 py-2 text-right">
+                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Total Payable</p>
+                      <p className="text-2xl font-black text-slate-900">{payablesReport.total_net_payable.toFixed(2)}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-slate-600">Currency: <span className="font-semibold">INR</span></p>
-                    <p className="text-xl font-black text-slate-900">
-                      Total Payable: {payablesReport.total_net_payable.toFixed(2)}
-                    </p>
+                  <button
+                    type="button"
+                    onClick={downloadPayablesCsv}
+                    className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-200/80 bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:brightness-95 shadow-md transition"
+                    title="Download Payables CSV"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M12 3v12" />
+                      <path d="m7 10 5 5 5-5" />
+                      <path d="M5 21h14" />
+                    </svg>
+                    <span className="text-sm font-semibold">Download CSV</span>
+                  </button>
+                  <div className="mt-3 max-w-xs">
+                    <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Project Filter</label>
+                    <select
+                      value={payablesProjectFilter}
+                      onChange={(e) => setPayablesProjectFilter(e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
+                    >
+                      <option value="ALL">All</option>
+                      {payablesProjectOptions.map((projectCode) => (
+                        <option key={projectCode} value={projectCode}>
+                          {projectCode}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -2035,14 +2207,14 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {payablesReport.rows.length === 0 ? (
+                      {filteredPayablesRows.length === 0 ? (
                         <tr>
                           <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
                             No payable entries found for the selected filters
                           </td>
                         </tr>
                       ) : (
-                        payablesReport.rows.map((row) => (
+                        filteredPayablesRows.map((row) => (
                           <tr key={row.work_id} className="hover:bg-slate-50/70">
                             <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code || '-'}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
@@ -2060,19 +2232,6 @@ export default function AdminDashboard() {
                   </table>
                 </div>
 
-                {payablesReport.employee_totals.length > 0 && (
-                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {payablesReport.employee_totals.map((summary) => (
-                      <div key={summary.employee_id} className="glass-subtle rounded-xl border border-white/70 p-3">
-                        <p className="font-semibold text-slate-900">
-                          {summary.employee_name} {summary.employee_code ? `(${summary.employee_code})` : ''}
-                        </p>
-                        <p className="text-sm text-slate-600">Hours: {summary.total_hours.toFixed(2)}</p>
-                        <p className="text-sm font-semibold text-slate-800">Net Payable (INR): {summary.total_net_payable.toFixed(2)}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>
