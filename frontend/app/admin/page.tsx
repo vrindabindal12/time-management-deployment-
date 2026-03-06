@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { employeeApi, clientApi, projectApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
-import type { Client, Employee, Project, ProjectRate } from '@/lib/api';
+import type { Client, ClientInvoiceReport, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 const DESIGNATIONS = ['Managing Director', 'Associate Director', 'Senior Consultant'];
@@ -60,6 +60,24 @@ export default function AdminDashboard() {
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
   const [showAddClientForm, setShowAddClientForm] = useState(false);
   const [clientForm, setClientForm] = useState({ name: '', code: '' });
+  const [invoiceClientId, setInvoiceClientId] = useState<number | null>(null);
+  const [invoiceStartDate, setInvoiceStartDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  });
+  const [invoiceEndDate, setInvoiceEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [invoiceReport, setInvoiceReport] = useState<ClientInvoiceReport | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceEdits, setInvoiceEdits] = useState<Record<number, { gross_rate: string; discount: string; hours: string }>>({});
+  const [savingInvoiceRowId, setSavingInvoiceRowId] = useState<number | null>(null);
+  const [payableEmployeeId, setPayableEmployeeId] = useState<number | null>(null);
+  const [payableStartDate, setPayableStartDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  });
+  const [payableEndDate, setPayableEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [payablesReport, setPayablesReport] = useState<EmployeePayablesReport | null>(null);
+  const [payablesLoading, setPayablesLoading] = useState(false);
 
   // Project states
   const [projects, setProjects] = useState<Project[]>([]);
@@ -103,6 +121,12 @@ export default function AdminDashboard() {
       loadClientProjects(selectedClient);
     }
   }, [selectedClient]);
+
+  useEffect(() => {
+    if (!invoiceClientId && clients.length > 0) {
+      setInvoiceClientId(clients[0].id);
+    }
+  }, [clients, invoiceClientId]);
 
   useEffect(() => {
     if (selectedProject) {
@@ -405,6 +429,88 @@ export default function AdminDashboard() {
     }
   };
 
+  const runInvoiceReport = async () => {
+    if (!invoiceClientId) {
+      setError('Please select a client for invoicing');
+      clearError();
+      return;
+    }
+
+    setInvoiceLoading(true);
+    setError(null);
+    try {
+      const data = await employeeApi.getClientInvoiceReport(invoiceClientId, invoiceStartDate, invoiceEndDate);
+      setInvoiceReport(data);
+      const nextEdits: Record<number, { gross_rate: string; discount: string; hours: string }> = {};
+      data.rows.forEach((row) => {
+        nextEdits[row.work_id] = {
+          gross_rate: row.gross_rate.toString(),
+          discount: row.discount.toString(),
+          hours: row.hours.toString(),
+        };
+      });
+      setInvoiceEdits(nextEdits);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load invoice report');
+      clearError();
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  const handleInvoiceEditChange = (
+    workId: number,
+    field: 'gross_rate' | 'discount' | 'hours',
+    value: string
+  ) => {
+    setInvoiceEdits((prev) => ({
+      ...prev,
+      [workId]: {
+        ...(prev[workId] || { gross_rate: '', discount: '', hours: '' }),
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveInvoiceRow = async (workId: number) => {
+    const edit = invoiceEdits[workId];
+    if (!edit) return;
+
+    setSavingInvoiceRowId(workId);
+    setError(null);
+    try {
+      await employeeApi.updateWorkInvoiceValues(workId, {
+        gross_rate: edit.gross_rate === '' ? null : parseFloat(edit.gross_rate),
+        discount: edit.discount === '' ? null : parseFloat(edit.discount),
+        hours: edit.hours === '' ? null : parseFloat(edit.hours),
+      });
+      await runInvoiceReport();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to save invoice values');
+      clearError();
+    } finally {
+      setSavingInvoiceRowId(null);
+    }
+  };
+
+  const runPayablesReport = async () => {
+    setPayablesLoading(true);
+    setError(null);
+    try {
+      const data = await employeeApi.getEmployeePayablesReport(
+        payableStartDate,
+        payableEndDate,
+        payableEmployeeId || undefined
+      );
+      setPayablesReport(data);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load payables report');
+      clearError();
+    } finally {
+      setPayablesLoading(false);
+    }
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
@@ -464,6 +570,26 @@ export default function AdminDashboard() {
               }`}
             >
               Clients & Projects
+            </button>
+            <button
+              onClick={() => setActiveTab('invoicing')}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
+                activeTab === 'invoicing'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+              }`}
+            >
+              Invoicing
+            </button>
+            <button
+              onClick={() => setActiveTab('payables')}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
+                activeTab === 'payables'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+              }`}
+            >
+              Payables
             </button>
           </div>
         </div>
@@ -1057,6 +1183,289 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'invoicing' && (
+          <div className="space-y-6">
+            <div className="glass-panel rounded-3xl p-6">
+              <h2 className="text-2xl font-black text-slate-900 mb-4">Reports - Client Invoicing</h2>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <select
+                  value={invoiceClientId ?? ''}
+                  onChange={(e) => setInvoiceClientId(Number(e.target.value))}
+                  className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                >
+                  <option value="">Select Client</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={invoiceStartDate}
+                  onChange={(e) => setInvoiceStartDate(e.target.value)}
+                  className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                />
+                <input
+                  type="date"
+                  value={invoiceEndDate}
+                  onChange={(e) => setInvoiceEndDate(e.target.value)}
+                  className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                />
+                <button
+                  onClick={runInvoiceReport}
+                  disabled={invoiceLoading}
+                  className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition disabled:opacity-50"
+                >
+                  {invoiceLoading ? 'Running...' : 'Run Report'}
+                </button>
+              </div>
+            </div>
+
+            {invoiceReport && (
+              <div className="glass-panel rounded-3xl p-6">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
+                  <div>
+                    <p className="text-sm text-slate-600">
+                      Client: <span className="font-semibold text-slate-900">{invoiceReport.client.name}</span>
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Period: {invoiceReport.start_date} to {invoiceReport.end_date}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-slate-600">Currency: <span className="font-semibold">CAD$</span></p>
+                    <p className="text-xl font-black text-slate-900">
+                      Total Billable: {invoiceReport.total_net_billable.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-white/60 bg-white/65">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-100/90">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Code</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Employee</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Level</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Name</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Date</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Gross Rate</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Discount</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Net Rate</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Hours</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Net Billable</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Task Performed</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {invoiceReport.rows.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-6 text-center text-slate-500" colSpan={12}>
+                            No invoice entries found for the selected filters
+                          </td>
+                        </tr>
+                      ) : (
+                        invoiceReport.rows.map((row) => (
+                          <tr key={row.work_id} className="hover:bg-slate-50/70">
+                            <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
+                            <td className="px-4 py-3 text-slate-700">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={invoiceEdits[row.work_id]?.gross_rate ?? ''}
+                                onChange={(e) => handleInvoiceEditChange(row.work_id, 'gross_rate', e.target.value)}
+                                className="w-24 border border-slate-300 rounded-lg px-2 py-1 bg-white/85"
+                              />
+                            </td>
+                            <td className="px-4 py-3 text-slate-700">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="100"
+                                value={invoiceEdits[row.work_id]?.discount ?? ''}
+                                onChange={(e) => handleInvoiceEditChange(row.work_id, 'discount', e.target.value)}
+                                className="w-20 border border-slate-300 rounded-lg px-2 py-1 bg-white/85"
+                              />
+                            </td>
+                            <td className="px-4 py-3 text-slate-700">{row.net_rate.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                value={invoiceEdits[row.work_id]?.hours ?? ''}
+                                onChange={(e) => handleInvoiceEditChange(row.work_id, 'hours', e.target.value)}
+                                className="w-20 border border-slate-300 rounded-lg px-2 py-1 bg-white/85"
+                              />
+                            </td>
+                            <td className="px-4 py-3 font-bold text-slate-900">{row.net_billable.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">
+                              {row.task_performed || '-'}
+                              {row.is_invoice_override && (
+                                <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-100 text-cyan-800">
+                                  Admin Override
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => saveInvoiceRow(row.work_id)}
+                                disabled={savingInvoiceRowId === row.work_id}
+                                className="glass-primary-btn hover:brightness-95 text-white px-3 py-1.5 rounded-lg text-xs transition disabled:opacity-50"
+                              >
+                                {savingInvoiceRowId === row.work_id ? 'Saving...' : 'Save'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {invoiceReport.project_totals.length > 0 && (
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {invoiceReport.project_totals.map((summary) => (
+                      <div key={summary.project_id} className="glass-subtle rounded-xl border border-white/70 p-3">
+                        <p className="font-semibold text-slate-900">{summary.project_code} - {summary.project_name}</p>
+                        <p className="text-sm text-slate-600">Hours: {summary.total_hours.toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-slate-800">Billable (CAD$): {summary.total_net_billable.toFixed(2)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'payables' && (
+          <div className="space-y-6">
+            <div className="glass-panel rounded-3xl p-6">
+              <h2 className="text-2xl font-black text-slate-900 mb-4">Reports - Employee Payables</h2>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <select
+                  value={payableEmployeeId ?? ''}
+                  onChange={(e) => setPayableEmployeeId(e.target.value ? Number(e.target.value) : null)}
+                  className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                >
+                  <option value="">All Employees</option>
+                  {employees
+                    .filter((emp) => !emp.is_admin)
+                    .map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </option>
+                    ))}
+                </select>
+                <input
+                  type="date"
+                  value={payableStartDate}
+                  onChange={(e) => setPayableStartDate(e.target.value)}
+                  className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                />
+                <input
+                  type="date"
+                  value={payableEndDate}
+                  onChange={(e) => setPayableEndDate(e.target.value)}
+                  className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
+                />
+                <button
+                  onClick={runPayablesReport}
+                  disabled={payablesLoading}
+                  className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition disabled:opacity-50"
+                >
+                  {payablesLoading ? 'Running...' : 'Run Report'}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-3">
+                Auto-populated from employee onboarding rates/promotions and attendance logs.
+              </p>
+            </div>
+
+            {payablesReport && (
+              <div className="glass-panel rounded-3xl p-6">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
+                  <div>
+                    <p className="text-sm text-slate-600">
+                      Period: {payablesReport.start_date} to {payablesReport.end_date}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-slate-600">Currency: <span className="font-semibold">INR</span></p>
+                    <p className="text-xl font-black text-slate-900">
+                      Total Payable: {payablesReport.total_net_payable.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-white/60 bg-white/65">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-100/90">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Code</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Name</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Level</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Name</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Date</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Rate</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Hours</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Net Payable</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Task Performed</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {payablesReport.rows.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
+                            No payable entries found for the selected filters
+                          </td>
+                        </tr>
+                      ) : (
+                        payablesReport.rows.map((row) => (
+                          <tr key={row.work_id} className="hover:bg-slate-50/70">
+                            <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code || '-'}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.rate.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.hours.toFixed(2)}</td>
+                            <td className="px-4 py-3 font-bold text-slate-900">{row.net_payable.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.task_performed || '-'}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {payablesReport.employee_totals.length > 0 && (
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {payablesReport.employee_totals.map((summary) => (
+                      <div key={summary.employee_id} className="glass-subtle rounded-xl border border-white/70 p-3">
+                        <p className="font-semibold text-slate-900">
+                          {summary.employee_name} {summary.employee_code ? `(${summary.employee_code})` : ''}
+                        </p>
+                        <p className="text-sm text-slate-600">Hours: {summary.total_hours.toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-slate-800">Net Payable (INR): {summary.total_net_payable.toFixed(2)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

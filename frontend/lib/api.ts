@@ -103,6 +103,72 @@ export interface ReportData {
   total_entries: number;
 }
 
+export interface ClientInvoiceRow {
+  work_id: number;
+  work_date: string;
+  project_code: string;
+  project_name: string;
+  employee_name: string;
+  employee_designation: string;
+  gross_rate: number;
+  discount: number;
+  net_rate: number;
+  hours: number;
+  net_billable: number;
+  task_performed: string;
+  is_invoice_override: boolean;
+}
+
+export interface ClientInvoiceProjectTotal {
+  project_id: number;
+  project_code: string;
+  project_name: string;
+  total_hours: number;
+  total_net_billable: number;
+}
+
+export interface ClientInvoiceReport {
+  client: Client;
+  start_date: string;
+  end_date: string;
+  rows: ClientInvoiceRow[];
+  project_totals: ClientInvoiceProjectTotal[];
+  total_hours: number;
+  total_net_billable: number;
+}
+
+export interface EmployeePayableRow {
+  work_id: number;
+  project_code: string;
+  employee_name: string;
+  employee_code: string | null;
+  employee_designation: string;
+  project_name: string;
+  work_date: string;
+  rate: number;
+  hours: number;
+  net_payable: number;
+  task_performed: string;
+}
+
+export interface EmployeePayableTotal {
+  employee_id: number;
+  employee_name: string;
+  employee_code: string | null;
+  designation: string | null;
+  total_hours: number;
+  total_net_payable: number;
+}
+
+export interface EmployeePayablesReport {
+  start_date: string;
+  end_date: string;
+  rows: EmployeePayableRow[];
+  employee_totals: EmployeePayableTotal[];
+  total_hours: number;
+  total_net_payable: number;
+}
+
 export interface ProjectRate {
   id: number;
   project_id: number;
@@ -286,8 +352,46 @@ export const employeeApi = {
     return response.data;
   },
 
+  updateWorkInvoiceValues: async (
+    workId: number,
+    data: { gross_rate?: number | null; discount?: number | null; hours?: number | null }
+  ): Promise<WorkEntry> => {
+    const response = await api.put(`/work/${workId}/invoice-values`, data);
+    return response.data;
+  },
+
   getReport: async (): Promise<ReportData[]> => {
     const response = await api.get('/report');
+    return response.data;
+  },
+
+  getClientInvoiceReport: async (
+    clientId: number,
+    startDate: string,
+    endDate: string
+  ): Promise<ClientInvoiceReport> => {
+    const response = await api.get('/invoices/client', {
+      params: {
+        client_id: clientId,
+        start_date: startDate,
+        end_date: endDate,
+      },
+    });
+    return response.data;
+  },
+
+  getEmployeePayablesReport: async (
+    startDate: string,
+    endDate: string,
+    employeeId?: number
+  ): Promise<EmployeePayablesReport> => {
+    const params: any = {
+      start_date: startDate,
+      end_date: endDate,
+    };
+    if (employeeId) params.employee_id = employeeId;
+
+    const response = await api.get('/payables/employees', { params });
     return response.data;
   },
 

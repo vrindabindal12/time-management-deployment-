@@ -108,6 +108,9 @@ class Punch(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)  # New field for project FK
     work_date = db.Column(db.Date, nullable=False)
     hours_worked = db.Column(db.Float, nullable=False)
+    invoice_hours = db.Column(db.Float, nullable=True)
+    invoice_gross_rate = db.Column(db.Float, nullable=True)
+    invoice_discount = db.Column(db.Float, nullable=True)
     description = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -122,6 +125,9 @@ class Punch(db.Model):
             'project_id': self.project_id,
             'work_date': self.work_date.isoformat() if self.work_date else None,
             'hours_worked': self.hours_worked,
+            'invoice_hours': self.invoice_hours,
+            'invoice_gross_rate': self.invoice_gross_rate,
+            'invoice_discount': self.invoice_discount,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
@@ -399,6 +405,28 @@ def ensure_employee_schema():
     db.session.commit()
 
 
+def ensure_punch_invoice_schema():
+    """Add invoice override columns for existing sqlite databases."""
+    if not DATABASE_URL.startswith('sqlite'):
+        return
+
+    required_columns = {
+        'invoice_hours': 'FLOAT',
+        'invoice_gross_rate': 'FLOAT',
+        'invoice_discount': 'FLOAT',
+    }
+
+    existing = {
+        row[1]
+        for row in db.session.execute(text("PRAGMA table_info(punch)")).fetchall()
+    }
+
+    for column_name, column_type in required_columns.items():
+        if column_name not in existing:
+            db.session.execute(text(f"ALTER TABLE punch ADD COLUMN {column_name} {column_type}"))
+    db.session.commit()
+
+
 def parse_optional_date(value, field_name):
     if value is None or value == '':
         return None
@@ -450,10 +478,38 @@ def apply_employee_profile(employee, data):
         if rate_key in data:
             setattr(employee, rate_key, parse_optional_rate(data.get(rate_key), rate_key))
 
+
+def get_employee_rate_for_date(employee, work_date):
+    """
+    Resolve employee hourly rate for a given work date.
+    Priority:
+    1) Latest promotion rate where promotion date <= work_date
+    2) current_hourly_rate
+    3) 0.0 fallback
+    """
+    effective_rate = employee.current_hourly_rate if employee.current_hourly_rate is not None else 0.0
+
+    promotions = []
+    for idx in range(1, 6):
+        promo_date = getattr(employee, f'promotion_{idx}_date')
+        promo_rate = getattr(employee, f'promotion_{idx}_rate')
+        if promo_date and promo_rate is not None:
+            promotions.append((promo_date, promo_rate))
+
+    promotions.sort(key=lambda item: item[0])
+    for promo_date, promo_rate in promotions:
+        if promo_date <= work_date:
+            effective_rate = promo_rate
+        else:
+            break
+
+    return float(effective_rate or 0.0)
+
 # Initialize database
 with app.app_context():
     db.create_all()
     ensure_employee_schema()
+    ensure_punch_invoice_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
     if legacy_null_descriptions:
@@ -858,6 +914,59 @@ def delete_work(current_user, work_id):
     
     return jsonify({'message': 'Work entry deleted successfully'}), 200
 
+
+@app.route('/api/work/<int:work_id>/invoice-values', methods=['PUT'])
+@token_required
+@admin_required
+def update_work_invoice_values(current_user, work_id):
+    work_entry = Punch.query.get(work_id)
+    if not work_entry:
+        return jsonify({'error': 'Work entry not found'}), 404
+
+    data = request.json or {}
+
+    if 'hours' in data:
+        hours = data.get('hours')
+        if hours is None or hours == '':
+            work_entry.invoice_hours = None
+        else:
+            try:
+                parsed_hours = float(hours)
+            except (ValueError, TypeError):
+                return jsonify({'error': 'hours must be a valid number'}), 400
+            if parsed_hours <= 0:
+                return jsonify({'error': 'hours must be greater than 0'}), 400
+            work_entry.invoice_hours = parsed_hours
+
+    if 'gross_rate' in data:
+        gross_rate = data.get('gross_rate')
+        if gross_rate is None or gross_rate == '':
+            work_entry.invoice_gross_rate = None
+        else:
+            try:
+                parsed_gross_rate = float(gross_rate)
+            except (ValueError, TypeError):
+                return jsonify({'error': 'gross_rate must be a valid number'}), 400
+            if parsed_gross_rate < 0:
+                return jsonify({'error': 'gross_rate must be non-negative'}), 400
+            work_entry.invoice_gross_rate = parsed_gross_rate
+
+    if 'discount' in data:
+        discount = data.get('discount')
+        if discount is None or discount == '':
+            work_entry.invoice_discount = None
+        else:
+            try:
+                parsed_discount = float(discount)
+            except (ValueError, TypeError):
+                return jsonify({'error': 'discount must be a valid number'}), 400
+            if parsed_discount < 0 or parsed_discount > 100:
+                return jsonify({'error': 'discount must be between 0 and 100'}), 400
+            work_entry.invoice_discount = parsed_discount
+
+    db.session.commit()
+    return jsonify(work_entry.to_dict()), 200
+
 @app.route('/api/my-status', methods=['GET'])
 @token_required
 def get_my_status(current_user):
@@ -963,6 +1072,275 @@ def get_report(current_user):
         })
     
     return jsonify(report)
+
+
+@app.route('/api/invoices/client', methods=['GET'])
+@token_required
+@admin_required
+def get_client_invoice_report(current_user):
+    client_id = request.args.get('client_id', type=int)
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    if not client_id:
+        return jsonify({'error': 'client_id is required'}), 400
+    if not start_date_str or not end_date_str:
+        return jsonify({'error': 'start_date and end_date are required'}), 400
+
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    if end_date < start_date:
+        return jsonify({'error': 'end_date cannot be before start_date'}), 400
+
+    client = Client.query.get(client_id)
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+
+    projects = Project.query.filter_by(client_id=client_id).all()
+    project_by_id = {project.id: project for project in projects}
+    project_by_code = {project.code: project for project in projects if project.code}
+    project_by_name = {project.name: project for project in projects if project.name}
+    project_ids = list(project_by_id.keys())
+
+    if not project_ids:
+        return jsonify({
+            'client': client.to_dict(),
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+            'rows': [],
+            'project_totals': [],
+            'total_hours': 0.0,
+            'total_net_billable': 0.0
+        })
+
+    base_query = Punch.query.filter(
+        Punch.work_date >= start_date,
+        Punch.work_date <= end_date
+    )
+
+    punches = base_query.filter(Punch.project_id.in_(project_ids)).all()
+    legacy_punches = base_query.filter(Punch.project_id.is_(None)).all()
+
+    for punch in legacy_punches:
+        if punch.project_code and punch.project_code in project_by_code:
+            punches.append(punch)
+        elif punch.project_name and punch.project_name in project_by_name:
+            punches.append(punch)
+
+    employee_ids = list({p.employee_id for p in punches})
+    employees = Employee.query.filter(Employee.id.in_(employee_ids)).all() if employee_ids else []
+    employee_by_id = {employee.id: employee for employee in employees}
+
+    rates = ProjectRate.query.filter(ProjectRate.project_id.in_(project_ids)).all()
+    rate_by_project_and_designation = {
+        (rate.project_id, rate.designation): rate for rate in rates
+    }
+    first_rate_by_project = {}
+    for rate in rates:
+        if rate.project_id not in first_rate_by_project:
+            first_rate_by_project[rate.project_id] = rate
+
+    rows = []
+    project_totals_map = {}
+    total_hours = 0.0
+    total_net_billable = 0.0
+
+    for punch in punches:
+        project = None
+        if punch.project_id and punch.project_id in project_by_id:
+            project = project_by_id[punch.project_id]
+        elif punch.project_code and punch.project_code in project_by_code:
+            project = project_by_code[punch.project_code]
+        elif punch.project_name and punch.project_name in project_by_name:
+            project = project_by_name[punch.project_name]
+
+        if not project:
+            continue
+
+        employee = employee_by_id.get(punch.employee_id)
+        designation = employee.designation if employee and employee.designation else 'Unspecified'
+        selected_rate = rate_by_project_and_designation.get((project.id, designation))
+        if not selected_rate:
+            selected_rate = first_rate_by_project.get(project.id)
+
+        base_gross_rate = selected_rate.gross_rate if selected_rate else 0.0
+        base_discount = selected_rate.discount if selected_rate else 0.0
+
+        gross_rate = punch.invoice_gross_rate if punch.invoice_gross_rate is not None else base_gross_rate
+        discount = punch.invoice_discount if punch.invoice_discount is not None else base_discount
+        hours = punch.invoice_hours if punch.invoice_hours is not None else punch.hours_worked
+        net_rate = round(gross_rate * (1 - discount / 100), 2)
+        net_billable = round(net_rate * hours, 2)
+
+        total_hours += hours
+        total_net_billable += net_billable
+
+        if project.id not in project_totals_map:
+            project_totals_map[project.id] = {
+                'project_id': project.id,
+                'project_code': project.code,
+                'project_name': project.name,
+                'total_hours': 0.0,
+                'total_net_billable': 0.0
+            }
+        project_totals_map[project.id]['total_hours'] += hours
+        project_totals_map[project.id]['total_net_billable'] += net_billable
+
+        rows.append({
+            'work_id': punch.id,
+            'work_date': punch.work_date.isoformat(),
+            'project_code': project.code,
+            'project_name': project.name,
+            'employee_name': employee.name if employee else 'Unknown',
+            'employee_designation': designation,
+            'gross_rate': gross_rate,
+            'discount': discount,
+            'net_rate': net_rate,
+            'hours': round(hours, 2),
+            'net_billable': net_billable,
+            'task_performed': punch.description or '',
+            'is_invoice_override': (
+                punch.invoice_hours is not None or
+                punch.invoice_gross_rate is not None or
+                punch.invoice_discount is not None
+            )
+        })
+
+    rows.sort(key=lambda item: (item['work_date'], item['project_code'], item['employee_name']))
+
+    project_totals = list(project_totals_map.values())
+    for summary in project_totals:
+        summary['total_hours'] = round(summary['total_hours'], 2)
+        summary['total_net_billable'] = round(summary['total_net_billable'], 2)
+    project_totals.sort(key=lambda item: item['project_code'])
+
+    return jsonify({
+        'client': client.to_dict(),
+        'start_date': start_date.isoformat(),
+        'end_date': end_date.isoformat(),
+        'rows': rows,
+        'project_totals': project_totals,
+        'total_hours': round(total_hours, 2),
+        'total_net_billable': round(total_net_billable, 2)
+    })
+
+
+@app.route('/api/payables/employees', methods=['GET'])
+@token_required
+@admin_required
+def get_employee_payables_report(current_user):
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    employee_id = request.args.get('employee_id', type=int)
+
+    if not start_date_str or not end_date_str:
+        return jsonify({'error': 'start_date and end_date are required'}), 400
+
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    if end_date < start_date:
+        return jsonify({'error': 'end_date cannot be before start_date'}), 400
+
+    query = Punch.query.filter(
+        Punch.work_date >= start_date,
+        Punch.work_date <= end_date
+    ).order_by(Punch.work_date.asc(), Punch.id.asc())
+
+    if employee_id:
+        query = query.filter(Punch.employee_id == employee_id)
+
+    punches = query.all()
+    if not punches:
+        return jsonify({
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+            'rows': [],
+            'employee_totals': [],
+            'total_hours': 0.0,
+            'total_net_payable': 0.0
+        })
+
+    employee_ids = list({p.employee_id for p in punches})
+    employees = Employee.query.filter(Employee.id.in_(employee_ids)).all()
+    employee_by_id = {employee.id: employee for employee in employees}
+
+    # Non-admin payroll report by default unless explicitly querying an admin employee_id.
+    if not employee_id:
+        punches = [p for p in punches if p.employee_id in employee_by_id and not employee_by_id[p.employee_id].is_admin]
+
+    project_ids = list({p.project_id for p in punches if p.project_id})
+    projects = Project.query.filter(Project.id.in_(project_ids)).all() if project_ids else []
+    project_by_id = {project.id: project for project in projects}
+
+    rows = []
+    employee_totals_map = {}
+    total_hours = 0.0
+    total_net_payable = 0.0
+
+    for punch in punches:
+        employee = employee_by_id.get(punch.employee_id)
+        if not employee:
+            continue
+
+        hours = round(float(punch.hours_worked), 2)
+        rate = round(get_employee_rate_for_date(employee, punch.work_date), 2)
+        net_payable = round(hours * rate, 2)
+
+        project = project_by_id.get(punch.project_id) if punch.project_id else None
+        project_code = project.code if project else (punch.project_code or '')
+        project_name = project.name if project else punch.project_name
+
+        total_hours += hours
+        total_net_payable += net_payable
+
+        if employee.id not in employee_totals_map:
+            employee_totals_map[employee.id] = {
+                'employee_id': employee.id,
+                'employee_name': employee.name,
+                'employee_code': employee.employee_code,
+                'designation': employee.designation,
+                'total_hours': 0.0,
+                'total_net_payable': 0.0
+            }
+        employee_totals_map[employee.id]['total_hours'] += hours
+        employee_totals_map[employee.id]['total_net_payable'] += net_payable
+
+        rows.append({
+            'work_id': punch.id,
+            'project_code': project_code,
+            'employee_name': employee.name,
+            'employee_code': employee.employee_code,
+            'employee_designation': employee.designation or 'Unspecified',
+            'project_name': project_name,
+            'work_date': punch.work_date.isoformat(),
+            'rate': rate,
+            'hours': hours,
+            'net_payable': net_payable,
+            'task_performed': punch.description or ''
+        })
+
+    employee_totals = list(employee_totals_map.values())
+    for summary in employee_totals:
+        summary['total_hours'] = round(summary['total_hours'], 2)
+        summary['total_net_payable'] = round(summary['total_net_payable'], 2)
+    employee_totals.sort(key=lambda item: item['employee_name'])
+
+    return jsonify({
+        'start_date': start_date.isoformat(),
+        'end_date': end_date.isoformat(),
+        'rows': rows,
+        'employee_totals': employee_totals,
+        'total_hours': round(total_hours, 2),
+        'total_net_payable': round(total_net_payable, 2)
+    })
 
 # ==================== CLIENT ROUTES ====================
 @app.route('/api/clients', methods=['GET'])
