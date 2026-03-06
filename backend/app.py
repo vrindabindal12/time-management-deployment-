@@ -188,6 +188,7 @@ class Project(db.Model):
 class ProjectRate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    employee_name = db.Column(db.String(120), nullable=True)
     designation = db.Column(db.String(100), nullable=False)  # Managing Director, Associate Director, Senior Consultant
     gross_rate = db.Column(db.Float, nullable=False)
     discount = db.Column(db.Float, default=0.0)  # Stored as percentage (0-100)
@@ -199,6 +200,7 @@ class ProjectRate(db.Model):
         return {
             'id': self.id,
             'project_id': self.project_id,
+            'employee_name': self.employee_name,
             'designation': self.designation,
             'gross_rate': self.gross_rate,
             'discount': self.discount,
@@ -460,6 +462,26 @@ def ensure_punch_invoice_schema():
     db.session.commit()
 
 
+def ensure_project_rate_schema():
+    """Add project rate columns for existing sqlite databases."""
+    if not DATABASE_URL.startswith('sqlite'):
+        return
+
+    required_columns = {
+        'employee_name': 'TEXT',
+    }
+
+    existing = {
+        row[1]
+        for row in db.session.execute(text("PRAGMA table_info(project_rate)")).fetchall()
+    }
+
+    for column_name, column_type in required_columns.items():
+        if column_name not in existing:
+            db.session.execute(text(f"ALTER TABLE project_rate ADD COLUMN {column_name} {column_type}"))
+    db.session.commit()
+
+
 def parse_optional_date(value, field_name):
     if value is None or value == '':
         return None
@@ -606,6 +628,7 @@ with app.app_context():
     ensure_employee_schema()
     ensure_employee_codes()
     ensure_punch_invoice_schema()
+    ensure_project_rate_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
     if legacy_null_descriptions:
@@ -1245,10 +1268,25 @@ def get_client_invoice_report(current_user):
     employees = Employee.query.filter(Employee.id.in_(employee_ids)).all() if employee_ids else []
     employee_by_id = {employee.id: employee for employee in employees}
 
+    def _norm_text(value):
+        return (value or '').strip().lower()
+
     rates = ProjectRate.query.filter(ProjectRate.project_id.in_(project_ids)).all()
-    rate_by_project_and_designation = {
-        (rate.project_id, rate.designation): rate for rate in rates
-    }
+    rate_by_project_employee_designation = {}
+    rate_by_project_and_employee = {}
+    rate_by_project_and_designation = {}
+    employee_scoped_projects = set()
+    for rate in rates:
+        designation_key = _norm_text(rate.designation)
+        employee_key = _norm_text(rate.employee_name)
+        if employee_key and designation_key:
+            rate_by_project_employee_designation[(rate.project_id, employee_key, designation_key)] = rate
+        if employee_key and (rate.project_id, employee_key) not in rate_by_project_and_employee:
+            rate_by_project_and_employee[(rate.project_id, employee_key)] = rate
+            employee_scoped_projects.add(rate.project_id)
+        # Keep designation fallback available even when employee_name is present.
+        if designation_key and (rate.project_id, designation_key) not in rate_by_project_and_designation:
+            rate_by_project_and_designation[(rate.project_id, designation_key)] = rate
     first_rate_by_project = {}
     for rate in rates:
         if rate.project_id not in first_rate_by_project:
@@ -1273,16 +1311,28 @@ def get_client_invoice_report(current_user):
 
         employee = employee_by_id.get(punch.employee_id)
         _, designation = get_employee_compensation_for_date(employee, punch.work_date) if employee else (0.0, 'Unspecified')
-        selected_rate = rate_by_project_and_designation.get((project.id, designation))
+        employee_key = _norm_text(employee.name) if employee else ''
+        designation_key = _norm_text(designation)
+        selected_rate = rate_by_project_employee_designation.get((project.id, employee_key, designation_key))
+        if not selected_rate:
+            selected_rate = rate_by_project_and_employee.get((project.id, employee_key))
+        # If project has employee-specific rates, only those employees are invoiceable.
+        if not selected_rate and project.id in employee_scoped_projects:
+            continue
+        if not selected_rate:
+            selected_rate = rate_by_project_and_designation.get((project.id, designation_key))
         if not selected_rate:
             selected_rate = first_rate_by_project.get(project.id)
+        if not selected_rate:
+            continue
 
         base_gross_rate = selected_rate.gross_rate if selected_rate else 0.0
         base_discount = selected_rate.discount if selected_rate else 0.0
 
-        gross_rate = punch.invoice_gross_rate if punch.invoice_gross_rate is not None else base_gross_rate
-        discount = punch.invoice_discount if punch.invoice_discount is not None else base_discount
-        hours = punch.invoice_hours if punch.invoice_hours is not None else punch.hours_worked
+        # Invoicing report is fully auto-populated from configured project rates and attendance hours.
+        gross_rate = base_gross_rate
+        discount = base_discount
+        hours = punch.hours_worked
         net_rate = round(gross_rate * (1 - discount / 100), 2)
         net_billable = round(net_rate * hours, 2)
 
@@ -1313,11 +1363,7 @@ def get_client_invoice_report(current_user):
             'hours': round(hours, 2),
             'net_billable': net_billable,
             'task_performed': punch.description or '',
-            'is_invoice_override': (
-                punch.invoice_hours is not None or
-                punch.invoice_gross_rate is not None or
-                punch.invoice_discount is not None
-            )
+            'is_invoice_override': False
         })
 
     rows.sort(key=lambda item: (item['work_date'], item['project_code'], item['employee_name']))
@@ -1677,8 +1723,8 @@ def create_project_rate(current_user, project_id):
     
     data = request.json
     
-    if not data.get('designation') or data.get('gross_rate') is None:
-        return jsonify({'error': 'Designation and gross rate are required'}), 400
+    if not data.get('employee_name') or not data.get('designation') or data.get('gross_rate') is None:
+        return jsonify({'error': 'Employee name, designation and gross rate are required'}), 400
     
     try:
         gross_rate = float(data['gross_rate'])
@@ -1698,6 +1744,7 @@ def create_project_rate(current_user, project_id):
     
     rate = ProjectRate(
         project_id=project_id,
+        employee_name=(data.get('employee_name') or '').strip() or None,
         designation=data['designation'].strip(),
         gross_rate=gross_rate,
         discount=discount,
@@ -1725,6 +1772,10 @@ def update_project_rate(current_user, rate_id):
         if not designation:
             return jsonify({'error': 'Designation cannot be empty'}), 400
         rate.designation = designation
+
+    if 'employee_name' in data:
+        employee_name = (data.get('employee_name') or '').strip()
+        rate.employee_name = employee_name or None
     
     if 'gross_rate' in data or 'discount' in data:
         gross_rate = float(data.get('gross_rate', rate.gross_rate))

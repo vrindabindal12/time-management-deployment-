@@ -178,6 +178,7 @@ export interface EmployeePayablesReport {
 export interface ProjectRate {
   id: number;
   project_id: number;
+  employee_name?: string | null;
   designation: string;
   gross_rate: number;
   discount: number;
@@ -489,8 +490,15 @@ export const projectApi = {
     return response.data;
   },
 
-  createProjectRate: async (projectId: number, designation: string, grossRate: number, discount: number = 0): Promise<ProjectRate> => {
+  createProjectRate: async (
+    projectId: number,
+    employeeName: string,
+    designation: string,
+    grossRate: number,
+    discount: number = 0
+  ): Promise<ProjectRate> => {
     const response = await api.post(`/projects/${projectId}/rates`, {
+      employee_name: employeeName,
       designation,
       gross_rate: grossRate,
       discount
@@ -498,7 +506,10 @@ export const projectApi = {
     return response.data;
   },
 
-  updateProjectRate: async (rateId: number, data: Partial<Pick<ProjectRate, 'designation' | 'gross_rate' | 'discount'>>): Promise<ProjectRate> => {
+  updateProjectRate: async (
+    rateId: number,
+    data: Partial<Pick<ProjectRate, 'employee_name' | 'designation' | 'gross_rate' | 'discount'>>
+  ): Promise<ProjectRate> => {
     const response = await api.put(`/rates/${rateId}`, data);
     return response.data;
   },

@@ -116,6 +116,8 @@ export default function AdminDashboard() {
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
   const [showAddClientForm, setShowAddClientForm] = useState(false);
   const [clientForm, setClientForm] = useState({ name: '', code: '' });
+  const [editingClientId, setEditingClientId] = useState<number | null>(null);
+  const [clientEditForm, setClientEditForm] = useState({ name: '', code: '' });
   const [invoiceClientId, setInvoiceClientId] = useState<number | null>(null);
   const [invoiceStartDate, setInvoiceStartDate] = useState(() => {
     const now = new Date();
@@ -124,8 +126,6 @@ export default function AdminDashboard() {
   const [invoiceEndDate, setInvoiceEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [invoiceReport, setInvoiceReport] = useState<ClientInvoiceReport | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
-  const [invoiceEdits, setInvoiceEdits] = useState<Record<number, { gross_rate: string; discount: string; hours: string }>>({});
-  const [savingInvoiceRowId, setSavingInvoiceRowId] = useState<number | null>(null);
   const [payableEmployeeId, setPayableEmployeeId] = useState<number | null>(null);
   const [payableStartDate, setPayableStartDate] = useState(() => {
     const now = new Date();
@@ -146,7 +146,21 @@ export default function AdminDashboard() {
   // Project Rate states
   const [projectRates, setProjectRates] = useState<ProjectRate[]>([]);
   const [showAddRateForm, setShowAddRateForm] = useState(false);
-  const [rateForm, setRateForm] = useState({ designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+  const [rateForm, setRateForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+  const [editingRateId, setEditingRateId] = useState<number | null>(null);
+  const [rateEditForm, setRateEditForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+  const [deleteEntityModal, setDeleteEntityModal] = useState<{
+    open: boolean;
+    entityType: 'client' | 'project' | 'rate' | null;
+    entityId: number | null;
+    entityName: string;
+  }>({
+    open: false,
+    entityType: null,
+    entityId: null,
+    entityName: '',
+  });
+  const [deleteEntityConfirmationText, setDeleteEntityConfirmationText] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -178,6 +192,8 @@ export default function AdminDashboard() {
     if (selectedClient) {
       loadClientProjects(selectedClient);
     }
+    setEditingClientId(null);
+    setClientEditForm({ name: '', code: '' });
     setEditingProjectId(null);
     setProjectEditForm({ name: '', code: '' });
   }, [selectedClient]);
@@ -540,11 +556,12 @@ export default function AdminDashboard() {
     try {
       await projectApi.createProjectRate(
         selectedProject,
+        rateForm.employeeName,
         rateForm.designation,
         parseFloat(rateForm.grossRate),
         parseFloat(rateForm.discount)
       );
-      setRateForm({ designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+      setRateForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
       setShowAddRateForm(false);
       await loadProjectRates(selectedProject);
     } catch (err: any) {
@@ -554,41 +571,104 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteClient = async (clientId: number) => {
-    if (!confirm('Delete this client and all its projects?')) return;
+  const openDeleteEntityModal = (
+    entityType: 'client' | 'project' | 'rate',
+    entityId: number,
+    entityName: string
+  ) => {
+    setDeleteEntityModal({
+      open: true,
+      entityType,
+      entityId,
+      entityName,
+    });
+    setDeleteEntityConfirmationText('');
+  };
+
+  const closeDeleteEntityModal = () => {
+    setDeleteEntityModal({
+      open: false,
+      entityType: null,
+      entityId: null,
+      entityName: '',
+    });
+    setDeleteEntityConfirmationText('');
+  };
+
+  const handleConfirmDeleteEntity = async () => {
+    if (!deleteEntityModal.entityId || !deleteEntityModal.entityType) return;
+
+    if (deleteEntityConfirmationText !== 'DELETE') {
+      setError('Please type DELETE exactly to confirm.');
+      clearError();
+      return;
+    }
 
     setLoading(true);
     setError(null);
-
     try {
-      await clientApi.deleteClient(clientId);
-      await loadClients();
-      setSelectedClient(null);
-      setProjects([]);
-      setSelectedProject(null);
-      setProjectRates([]);
+      if (deleteEntityModal.entityType === 'client') {
+        await clientApi.deleteClient(deleteEntityModal.entityId);
+        await loadClients();
+        if (selectedClient === deleteEntityModal.entityId) {
+          setSelectedClient(null);
+          setProjects([]);
+          setSelectedProject(null);
+          setProjectRates([]);
+        }
+      } else if (deleteEntityModal.entityType === 'project') {
+        await projectApi.deleteProject(deleteEntityModal.entityId);
+        if (selectedClient) {
+          await loadClientProjects(selectedClient);
+        }
+        if (selectedProject === deleteEntityModal.entityId) {
+          setSelectedProject(null);
+          setProjectRates([]);
+        }
+      } else if (deleteEntityModal.entityType === 'rate') {
+        await projectApi.deleteProjectRate(deleteEntityModal.entityId);
+        if (selectedProject) {
+          await loadProjectRates(selectedProject);
+        }
+      }
+
+      closeDeleteEntityModal();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to delete client');
+      setError(err.response?.data?.error || 'Failed to delete item');
+      clearError();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteProject = async (projectId: number) => {
-    if (!confirm('Delete this project and all its rates?')) return;
+  const startEditClient = (client: Client) => {
+    setEditingClientId(client.id);
+    setClientEditForm({ name: client.name, code: client.code });
+    setShowAddClientForm(false);
+  };
+
+  const cancelEditClient = () => {
+    setEditingClientId(null);
+    setClientEditForm({ name: '', code: '' });
+  };
+
+  const handleUpdateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClientId) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      await projectApi.deleteProject(projectId);
-      if (selectedClient) {
-        await loadClientProjects(selectedClient);
-      }
-      setSelectedProject(null);
-      setProjectRates([]);
+      await clientApi.updateClient(editingClientId, {
+        name: clientEditForm.name,
+        code: clientEditForm.code,
+      });
+      await loadClients();
+      cancelEditClient();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to delete project');
+      setError(err.response?.data?.error || 'Failed to update client');
+      clearError();
     } finally {
       setLoading(false);
     }
@@ -629,19 +709,43 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteRate = async (rateId: number) => {
-    if (!confirm('Delete this rate?')) return;
+  const startEditRate = (rate: ProjectRate) => {
+    setEditingRateId(rate.id);
+    setRateEditForm({
+      employeeName: rate.employee_name || '',
+      designation: rate.designation || DESIGNATIONS[0],
+      grossRate: String(rate.gross_rate ?? ''),
+      discount: String(rate.discount ?? 0),
+    });
+    setShowAddRateForm(false);
+  };
+
+  const cancelEditRate = () => {
+    setEditingRateId(null);
+    setRateEditForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+  };
+
+  const handleUpdateRate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRateId) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      await projectApi.deleteProjectRate(rateId);
+      await projectApi.updateProjectRate(editingRateId, {
+        employee_name: rateEditForm.employeeName,
+        designation: rateEditForm.designation,
+        gross_rate: parseFloat(rateEditForm.grossRate),
+        discount: parseFloat(rateEditForm.discount),
+      });
+      cancelEditRate();
       if (selectedProject) {
         await loadProjectRates(selectedProject);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to delete rate');
+      setError(err.response?.data?.error || 'Failed to update rate');
+      clearError();
     } finally {
       setLoading(false);
     }
@@ -659,55 +763,11 @@ export default function AdminDashboard() {
     try {
       const data = await employeeApi.getClientInvoiceReport(invoiceClientId, invoiceStartDate, invoiceEndDate);
       setInvoiceReport(data);
-      const nextEdits: Record<number, { gross_rate: string; discount: string; hours: string }> = {};
-      data.rows.forEach((row) => {
-        nextEdits[row.work_id] = {
-          gross_rate: row.gross_rate.toString(),
-          discount: row.discount.toString(),
-          hours: row.hours.toString(),
-        };
-      });
-      setInvoiceEdits(nextEdits);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load invoice report');
       clearError();
     } finally {
       setInvoiceLoading(false);
-    }
-  };
-
-  const handleInvoiceEditChange = (
-    workId: number,
-    field: 'gross_rate' | 'discount' | 'hours',
-    value: string
-  ) => {
-    setInvoiceEdits((prev) => ({
-      ...prev,
-      [workId]: {
-        ...(prev[workId] || { gross_rate: '', discount: '', hours: '' }),
-        [field]: value,
-      },
-    }));
-  };
-
-  const saveInvoiceRow = async (workId: number) => {
-    const edit = invoiceEdits[workId];
-    if (!edit) return;
-
-    setSavingInvoiceRowId(workId);
-    setError(null);
-    try {
-      await employeeApi.updateWorkInvoiceValues(workId, {
-        gross_rate: edit.gross_rate === '' ? null : parseFloat(edit.gross_rate),
-        discount: edit.discount === '' ? null : parseFloat(edit.discount),
-        hours: edit.hours === '' ? null : parseFloat(edit.hours),
-      });
-      await runInvoiceReport();
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save invoice values');
-      clearError();
-    } finally {
-      setSavingInvoiceRowId(null);
     }
   };
 
@@ -1321,6 +1381,44 @@ export default function AdminDashboard() {
                 </form>
               )}
 
+              {editingClientId !== null && (
+                <form onSubmit={handleUpdateClient} className="mb-4 p-3 rounded-2xl border border-amber-200/70 bg-amber-50/70">
+                  <p className="text-xs uppercase tracking-[0.18em] font-bold text-amber-700 mb-3">Edit Client</p>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={clientEditForm.name}
+                      onChange={(e) => setClientEditForm({ ...clientEditForm, name: e.target.value })}
+                      required
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <input
+                      type="text"
+                      value={clientEditForm.code}
+                      onChange={(e) => setClientEditForm({ ...clientEditForm, code: e.target.value.toUpperCase() })}
+                      required
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                    >
+                      {loading ? 'Saving...' : 'Save Client'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEditClient}
+                      className="px-4 py-2 rounded-xl text-sm border border-slate-300 bg-white/70 text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
               <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
                 {clients.map((client) => (
                   <div
@@ -1340,16 +1438,28 @@ export default function AdminDashboard() {
                         <p className="font-black text-slate-900 text-lg mt-1">{client.name}</p>
                         <p className="text-sm font-mono text-slate-600 mt-1">{client.code}</p>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteClient(client.id);
-                        }}
-                        disabled={loading}
-                        className="ml-2 px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
-                      >
-                        Delete
-                      </button>
+                      <div className="ml-2 flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditClient(client);
+                          }}
+                          disabled={loading}
+                          className="px-2 py-1 text-xs rounded bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200 transition disabled:opacity-50"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteEntityModal('client', client.id, client.name);
+                          }}
+                          disabled={loading}
+                          className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1496,7 +1606,7 @@ export default function AdminDashboard() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDeleteProject(project.id);
+                                openDeleteEntityModal('project', project.id, project.name);
                               }}
                               disabled={loading}
                               className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
@@ -1533,6 +1643,17 @@ export default function AdminDashboard() {
                   {showAddRateForm && (
                     <form onSubmit={handleAddRate} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                       <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-purple-700 mb-1">EMPLOYEE NAME</label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Shashank Jain"
+                            value={rateForm.employeeName}
+                            onChange={(e) => setRateForm({ ...rateForm, employeeName: e.target.value })}
+                            required
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          />
+                        </div>
                         <div>
                           <label className="block text-xs font-bold text-purple-700 mb-1">DESIGNATION</label>
                           <select
@@ -1584,11 +1705,75 @@ export default function AdminDashboard() {
                     </form>
                   )}
 
+                  {editingRateId !== null && (
+                    <form onSubmit={handleUpdateRate} className="mb-4 p-3 rounded-2xl border border-purple-200/70 bg-purple-50/70">
+                      <p className="text-xs uppercase tracking-[0.18em] font-bold text-purple-700 mb-3">Edit Gross Rate</p>
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={rateEditForm.employeeName}
+                          onChange={(e) => setRateEditForm({ ...rateEditForm, employeeName: e.target.value })}
+                          required
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        />
+                        <select
+                          value={rateEditForm.designation}
+                          onChange={(e) => setRateEditForm({ ...rateEditForm, designation: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        >
+                          {DESIGNATIONS.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={rateEditForm.grossRate}
+                            onChange={(e) => setRateEditForm({ ...rateEditForm, grossRate: e.target.value })}
+                            required
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          />
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            value={rateEditForm.discount}
+                            onChange={(e) => setRateEditForm({ ...rateEditForm, discount: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                        >
+                          {loading ? 'Saving...' : 'Save Rate'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditRate}
+                          className="px-4 py-2 rounded-xl text-sm border border-slate-300 bg-white/70 text-slate-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
                   <div className="space-y-2">
                     {projectRates.length > 0 ? (
                       projectRates.map((rate) => (
                         <div key={rate.id} className="p-3 border border-white/60 rounded-xl bg-white/55 hover:bg-white/75 transition">
-                          <div className="grid grid-cols-4 gap-2 items-center text-sm">
+                          <div className="grid grid-cols-5 gap-2 items-center text-sm">
+                            <div>
+                              <p className="font-bold text-gray-700">{rate.employee_name || '-'}</p>
+                              <p className="text-xs text-gray-500">Employee</p>
+                            </div>
                             <div>
                               <p className="font-bold text-gray-700">{rate.designation}</p>
                               <p className="text-xs text-gray-500">Designation</p>
@@ -1606,13 +1791,22 @@ export default function AdminDashboard() {
                                 <p className="font-bold text-green-600">${rate.net_rate}</p>
                                 <p className="text-xs text-gray-500">Net</p>
                               </div>
-                              <button
-                                onClick={() => handleDeleteRate(rate.id)}
-                                disabled={loading}
-                                className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
-                              >
-                                Del
-                              </button>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => startEditRate(rate)}
+                                  disabled={loading}
+                                  className="px-2 py-1 text-xs rounded bg-purple-100 text-purple-800 border border-purple-200 hover:bg-purple-200 transition disabled:opacity-50"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => openDeleteEntityModal('rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
+                                  disabled={loading}
+                                  className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
+                                >
+                                  Del
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1673,6 +1867,9 @@ export default function AdminDashboard() {
                   {invoiceLoading ? 'Running...' : 'Run Report'}
                 </button>
               </div>
+              <p className="text-xs text-slate-500 mt-3">
+                Auto-populated from project rates and employee attendance logs. Values are read-only here.
+              </p>
             </div>
 
             {invoiceReport && (
@@ -1709,13 +1906,12 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Hours</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Net Billable</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Task Performed</th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {invoiceReport.rows.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-6 text-center text-slate-500" colSpan={12}>
+                          <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
                             No invoice entries found for the selected filters
                           </td>
                         </tr>
@@ -1727,38 +1923,10 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
                             <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
-                            <td className="px-4 py-3 text-slate-700">
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={invoiceEdits[row.work_id]?.gross_rate ?? ''}
-                                onChange={(e) => handleInvoiceEditChange(row.work_id, 'gross_rate', e.target.value)}
-                                className="w-24 border border-slate-300 rounded-lg px-2 py-1 bg-white/85"
-                              />
-                            </td>
-                            <td className="px-4 py-3 text-slate-700">
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="100"
-                                value={invoiceEdits[row.work_id]?.discount ?? ''}
-                                onChange={(e) => handleInvoiceEditChange(row.work_id, 'discount', e.target.value)}
-                                className="w-20 border border-slate-300 rounded-lg px-2 py-1 bg-white/85"
-                              />
-                            </td>
+                            <td className="px-4 py-3 text-slate-700">{row.gross_rate.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.discount.toFixed(2)}%</td>
                             <td className="px-4 py-3 text-slate-700">{row.net_rate.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-slate-700">
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                value={invoiceEdits[row.work_id]?.hours ?? ''}
-                                onChange={(e) => handleInvoiceEditChange(row.work_id, 'hours', e.target.value)}
-                                className="w-20 border border-slate-300 rounded-lg px-2 py-1 bg-white/85"
-                              />
-                            </td>
+                            <td className="px-4 py-3 text-slate-700">{row.hours.toFixed(2)}</td>
                             <td className="px-4 py-3 font-bold text-slate-900">{row.net_billable.toFixed(2)}</td>
                             <td className="px-4 py-3 text-slate-700">
                               {row.task_performed || '-'}
@@ -1767,15 +1935,6 @@ export default function AdminDashboard() {
                                   Admin Override
                                 </span>
                               )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                onClick={() => saveInvoiceRow(row.work_id)}
-                                disabled={savingInvoiceRowId === row.work_id}
-                                className="glass-primary-btn hover:brightness-95 text-white px-3 py-1.5 rounded-lg text-xs transition disabled:opacity-50"
-                              >
-                                {savingInvoiceRowId === row.work_id ? 'Saving...' : 'Save'}
-                              </button>
                             </td>
                           </tr>
                         ))
@@ -2049,6 +2208,46 @@ export default function AdminDashboard() {
                 className="px-4 py-2 rounded-xl glass-danger-btn hover:brightness-95 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Deleting...' : 'Delete Employee'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteEntityModal.open && (
+        <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-md flex items-center justify-center px-4">
+          <div className="w-full max-w-md rounded-3xl glass-panel p-6">
+            <h3 className="text-xl font-bold text-slate-900">
+              Confirm {deleteEntityModal.entityType === 'client' ? 'Client' : deleteEntityModal.entityType === 'project' ? 'Project' : 'Rate'} Deletion
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will permanently delete{' '}
+              <span className="font-semibold text-slate-900">{deleteEntityModal.entityName}</span>.
+            </p>
+            <p className="mt-4 text-sm font-semibold text-red-600">
+              Type <span className="px-2 py-0.5 rounded bg-red-100 text-red-700">DELETE</span> to continue.
+            </p>
+            <input
+              type="text"
+              value={deleteEntityConfirmationText}
+              onChange={(e) => setDeleteEntityConfirmationText(e.target.value)}
+              placeholder="Type DELETE"
+              className="mt-3 w-full border border-slate-300 bg-white/80 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400"
+            />
+            <div className="mt-5 flex gap-2 justify-end">
+              <button
+                onClick={closeDeleteEntityModal}
+                disabled={loading}
+                className="px-4 py-2 rounded-xl glass-subtle border border-white/60 text-slate-700 hover:bg-white/70 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteEntity}
+                disabled={loading || deleteEntityConfirmationText !== 'DELETE'}
+                className="px-4 py-2 rounded-xl glass-danger-btn hover:brightness-95 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
