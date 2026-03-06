@@ -11,54 +11,66 @@ const emptyOnboardingForm = {
   name: '',
   email: '',
   password: '',
-  employee_code: '',
   designation: '',
   start_date: '',
   current_hourly_rate: '',
   promotion_1_date: '',
   promotion_1_rate: '',
+  promotion_1_designation: '',
   promotion_2_date: '',
   promotion_2_rate: '',
+  promotion_2_designation: '',
   promotion_3_date: '',
   promotion_3_rate: '',
+  promotion_3_designation: '',
   promotion_4_date: '',
   promotion_4_rate: '',
+  promotion_4_designation: '',
   promotion_5_date: '',
   promotion_5_rate: '',
+  promotion_5_designation: '',
 };
 
 type EmployeeProfileEdit = {
-  employee_code: string;
   designation: string;
   start_date: string;
   current_hourly_rate: string;
   promotion_1_date: string;
   promotion_1_rate: string;
+  promotion_1_designation: string;
   promotion_2_date: string;
   promotion_2_rate: string;
+  promotion_2_designation: string;
   promotion_3_date: string;
   promotion_3_rate: string;
+  promotion_3_designation: string;
   promotion_4_date: string;
   promotion_4_rate: string;
+  promotion_4_designation: string;
   promotion_5_date: string;
   promotion_5_rate: string;
+  promotion_5_designation: string;
 };
 
 const buildEmployeeProfileEdit = (employee: Employee): EmployeeProfileEdit => ({
-  employee_code: employee.employee_code || '',
   designation: employee.designation || '',
   start_date: employee.start_date || '',
   current_hourly_rate: employee.current_hourly_rate != null ? String(employee.current_hourly_rate) : '',
   promotion_1_date: employee.promotion_1_date || '',
   promotion_1_rate: employee.promotion_1_rate != null ? String(employee.promotion_1_rate) : '',
+  promotion_1_designation: employee.promotion_1_designation || '',
   promotion_2_date: employee.promotion_2_date || '',
   promotion_2_rate: employee.promotion_2_rate != null ? String(employee.promotion_2_rate) : '',
+  promotion_2_designation: employee.promotion_2_designation || '',
   promotion_3_date: employee.promotion_3_date || '',
   promotion_3_rate: employee.promotion_3_rate != null ? String(employee.promotion_3_rate) : '',
+  promotion_3_designation: employee.promotion_3_designation || '',
   promotion_4_date: employee.promotion_4_date || '',
   promotion_4_rate: employee.promotion_4_rate != null ? String(employee.promotion_4_rate) : '',
+  promotion_4_designation: employee.promotion_4_designation || '',
   promotion_5_date: employee.promotion_5_date || '',
   promotion_5_rate: employee.promotion_5_rate != null ? String(employee.promotion_5_rate) : '',
+  promotion_5_designation: employee.promotion_5_designation || '',
 });
 
 export default function AdminDashboard() {
@@ -80,6 +92,7 @@ export default function AdminDashboard() {
   const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
   const [employeeProfileEdits, setEmployeeProfileEdits] = useState<Record<number, EmployeeProfileEdit>>({});
   const [savingEmployeeProfileId, setSavingEmployeeProfileId] = useState<number | null>(null);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [deleteEmployeeModal, setDeleteEmployeeModal] = useState<{
     open: boolean;
     employeeId: number | null;
@@ -267,20 +280,24 @@ export default function AdminDashboard() {
         onboardingForm.email.trim(),
         onboardingForm.password,
         {
-          employee_code: toNullableText(onboardingForm.employee_code)?.toUpperCase() || null,
           designation: toNullableText(onboardingForm.designation),
           start_date: toNullableText(onboardingForm.start_date),
           current_hourly_rate: toNullableNumber(onboardingForm.current_hourly_rate),
           promotion_1_date: toNullableText(onboardingForm.promotion_1_date),
           promotion_1_rate: toNullableNumber(onboardingForm.promotion_1_rate),
+          promotion_1_designation: toNullableText(onboardingForm.promotion_1_designation),
           promotion_2_date: toNullableText(onboardingForm.promotion_2_date),
           promotion_2_rate: toNullableNumber(onboardingForm.promotion_2_rate),
+          promotion_2_designation: toNullableText(onboardingForm.promotion_2_designation),
           promotion_3_date: toNullableText(onboardingForm.promotion_3_date),
           promotion_3_rate: toNullableNumber(onboardingForm.promotion_3_rate),
+          promotion_3_designation: toNullableText(onboardingForm.promotion_3_designation),
           promotion_4_date: toNullableText(onboardingForm.promotion_4_date),
           promotion_4_rate: toNullableNumber(onboardingForm.promotion_4_rate),
+          promotion_4_designation: toNullableText(onboardingForm.promotion_4_designation),
           promotion_5_date: toNullableText(onboardingForm.promotion_5_date),
           promotion_5_rate: toNullableNumber(onboardingForm.promotion_5_rate),
+          promotion_5_designation: toNullableText(onboardingForm.promotion_5_designation),
         }
       );
 
@@ -308,20 +325,24 @@ export default function AdminDashboard() {
       ...prev,
       [employeeId]: {
         ...(prev[employeeId] || {
-          employee_code: '',
           designation: '',
           start_date: '',
           current_hourly_rate: '',
           promotion_1_date: '',
           promotion_1_rate: '',
+          promotion_1_designation: '',
           promotion_2_date: '',
           promotion_2_rate: '',
+          promotion_2_designation: '',
           promotion_3_date: '',
           promotion_3_rate: '',
+          promotion_3_designation: '',
           promotion_4_date: '',
           promotion_4_rate: '',
+          promotion_4_designation: '',
           promotion_5_date: '',
           promotion_5_rate: '',
+          promotion_5_designation: '',
         }),
         [field]: value,
       },
@@ -337,20 +358,24 @@ export default function AdminDashboard() {
 
     try {
       await employeeApi.updateEmployeeProfile(employeeId, {
-        employee_code: toNullableText(edit.employee_code)?.toUpperCase() || null,
         designation: toNullableText(edit.designation),
         start_date: toNullableText(edit.start_date),
         current_hourly_rate: toNullableNumber(edit.current_hourly_rate),
         promotion_1_date: toNullableText(edit.promotion_1_date),
         promotion_1_rate: toNullableNumber(edit.promotion_1_rate),
+        promotion_1_designation: toNullableText(edit.promotion_1_designation),
         promotion_2_date: toNullableText(edit.promotion_2_date),
         promotion_2_rate: toNullableNumber(edit.promotion_2_rate),
+        promotion_2_designation: toNullableText(edit.promotion_2_designation),
         promotion_3_date: toNullableText(edit.promotion_3_date),
         promotion_3_rate: toNullableNumber(edit.promotion_3_rate),
+        promotion_3_designation: toNullableText(edit.promotion_3_designation),
         promotion_4_date: toNullableText(edit.promotion_4_date),
         promotion_4_rate: toNullableNumber(edit.promotion_4_rate),
+        promotion_4_designation: toNullableText(edit.promotion_4_designation),
         promotion_5_date: toNullableText(edit.promotion_5_date),
         promotion_5_rate: toNullableNumber(edit.promotion_5_rate),
+        promotion_5_designation: toNullableText(edit.promotion_5_designation),
       });
       await loadEmployees();
     } catch (err: any) {
@@ -874,13 +899,6 @@ export default function AdminDashboard() {
                     />
                     <input
                       type="text"
-                      placeholder="Employee ID (e.g., BKP-008)"
-                      value={onboardingForm.employee_code}
-                      onChange={(e) => setOnboardingForm({ ...onboardingForm, employee_code: e.target.value })}
-                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
-                    />
-                    <input
-                      type="text"
                       placeholder="Designation"
                       value={onboardingForm.designation}
                       onChange={(e) => setOnboardingForm({ ...onboardingForm, designation: e.target.value })}
@@ -928,6 +946,16 @@ export default function AdminDashboard() {
                           })}
                           className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85"
                         />
+                        <input
+                          type="text"
+                          placeholder="New designation (optional)"
+                          value={onboardingForm[`promotion_${idx}_designation` as keyof typeof onboardingForm] as string}
+                          onChange={(e) => setOnboardingForm({
+                            ...onboardingForm,
+                            [`promotion_${idx}_designation`]: e.target.value,
+                          })}
+                          className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85 col-span-2"
+                        />
                       </div>
                     ))}
                   </div>
@@ -945,9 +973,13 @@ export default function AdminDashboard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {employees.map((employee: Employee) => (
-                <div key={employee.id} style={{ perspective: '1000px' }}>
+                <div
+                  key={employee.id}
+                  style={{ perspective: '1000px' }}
+                  className="transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01]"
+                >
                   <div
-                    className="relative h-80 w-full transition-transform duration-500"
+                    className="relative h-80 w-full transition-transform duration-700"
                     style={{
                       transformStyle: 'preserve-3d',
                       transform: flippedCards[employee.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
@@ -956,95 +988,57 @@ export default function AdminDashboard() {
                     <button
                       type="button"
                       onClick={() => toggleCardFlip(employee.id)}
-                      className="absolute inset-0 w-full text-left glass-panel rounded-2xl p-5"
+                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl hover:shadow-2xl overflow-hidden border border-white/60 bg-gradient-to-br from-cyan-100/70 via-white/70 to-indigo-100/70 backdrop-blur-xl"
                       style={{ backfaceVisibility: 'hidden' }}
                     >
+                      <div className="absolute -top-14 -right-10 w-36 h-36 bg-cyan-300/30 rounded-full blur-2xl" />
+                      <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
                       <p className="text-xs uppercase tracking-[0.2em] text-cyan-700 font-bold">Employee Card</p>
-                      <h3 className="text-xl font-bold text-slate-900 mt-2">{employee.name}</h3>
+                      <h3 className="text-xl font-black text-slate-900 mt-2">{employee.name}</h3>
                       <p className="text-slate-600 text-sm mt-1">{employee.email}</p>
-                      <div className="mt-6 rounded-xl bg-white/70 border border-white/70 p-3">
-                        <p className="text-xs text-slate-500">ID</p>
-                        <p className="font-semibold text-slate-900">{employee.employee_code || 'Not set'}</p>
-                        <p className="text-xs text-slate-500 mt-2">Designation</p>
-                        <p className="font-semibold text-slate-900">{employee.designation || 'Not set'}</p>
+                      <div className="mt-6 rounded-xl bg-white/70 border border-white/70 p-3 space-y-2">
+                        <p className="text-xs text-slate-500">ID: <span className="font-semibold text-slate-900">{employee.employee_code || 'Not set'}</span></p>
+                        <p className="text-xs text-slate-500">Designation: <span className="font-semibold text-slate-900">{employee.designation || 'Not set'}</span></p>
+                        <p className="text-xs text-slate-500">Hourly Rate: <span className="font-semibold text-slate-900">{employee.current_hourly_rate ?? '-'}</span></p>
                       </div>
-                      <p className="text-xs text-slate-500 mt-5">Click to flip for full details</p>
+                      <p className="text-xs text-slate-500 mt-5">Click to flip for details</p>
                     </button>
 
                     <div
-                      className="absolute inset-0 w-full text-left glass-panel rounded-2xl p-4 overflow-y-auto"
+                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl overflow-hidden border border-white/60 bg-gradient-to-br from-indigo-100/75 via-white/70 to-blue-100/70 backdrop-blur-xl"
                       style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs uppercase tracking-[0.2em] text-indigo-700 font-bold">Edit Employee Details</p>
+                      <div className="absolute -top-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
+                      <div className="absolute -bottom-14 -right-10 w-36 h-36 bg-blue-300/30 rounded-full blur-2xl" />
+                      <p className="text-xs uppercase tracking-[0.2em] text-indigo-700 font-bold">Employee Details</p>
+                      <div className="mt-3 space-y-1 text-sm text-slate-700">
+                        <p><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
+                        <p><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
+                        {[1, 2, 3, 4, 5].map((idx) => (
+                          <p key={`${employee.id}-view-promo-${idx}`}>
+                            <span className="font-semibold">Promotion {idx}:</span>{' '}
+                            {employee[`promotion_${idx}_date` as keyof Employee] as string || '-'} /{' '}
+                            {employee[`promotion_${idx}_rate` as keyof Employee] as number ?? '-'} /{' '}
+                            {employee[`promotion_${idx}_designation` as keyof Employee] as string || '-'}
+                          </p>
+                        ))}
+                      </div>
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingEmployeeId(employee.id)}
+                          className="glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm"
+                        >
+                          Edit
+                        </button>
                         <button
                           type="button"
                           onClick={() => toggleCardFlip(employee.id)}
-                          className="text-xs px-2 py-1 rounded-lg bg-white/70 border border-white/70 text-slate-700"
+                          className="px-3 py-2 rounded-lg bg-white/70 border border-white/70 text-slate-700 text-sm"
                         >
                           Flip Back
                         </button>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <input
-                          type="text"
-                          placeholder="Employee ID"
-                          value={employeeProfileEdits[employee.id]?.employee_code ?? ''}
-                          onChange={(e) => handleEmployeeProfileEditChange(employee.id, 'employee_code', e.target.value)}
-                          className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Designation"
-                          value={employeeProfileEdits[employee.id]?.designation ?? ''}
-                          onChange={(e) => handleEmployeeProfileEditChange(employee.id, 'designation', e.target.value)}
-                          className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
-                        />
-                        <input
-                          type="date"
-                          value={employeeProfileEdits[employee.id]?.start_date ?? ''}
-                          onChange={(e) => handleEmployeeProfileEditChange(employee.id, 'start_date', e.target.value)}
-                          className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
-                        />
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="Current Rate"
-                          value={employeeProfileEdits[employee.id]?.current_hourly_rate ?? ''}
-                          onChange={(e) => handleEmployeeProfileEditChange(employee.id, 'current_hourly_rate', e.target.value)}
-                          className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
-                        />
-                        {[1, 2, 3, 4, 5].map((idx) => (
-                          <div key={`${employee.id}-promo-${idx}`} className="col-span-2 grid grid-cols-2 gap-2">
-                            <input
-                              type="date"
-                              value={employeeProfileEdits[employee.id]?.[`promotion_${idx}_date` as keyof EmployeeProfileEdit] as string || ''}
-                              onChange={(e) => handleEmployeeProfileEditChange(employee.id, `promotion_${idx}_date` as keyof EmployeeProfileEdit, e.target.value)}
-                              className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
-                            />
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder={`Promotion ${idx} Rate`}
-                              value={employeeProfileEdits[employee.id]?.[`promotion_${idx}_rate` as keyof EmployeeProfileEdit] as string || ''}
-                              onChange={(e) => handleEmployeeProfileEditChange(employee.id, `promotion_${idx}_rate` as keyof EmployeeProfileEdit, e.target.value)}
-                              className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
-                            />
-                          </div>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => saveEmployeeProfile(employee.id)}
-                        disabled={savingEmployeeProfileId === employee.id}
-                        className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm transition disabled:opacity-50"
-                      >
-                        {savingEmployeeProfileId === employee.id ? 'Saving...' : 'Save Details'}
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -1629,6 +1623,96 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {editingEmployeeId !== null && employeeProfileEdits[editingEmployeeId] && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-md flex items-center justify-center px-4">
+          <div className="w-full max-w-4xl glass-panel rounded-3xl p-6 shadow-2xl transition-all duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-2xl font-black text-slate-900">Edit Employee Details</h3>
+              <button
+                onClick={() => setEditingEmployeeId(null)}
+                className="px-3 py-1 rounded-lg bg-white/70 border border-white/70 text-slate-700 text-sm"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+              <div className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85 text-sm text-slate-700">
+                <span className="text-xs uppercase tracking-[0.12em] text-slate-500">Employee ID</span>
+                <p className="font-semibold text-slate-900">
+                  {employees.find((emp) => emp.id === editingEmployeeId)?.employee_code || 'Auto-generated'}
+                </p>
+              </div>
+              <input
+                type="text"
+                placeholder="Designation"
+                value={employeeProfileEdits[editingEmployeeId].designation}
+                onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, 'designation', e.target.value)}
+                className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85"
+              />
+              <input
+                type="date"
+                value={employeeProfileEdits[editingEmployeeId].start_date}
+                onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, 'start_date', e.target.value)}
+                className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85"
+              />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Current Hourly Rate"
+                value={employeeProfileEdits[editingEmployeeId].current_hourly_rate}
+                onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, 'current_hourly_rate', e.target.value)}
+                className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+              {[1, 2, 3, 4, 5].map((idx) => (
+                <div key={`modal-promo-${idx}`} className="rounded-xl border border-white/70 bg-white/60 p-3 space-y-2">
+                  <p className="text-xs font-bold text-slate-600 uppercase">Promotion {idx}</p>
+                  <input
+                    type="date"
+                    value={employeeProfileEdits[editingEmployeeId][`promotion_${idx}_date` as keyof EmployeeProfileEdit] as string}
+                    onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, `promotion_${idx}_date` as keyof EmployeeProfileEdit, e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/90"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Rate"
+                    value={employeeProfileEdits[editingEmployeeId][`promotion_${idx}_rate` as keyof EmployeeProfileEdit] as string}
+                    onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, `promotion_${idx}_rate` as keyof EmployeeProfileEdit, e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/90"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Designation"
+                    value={employeeProfileEdits[editingEmployeeId][`promotion_${idx}_designation` as keyof EmployeeProfileEdit] as string}
+                    onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, `promotion_${idx}_designation` as keyof EmployeeProfileEdit, e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/90"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={async () => {
+                  await saveEmployeeProfile(editingEmployeeId);
+                  setEditingEmployeeId(null);
+                }}
+                disabled={savingEmployeeProfileId === editingEmployeeId}
+                className="glass-primary-btn hover:brightness-95 text-white px-5 py-2.5 rounded-xl disabled:opacity-50"
+              >
+                {savingEmployeeProfileId === editingEmployeeId ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteEmployeeModal.open && (
         <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-md flex items-center justify-center px-4">

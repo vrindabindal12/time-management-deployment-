@@ -62,14 +62,19 @@ class Employee(db.Model):
     current_hourly_rate = db.Column(db.Float, nullable=True)
     promotion_1_date = db.Column(db.Date, nullable=True)
     promotion_1_rate = db.Column(db.Float, nullable=True)
+    promotion_1_designation = db.Column(db.String(120), nullable=True)
     promotion_2_date = db.Column(db.Date, nullable=True)
     promotion_2_rate = db.Column(db.Float, nullable=True)
+    promotion_2_designation = db.Column(db.String(120), nullable=True)
     promotion_3_date = db.Column(db.Date, nullable=True)
     promotion_3_rate = db.Column(db.Float, nullable=True)
+    promotion_3_designation = db.Column(db.String(120), nullable=True)
     promotion_4_date = db.Column(db.Date, nullable=True)
     promotion_4_rate = db.Column(db.Float, nullable=True)
+    promotion_4_designation = db.Column(db.String(120), nullable=True)
     promotion_5_date = db.Column(db.Date, nullable=True)
     promotion_5_rate = db.Column(db.Float, nullable=True)
+    promotion_5_designation = db.Column(db.String(120), nullable=True)
     punches = db.relationship('Punch', backref='employee', lazy=True)
 
     def set_password(self, password):
@@ -90,14 +95,19 @@ class Employee(db.Model):
             'current_hourly_rate': self.current_hourly_rate,
             'promotion_1_date': self.promotion_1_date.isoformat() if self.promotion_1_date else None,
             'promotion_1_rate': self.promotion_1_rate,
+            'promotion_1_designation': self.promotion_1_designation,
             'promotion_2_date': self.promotion_2_date.isoformat() if self.promotion_2_date else None,
             'promotion_2_rate': self.promotion_2_rate,
+            'promotion_2_designation': self.promotion_2_designation,
             'promotion_3_date': self.promotion_3_date.isoformat() if self.promotion_3_date else None,
             'promotion_3_rate': self.promotion_3_rate,
+            'promotion_3_designation': self.promotion_3_designation,
             'promotion_4_date': self.promotion_4_date.isoformat() if self.promotion_4_date else None,
             'promotion_4_rate': self.promotion_4_rate,
+            'promotion_4_designation': self.promotion_4_designation,
             'promotion_5_date': self.promotion_5_date.isoformat() if self.promotion_5_date else None,
-            'promotion_5_rate': self.promotion_5_rate
+            'promotion_5_rate': self.promotion_5_rate,
+            'promotion_5_designation': self.promotion_5_designation
         }
 
 class Punch(db.Model):
@@ -379,14 +389,19 @@ def ensure_employee_schema():
         'current_hourly_rate': 'FLOAT',
         'promotion_1_date': 'DATE',
         'promotion_1_rate': 'FLOAT',
+        'promotion_1_designation': 'TEXT',
         'promotion_2_date': 'DATE',
         'promotion_2_rate': 'FLOAT',
+        'promotion_2_designation': 'TEXT',
         'promotion_3_date': 'DATE',
         'promotion_3_rate': 'FLOAT',
+        'promotion_3_designation': 'TEXT',
         'promotion_4_date': 'DATE',
         'promotion_4_rate': 'FLOAT',
+        'promotion_4_designation': 'TEXT',
         'promotion_5_date': 'DATE',
         'promotion_5_rate': 'FLOAT',
+        'promotion_5_designation': 'TEXT',
     }
 
     existing = {
@@ -403,6 +418,21 @@ def ensure_employee_schema():
         "ON employee(employee_code)"
     ))
     db.session.commit()
+
+
+def generate_employee_code(employee_id):
+    return f'BKP-{employee_id:03d}'
+
+
+def ensure_employee_codes():
+    employees = Employee.query.filter_by(is_admin=False).all()
+    updated = False
+    for employee in employees:
+        if not employee.employee_code:
+            employee.employee_code = generate_employee_code(employee.id)
+            updated = True
+    if updated:
+        db.session.commit()
 
 
 def ensure_punch_invoice_schema():
@@ -449,16 +479,6 @@ def parse_optional_rate(value, field_name):
 
 
 def apply_employee_profile(employee, data):
-    if 'employee_code' in data:
-        code = (data.get('employee_code') or '').strip().upper()
-        if code:
-            existing = Employee.query.filter_by(employee_code=code).first()
-            if existing and existing.id != employee.id:
-                raise ValueError('Employee code already exists')
-            employee.employee_code = code
-        else:
-            employee.employee_code = None
-
     if 'designation' in data:
         designation = (data.get('designation') or '').strip()
         employee.designation = designation or None
@@ -472,43 +492,52 @@ def apply_employee_profile(employee, data):
     for idx in range(1, 6):
         date_key = f'promotion_{idx}_date'
         rate_key = f'promotion_{idx}_rate'
+        designation_key = f'promotion_{idx}_designation'
 
         if date_key in data:
             setattr(employee, date_key, parse_optional_date(data.get(date_key), date_key))
         if rate_key in data:
             setattr(employee, rate_key, parse_optional_rate(data.get(rate_key), rate_key))
+        if designation_key in data:
+            designation = (data.get(designation_key) or '').strip()
+            setattr(employee, designation_key, designation or None)
 
 
-def get_employee_rate_for_date(employee, work_date):
+def get_employee_compensation_for_date(employee, work_date):
     """
-    Resolve employee hourly rate for a given work date.
+    Resolve employee hourly rate and designation for a given work date.
     Priority:
-    1) Latest promotion rate where promotion date <= work_date
-    2) current_hourly_rate
-    3) 0.0 fallback
+    1) Latest promotion fields where promotion date <= work_date
+    2) employee base designation/current_hourly_rate
     """
     effective_rate = employee.current_hourly_rate if employee.current_hourly_rate is not None else 0.0
+    effective_designation = employee.designation or 'Unspecified'
 
     promotions = []
     for idx in range(1, 6):
         promo_date = getattr(employee, f'promotion_{idx}_date')
         promo_rate = getattr(employee, f'promotion_{idx}_rate')
-        if promo_date and promo_rate is not None:
-            promotions.append((promo_date, promo_rate))
+        promo_designation = getattr(employee, f'promotion_{idx}_designation')
+        if promo_date and (promo_rate is not None or promo_designation):
+            promotions.append((promo_date, promo_rate, promo_designation))
 
     promotions.sort(key=lambda item: item[0])
-    for promo_date, promo_rate in promotions:
+    for promo_date, promo_rate, promo_designation in promotions:
         if promo_date <= work_date:
-            effective_rate = promo_rate
+            if promo_rate is not None:
+                effective_rate = promo_rate
+            if promo_designation:
+                effective_designation = promo_designation
         else:
             break
 
-    return float(effective_rate or 0.0)
+    return float(effective_rate or 0.0), effective_designation
 
 # Initialize database
 with app.app_context():
     db.create_all()
     ensure_employee_schema()
+    ensure_employee_codes()
     ensure_punch_invoice_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
@@ -728,6 +757,11 @@ def create_employee(current_user):
     
     db.session.add(employee)
     db.session.commit()
+
+    # Auto-generate immutable employee code.
+    if not employee.employee_code:
+        employee.employee_code = generate_employee_code(employee.id)
+        db.session.commit()
     
     return jsonify(employee.to_dict()), 201
 
@@ -1162,7 +1196,7 @@ def get_client_invoice_report(current_user):
             continue
 
         employee = employee_by_id.get(punch.employee_id)
-        designation = employee.designation if employee and employee.designation else 'Unspecified'
+        _, designation = get_employee_compensation_for_date(employee, punch.work_date) if employee else (0.0, 'Unspecified')
         selected_rate = rate_by_project_and_designation.get((project.id, designation))
         if not selected_rate:
             selected_rate = first_rate_by_project.get(project.id)
@@ -1291,7 +1325,8 @@ def get_employee_payables_report(current_user):
             continue
 
         hours = round(float(punch.hours_worked), 2)
-        rate = round(get_employee_rate_for_date(employee, punch.work_date), 2)
+        resolved_rate, resolved_designation = get_employee_compensation_for_date(employee, punch.work_date)
+        rate = round(resolved_rate, 2)
         net_payable = round(hours * rate, 2)
 
         project = project_by_id.get(punch.project_id) if punch.project_id else None
@@ -1306,7 +1341,7 @@ def get_employee_payables_report(current_user):
                 'employee_id': employee.id,
                 'employee_name': employee.name,
                 'employee_code': employee.employee_code,
-                'designation': employee.designation,
+                'designation': resolved_designation,
                 'total_hours': 0.0,
                 'total_net_payable': 0.0
             }
@@ -1318,7 +1353,7 @@ def get_employee_payables_report(current_user):
             'project_code': project_code,
             'employee_name': employee.name,
             'employee_code': employee.employee_code,
-            'employee_designation': employee.designation or 'Unspecified',
+            'employee_designation': resolved_designation,
             'project_name': project_name,
             'work_date': punch.work_date.isoformat(),
             'rate': rate,

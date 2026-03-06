@@ -53,14 +53,19 @@ export interface Employee {
   current_hourly_rate?: number | null;
   promotion_1_date?: string | null;
   promotion_1_rate?: number | null;
+  promotion_1_designation?: string | null;
   promotion_2_date?: string | null;
   promotion_2_rate?: number | null;
+  promotion_2_designation?: string | null;
   promotion_3_date?: string | null;
   promotion_3_rate?: number | null;
+  promotion_3_designation?: string | null;
   promotion_4_date?: string | null;
   promotion_4_rate?: number | null;
+  promotion_4_designation?: string | null;
   promotion_5_date?: string | null;
   promotion_5_rate?: number | null;
+  promotion_5_designation?: string | null;
 }
 
 export interface WorkEntry {
