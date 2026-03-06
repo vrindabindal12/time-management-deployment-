@@ -76,6 +76,7 @@ class Employee(db.Model):
     promotion_5_date = db.Column(db.Date, nullable=True)
     promotion_5_rate = db.Column(db.Float, nullable=True)
     promotion_5_designation = db.Column(db.String(120), nullable=True)
+    profile_photo = db.Column(db.Text, nullable=True)
     punches = db.relationship('Punch', backref='employee', lazy=True)
 
     def set_password(self, password):
@@ -109,7 +110,8 @@ class Employee(db.Model):
             'promotion_4_designation': self.promotion_4_designation,
             'promotion_5_date': self.promotion_5_date.isoformat() if self.promotion_5_date else None,
             'promotion_5_rate': self.promotion_5_rate,
-            'promotion_5_designation': self.promotion_5_designation
+            'promotion_5_designation': self.promotion_5_designation,
+            'profile_photo': self.profile_photo
         }
 
 class Punch(db.Model):
@@ -407,6 +409,7 @@ def ensure_employee_schema():
         'promotion_5_date': 'DATE',
         'promotion_5_rate': 'FLOAT',
         'promotion_5_designation': 'TEXT',
+        'profile_photo': 'TEXT',
     }
 
     existing = {
@@ -503,6 +506,22 @@ def parse_optional_rate(value, field_name):
     return parsed
 
 
+def parse_profile_photo(value, field_name='profile_photo'):
+    if value is None or value == '':
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f'{field_name} must be a string')
+
+    photo_data = value.strip()
+    if not photo_data:
+        return None
+    if not photo_data.startswith('data:image/'):
+        raise ValueError(f'{field_name} must be a valid image data URL')
+    if len(photo_data) > 2_000_000:
+        raise ValueError(f'{field_name} is too large')
+    return photo_data
+
+
 def apply_employee_profile(employee, data):
     if 'designation' in data:
         designation = (data.get('designation') or '').strip()
@@ -530,6 +549,9 @@ def apply_employee_profile(employee, data):
         if designation_key in data:
             designation = (data.get(designation_key) or '').strip()
             setattr(employee, designation_key, designation or None)
+
+    if 'profile_photo' in data:
+        employee.profile_photo = parse_profile_photo(data.get('profile_photo'))
 
 
 def get_employee_compensation_for_date(employee, work_date):
@@ -812,6 +834,19 @@ def change_password(current_user):
     db.session.commit()
     
     return jsonify({'message': 'Password changed successfully'}), 200
+
+
+@app.route('/api/me/profile-photo', methods=['PUT'])
+@token_required
+def update_my_profile_photo(current_user):
+    data = request.json or {}
+    try:
+        current_user.profile_photo = parse_profile_photo(data.get('profile_photo'))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    db.session.commit()
+    return jsonify(current_user.to_dict()), 200
 
 @app.route('/api/employees', methods=['GET'])
 @token_required

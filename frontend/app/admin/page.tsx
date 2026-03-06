@@ -76,6 +76,31 @@ const buildEmployeeProfileEdit = (employee: Employee): EmployeeProfileEdit => ({
   promotion_5_designation: employee.promotion_5_designation || '',
 });
 
+const AVATAR_GRADIENTS = [
+  'from-cyan-500 to-blue-600',
+  'from-violet-500 to-indigo-600',
+  'from-emerald-500 to-teal-600',
+  'from-fuchsia-500 to-pink-600',
+  'from-orange-500 to-rose-600',
+  'from-sky-500 to-indigo-600',
+];
+
+const getEmployeeInitials = (name: string) => {
+  const tokens = name.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return 'NA';
+  if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase();
+  return (tokens[0][0] + tokens[tokens.length - 1][0]).toUpperCase();
+};
+
+const getEmployeeAvatarGradient = (employee: Employee) => {
+  const seed = `${employee.id}-${employee.name}`;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+};
+
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('onboarding');
@@ -1350,7 +1375,22 @@ export default function AdminDashboard() {
                       </div>
                       <div className="absolute -top-14 -right-10 w-36 h-36 bg-cyan-300/30 rounded-full blur-2xl" />
                       <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
-                      <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-700 font-bold">Employee Profile</p>
+                      <div className="mt-2 mb-5 flex items-center gap-4">
+                        <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-white/85 shadow-xl bg-white/70 shrink-0">
+                          {employee.profile_photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={employee.profile_photo} alt={`${employee.name} profile`} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className={`w-full h-full bg-gradient-to-br ${getEmployeeAvatarGradient(employee)} flex items-center justify-center text-white font-black text-lg`}>
+                              {getEmployeeInitials(employee.name)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col justify-center">
+                          <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-700 font-bold">Employee Profile</p>
+                          <p className="text-xs text-slate-500 mt-1">Tap card to flip details</p>
+                        </div>
+                      </div>
                       <h3 className="text-2xl font-black text-slate-900 mt-2 leading-tight">{employee.name}</h3>
                       <p className="text-slate-600 text-sm mt-1">{employee.email}</p>
                       <div className="mt-5 rounded-2xl bg-white/72 border border-white/70 p-4">
@@ -1986,9 +2026,6 @@ export default function AdminDashboard() {
                   {invoiceLoading ? 'Running...' : 'Run Report'}
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-3">
-                Auto-populated from project rates and employee attendance logs. Values are read-only here.
-              </p>
             </div>
 
             {invoiceReport && (
@@ -2138,9 +2175,6 @@ export default function AdminDashboard() {
                   {payablesLoading ? 'Running...' : 'Run Report'}
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-3">
-                Auto-populated from employee onboarding rates/promotions and attendance logs.
-              </p>
             </div>
 
             {payablesReport && (

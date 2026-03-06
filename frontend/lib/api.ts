@@ -67,6 +67,7 @@ export interface Employee {
   promotion_5_date?: string | null;
   promotion_5_rate?: number | null;
   promotion_5_designation?: string | null;
+  profile_photo?: string | null;
 }
 
 export interface WorkEntry {
@@ -255,6 +256,11 @@ export const employeeApi = {
 
   updateEmployeeProfile: async (employeeId: number, profileData: Partial<Employee>): Promise<Employee> => {
     const response = await api.put(`/employees/${employeeId}/profile`, profileData);
+    return response.data;
+  },
+
+  updateMyProfilePhoto: async (profilePhoto: string | null): Promise<Employee> => {
+    const response = await api.put('/me/profile-photo', { profile_photo: profilePhoto });
     return response.data;
   },
 
