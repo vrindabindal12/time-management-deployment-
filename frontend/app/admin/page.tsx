@@ -79,6 +79,7 @@ export default function AdminDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [totalProjectsCount, setTotalProjectsCount] = useState(0);
   const router = useRouter();
 
   // Employee states
@@ -182,6 +183,18 @@ export default function AdminDashboard() {
       loadProjectRates(selectedProject);
     }
   }, [selectedProject]);
+
+  useEffect(() => {
+    const loadDashboardCounts = async () => {
+      try {
+        const allProjects = await employeeApi.getAllProjects();
+        setTotalProjectsCount(allProjects.length);
+      } catch {
+        setTotalProjectsCount(0);
+      }
+    };
+    loadDashboardCounts();
+  }, []);
 
   const clearError = () => setTimeout(() => setError(null), 5000);
 
@@ -652,11 +665,29 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-7xl mx-auto">
-        {/* Welcome Message */}
+        {/* Dashboard Summary */}
         <div className="glass-panel rounded-3xl p-6 mb-6">
-          <h2 className="text-3xl font-black text-slate-900">Admin Dashboard</h2>
-          <p className="text-slate-600 mt-1">Welcome, {user.name}</p>
-          <p className="text-slate-500 text-sm mt-2">Current Time: {currentTime.toLocaleString()}</p>
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
+            <div>
+              <h2 className="text-3xl font-black text-slate-900">Admin Dashboard</h2>
+              <p className="text-slate-600 mt-1">Organization Overview</p>
+            </div>
+            <p className="text-slate-500 text-sm">{currentTime.toLocaleString()}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-2xl border border-white/70 bg-gradient-to-br from-cyan-100/80 via-white/80 to-blue-100/70 p-5 shadow-lg">
+              <p className="text-xs uppercase tracking-[0.18em] text-cyan-700 font-bold">Total Employees</p>
+              <p className="text-4xl font-black text-slate-900 mt-3">{employees.filter((emp) => !emp.is_admin).length}</p>
+            </div>
+            <div className="rounded-2xl border border-white/70 bg-gradient-to-br from-emerald-100/80 via-white/80 to-teal-100/70 p-5 shadow-lg">
+              <p className="text-xs uppercase tracking-[0.18em] text-emerald-700 font-bold">Total Clients</p>
+              <p className="text-4xl font-black text-slate-900 mt-3">{clients.length}</p>
+            </div>
+            <div className="rounded-2xl border border-white/70 bg-gradient-to-br from-indigo-100/80 via-white/80 to-violet-100/70 p-5 shadow-lg">
+              <p className="text-xs uppercase tracking-[0.18em] text-indigo-700 font-bold">Total Projects</p>
+              <p className="text-4xl font-black text-slate-900 mt-3">{totalProjectsCount}</p>
+            </div>
+          </div>
         </div>
 
         {/* Error Message */}
