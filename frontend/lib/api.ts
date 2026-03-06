@@ -85,6 +85,7 @@ export interface WorkEntry {
 
 export interface EmployeeStatus {
   employee: Employee;
+  date?: string;
   today_entries: WorkEntry[];
   today_hours: number;
 }
@@ -262,8 +263,10 @@ export const employeeApi = {
     return response.data;
   },
 
-  getMyStatus: async (): Promise<EmployeeStatus> => {
-    const response = await api.get('/my-status');
+  getMyStatus: async (date?: string): Promise<EmployeeStatus> => {
+    const params: any = {};
+    if (date) params.date = date;
+    const response = await api.get('/my-status', { params });
     return response.data;
   },
 
@@ -280,6 +283,7 @@ export const employeeApi = {
     project_name?: string;
     project_code?: string;
     work_date: string;
+    client_today?: string;
     hours_worked: number;
     description: string;
   }): Promise<WorkEntry> => {

@@ -4,6 +4,13 @@ import { useState, useEffect } from 'react';
 import { employeeApi, getCurrentUser, logout, isAuthenticated } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
+const formatLocalDate = (date: Date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [status, setStatus] = useState<any>(null);
@@ -18,16 +25,16 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<any[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<any[]>([]);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
-  const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
+  const [workDate, setWorkDate] = useState(() => formatLocalDate(new Date()));
   const [hoursWorked, setHoursWorked] = useState('');
   const [description, setDescription] = useState('');
   
   const router = useRouter();
   const today = new Date();
-  const maxWorkDate = today.toISOString().split('T')[0];
+  const maxWorkDate = formatLocalDate(today);
   const minDate = new Date(today);
   minDate.setDate(today.getDate() - 7);
-  const minWorkDate = minDate.toISOString().split('T')[0];
+  const minWorkDate = formatLocalDate(minDate);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -42,16 +49,16 @@ export default function Dashboard() {
     }
 
     setUser(currentUser);
-    loadStatus();
+    loadStatus(formatLocalDate(new Date()));
     loadProjects();
 
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, [router]);
 
-  const loadStatus = async () => {
+  const loadStatus = async (date?: string) => {
     try {
-      const data = await employeeApi.getMyStatus();
+      const data = await employeeApi.getMyStatus(date);
       setStatus(data);
     } catch (err: any) {
       setError('Failed to load status');
@@ -133,6 +140,7 @@ export default function Dashboard() {
       await employeeApi.addWork({
         project_code: projectCode.trim(),
         work_date: workDate,
+        client_today: formatLocalDate(new Date()),
         hours_worked: hours,
         description: description.trim()
       });
@@ -140,12 +148,12 @@ export default function Dashboard() {
       // Reset form
       setProjectCode('');
       setProjectName('');
-      setWorkDate(new Date().toISOString().split('T')[0]);
+      setWorkDate(formatLocalDate(new Date()));
       setHoursWorked('');
       setDescription('');
       
       setSuccess('Work entry added successfully!');
-      await loadStatus();
+      await loadStatus(formatLocalDate(new Date()));
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to add work entry');
     } finally {
@@ -181,6 +189,9 @@ export default function Dashboard() {
               <p className="text-2xl font-bold text-blue-700">
                 Total Hours Today: {status.today_hours.toFixed(2)}
               </p>
+              {status.date && (
+                <p className="text-xs text-slate-500 mt-1">Date: {status.date}</p>
+              )}
               <p className="text-sm text-slate-600 mt-2">
                 {status.today_entries.length} {status.today_entries.length === 1 ? 'entry' : 'entries'} logged
               </p>

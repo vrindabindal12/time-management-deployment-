@@ -928,7 +928,19 @@ def add_work(current_user):
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
-    today = datetime.utcnow().date()
+    utc_today = datetime.utcnow().date()
+    today = utc_today
+    client_today_raw = (data.get('client_today') or '').strip()
+    if client_today_raw:
+        try:
+            client_today = datetime.strptime(client_today_raw, '%Y-%m-%d').date()
+            # Accept client-reported local date when it is within a safe drift window.
+            # This avoids timezone edge rejections (e.g., Asia timezones ahead of UTC).
+            if abs((client_today - utc_today).days) <= 1:
+                today = max(utc_today, client_today)
+        except ValueError:
+            return jsonify({'error': 'client_today must be in YYYY-MM-DD format'}), 400
+
     oldest_allowed = today - timedelta(days=7)
     if work_date < oldest_allowed or work_date > today:
         return jsonify({'error': 'Work date must be within the last 7 days (including today)'}), 400
@@ -1096,17 +1108,25 @@ def update_work_invoice_values(current_user, work_id):
 @app.route('/api/my-status', methods=['GET'])
 @token_required
 def get_my_status(current_user):
-    # Get today's work entries
-    today = datetime.now().date()
+    target_date_str = request.args.get('date')
+    if target_date_str:
+        try:
+            target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    else:
+        target_date = datetime.now().date()
+
     today_entries = Punch.query.filter_by(
         employee_id=current_user.id,
-        work_date=today
+        work_date=target_date
     ).all()
     
     today_hours = sum(entry.hours_worked for entry in today_entries)
     
     return jsonify({
         'employee': current_user.to_dict(),
+        'date': target_date.isoformat(),
         'today_entries': [entry.to_dict() for entry in today_entries],
         'today_hours': round(today_hours, 2)
     })
