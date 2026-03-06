@@ -27,6 +27,40 @@ const emptyOnboardingForm = {
   promotion_5_rate: '',
 };
 
+type EmployeeProfileEdit = {
+  employee_code: string;
+  designation: string;
+  start_date: string;
+  current_hourly_rate: string;
+  promotion_1_date: string;
+  promotion_1_rate: string;
+  promotion_2_date: string;
+  promotion_2_rate: string;
+  promotion_3_date: string;
+  promotion_3_rate: string;
+  promotion_4_date: string;
+  promotion_4_rate: string;
+  promotion_5_date: string;
+  promotion_5_rate: string;
+};
+
+const buildEmployeeProfileEdit = (employee: Employee): EmployeeProfileEdit => ({
+  employee_code: employee.employee_code || '',
+  designation: employee.designation || '',
+  start_date: employee.start_date || '',
+  current_hourly_rate: employee.current_hourly_rate != null ? String(employee.current_hourly_rate) : '',
+  promotion_1_date: employee.promotion_1_date || '',
+  promotion_1_rate: employee.promotion_1_rate != null ? String(employee.promotion_1_rate) : '',
+  promotion_2_date: employee.promotion_2_date || '',
+  promotion_2_rate: employee.promotion_2_rate != null ? String(employee.promotion_2_rate) : '',
+  promotion_3_date: employee.promotion_3_date || '',
+  promotion_3_rate: employee.promotion_3_rate != null ? String(employee.promotion_3_rate) : '',
+  promotion_4_date: employee.promotion_4_date || '',
+  promotion_4_rate: employee.promotion_4_rate != null ? String(employee.promotion_4_rate) : '',
+  promotion_5_date: employee.promotion_5_date || '',
+  promotion_5_rate: employee.promotion_5_rate != null ? String(employee.promotion_5_rate) : '',
+});
+
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('employees');
@@ -44,6 +78,8 @@ export default function AdminDashboard() {
   const [showOnboardingForm, setShowOnboardingForm] = useState(false);
   const [onboardingForm, setOnboardingForm] = useState(emptyOnboardingForm);
   const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
+  const [employeeProfileEdits, setEmployeeProfileEdits] = useState<Record<number, EmployeeProfileEdit>>({});
+  const [savingEmployeeProfileId, setSavingEmployeeProfileId] = useState<number | null>(null);
   const [deleteEmployeeModal, setDeleteEmployeeModal] = useState<{
     open: boolean;
     employeeId: number | null;
@@ -140,6 +176,11 @@ export default function AdminDashboard() {
     try {
       const data = await employeeApi.getEmployees();
       setEmployees(data);
+      const nextProfileEdits: Record<number, EmployeeProfileEdit> = {};
+      data.forEach((employee: Employee) => {
+        nextProfileEdits[employee.id] = buildEmployeeProfileEdit(employee);
+      });
+      setEmployeeProfileEdits(nextProfileEdits);
     } catch (err: any) {
       setError('Failed to load employees');
       clearError();
@@ -256,6 +297,68 @@ export default function AdminDashboard() {
 
   const toggleCardFlip = (employeeId: number) => {
     setFlippedCards((prev) => ({ ...prev, [employeeId]: !prev[employeeId] }));
+  };
+
+  const handleEmployeeProfileEditChange = (
+    employeeId: number,
+    field: keyof EmployeeProfileEdit,
+    value: string
+  ) => {
+    setEmployeeProfileEdits((prev) => ({
+      ...prev,
+      [employeeId]: {
+        ...(prev[employeeId] || {
+          employee_code: '',
+          designation: '',
+          start_date: '',
+          current_hourly_rate: '',
+          promotion_1_date: '',
+          promotion_1_rate: '',
+          promotion_2_date: '',
+          promotion_2_rate: '',
+          promotion_3_date: '',
+          promotion_3_rate: '',
+          promotion_4_date: '',
+          promotion_4_rate: '',
+          promotion_5_date: '',
+          promotion_5_rate: '',
+        }),
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveEmployeeProfile = async (employeeId: number) => {
+    const edit = employeeProfileEdits[employeeId];
+    if (!edit) return;
+
+    setSavingEmployeeProfileId(employeeId);
+    setError(null);
+
+    try {
+      await employeeApi.updateEmployeeProfile(employeeId, {
+        employee_code: toNullableText(edit.employee_code)?.toUpperCase() || null,
+        designation: toNullableText(edit.designation),
+        start_date: toNullableText(edit.start_date),
+        current_hourly_rate: toNullableNumber(edit.current_hourly_rate),
+        promotion_1_date: toNullableText(edit.promotion_1_date),
+        promotion_1_rate: toNullableNumber(edit.promotion_1_rate),
+        promotion_2_date: toNullableText(edit.promotion_2_date),
+        promotion_2_rate: toNullableNumber(edit.promotion_2_rate),
+        promotion_3_date: toNullableText(edit.promotion_3_date),
+        promotion_3_rate: toNullableNumber(edit.promotion_3_rate),
+        promotion_4_date: toNullableText(edit.promotion_4_date),
+        promotion_4_rate: toNullableNumber(edit.promotion_4_rate),
+        promotion_5_date: toNullableText(edit.promotion_5_date),
+        promotion_5_rate: toNullableNumber(edit.promotion_5_rate),
+      });
+      await loadEmployees();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update employee profile');
+      clearError();
+    } finally {
+      setSavingEmployeeProfileId(null);
+    }
   };
 
   const openDeleteEmployeeModal = (employeeId: number, employeeName: string) => {
@@ -868,24 +971,81 @@ export default function AdminDashboard() {
                       <p className="text-xs text-slate-500 mt-5">Click to flip for full details</p>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => toggleCardFlip(employee.id)}
-                      className="absolute inset-0 w-full text-left glass-panel rounded-2xl p-5"
+                    <div
+                      className="absolute inset-0 w-full text-left glass-panel rounded-2xl p-4 overflow-y-auto"
                       style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                     >
-                      <p className="text-xs uppercase tracking-[0.2em] text-indigo-700 font-bold">Compensation Details</p>
-                      <div className="mt-2 space-y-1 text-sm text-slate-700">
-                        <p><span className="font-semibold">Start:</span> {employee.start_date || '-'}</p>
-                        <p><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
-                        <p><span className="font-semibold">Promotion 1:</span> {employee.promotion_1_date || '-'} / {employee.promotion_1_rate ?? '-'}</p>
-                        <p><span className="font-semibold">Promotion 2:</span> {employee.promotion_2_date || '-'} / {employee.promotion_2_rate ?? '-'}</p>
-                        <p><span className="font-semibold">Promotion 3:</span> {employee.promotion_3_date || '-'} / {employee.promotion_3_rate ?? '-'}</p>
-                        <p><span className="font-semibold">Promotion 4:</span> {employee.promotion_4_date || '-'} / {employee.promotion_4_rate ?? '-'}</p>
-                        <p><span className="font-semibold">Promotion 5:</span> {employee.promotion_5_date || '-'} / {employee.promotion_5_rate ?? '-'}</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs uppercase tracking-[0.2em] text-indigo-700 font-bold">Edit Employee Details</p>
+                        <button
+                          type="button"
+                          onClick={() => toggleCardFlip(employee.id)}
+                          className="text-xs px-2 py-1 rounded-lg bg-white/70 border border-white/70 text-slate-700"
+                        >
+                          Flip Back
+                        </button>
                       </div>
-                      <p className="text-xs text-slate-500 mt-4">Click to flip back</p>
-                    </button>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <input
+                          type="text"
+                          placeholder="Employee ID"
+                          value={employeeProfileEdits[employee.id]?.employee_code ?? ''}
+                          onChange={(e) => handleEmployeeProfileEditChange(employee.id, 'employee_code', e.target.value)}
+                          className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Designation"
+                          value={employeeProfileEdits[employee.id]?.designation ?? ''}
+                          onChange={(e) => handleEmployeeProfileEditChange(employee.id, 'designation', e.target.value)}
+                          className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
+                        />
+                        <input
+                          type="date"
+                          value={employeeProfileEdits[employee.id]?.start_date ?? ''}
+                          onChange={(e) => handleEmployeeProfileEditChange(employee.id, 'start_date', e.target.value)}
+                          className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="Current Rate"
+                          value={employeeProfileEdits[employee.id]?.current_hourly_rate ?? ''}
+                          onChange={(e) => handleEmployeeProfileEditChange(employee.id, 'current_hourly_rate', e.target.value)}
+                          className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
+                        />
+                        {[1, 2, 3, 4, 5].map((idx) => (
+                          <div key={`${employee.id}-promo-${idx}`} className="col-span-2 grid grid-cols-2 gap-2">
+                            <input
+                              type="date"
+                              value={employeeProfileEdits[employee.id]?.[`promotion_${idx}_date` as keyof EmployeeProfileEdit] as string || ''}
+                              onChange={(e) => handleEmployeeProfileEditChange(employee.id, `promotion_${idx}_date` as keyof EmployeeProfileEdit, e.target.value)}
+                              className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder={`Promotion ${idx} Rate`}
+                              value={employeeProfileEdits[employee.id]?.[`promotion_${idx}_rate` as keyof EmployeeProfileEdit] as string || ''}
+                              onChange={(e) => handleEmployeeProfileEditChange(employee.id, `promotion_${idx}_rate` as keyof EmployeeProfileEdit, e.target.value)}
+                              className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white/85"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => saveEmployeeProfile(employee.id)}
+                        disabled={savingEmployeeProfileId === employee.id}
+                        className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm transition disabled:opacity-50"
+                      >
+                        {savingEmployeeProfileId === employee.id ? 'Saving...' : 'Save Details'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
