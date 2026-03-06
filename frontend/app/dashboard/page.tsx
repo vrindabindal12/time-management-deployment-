@@ -23,6 +23,11 @@ export default function Dashboard() {
   const [description, setDescription] = useState('');
   
   const router = useRouter();
+  const today = new Date();
+  const maxWorkDate = today.toISOString().split('T')[0];
+  const minDate = new Date(today);
+  minDate.setDate(today.getDate() - 7);
+  const minWorkDate = minDate.toISOString().split('T')[0];
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -115,6 +120,12 @@ export default function Dashboard() {
       const hours = parseFloat(hoursWorked);
       if (isNaN(hours) || hours <= 0 || hours > 24) {
         setError('Hours must be between 0 and 24');
+        setLoading(false);
+        return;
+      }
+
+      if (workDate < minWorkDate || workDate > maxWorkDate) {
+        setError('You can only log work for today or up to 7 days back');
         setLoading(false);
         return;
       }
@@ -251,7 +262,8 @@ export default function Dashboard() {
                   required
                   value={workDate}
                   onChange={(e) => setWorkDate(e.target.value)}
-                  max={new Date().toISOString().split('T')[0]}
+                  min={minWorkDate}
+                  max={maxWorkDate}
                   className="w-full border border-slate-300 bg-white/80 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

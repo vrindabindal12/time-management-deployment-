@@ -603,6 +603,11 @@ def add_work(current_user):
         work_date = datetime.strptime(data['work_date'], '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    today = datetime.utcnow().date()
+    oldest_allowed = today - timedelta(days=7)
+    if work_date < oldest_allowed or work_date > today:
+        return jsonify({'error': 'Work date must be within the last 7 days (including today)'}), 400
     
     # Employee can only add work for themselves
     work_entry = Punch(
