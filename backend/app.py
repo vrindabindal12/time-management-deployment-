@@ -10,6 +10,7 @@ import csv
 import io
 from functools import wraps
 from openpyxl import Workbook
+from sqlalchemy import text
 
 app = Flask(__name__)
 
@@ -55,6 +56,20 @@ class Employee(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
+    employee_code = db.Column(db.String(50), unique=True, nullable=True)
+    designation = db.Column(db.String(120), nullable=True)
+    start_date = db.Column(db.Date, nullable=True)
+    current_hourly_rate = db.Column(db.Float, nullable=True)
+    promotion_1_date = db.Column(db.Date, nullable=True)
+    promotion_1_rate = db.Column(db.Float, nullable=True)
+    promotion_2_date = db.Column(db.Date, nullable=True)
+    promotion_2_rate = db.Column(db.Float, nullable=True)
+    promotion_3_date = db.Column(db.Date, nullable=True)
+    promotion_3_rate = db.Column(db.Float, nullable=True)
+    promotion_4_date = db.Column(db.Date, nullable=True)
+    promotion_4_rate = db.Column(db.Float, nullable=True)
+    promotion_5_date = db.Column(db.Date, nullable=True)
+    promotion_5_rate = db.Column(db.Float, nullable=True)
     punches = db.relationship('Punch', backref='employee', lazy=True)
 
     def set_password(self, password):
@@ -68,7 +83,21 @@ class Employee(db.Model):
             'id': self.id,
             'name': self.name,
             'email': self.email,
-            'is_admin': self.is_admin
+            'is_admin': self.is_admin,
+            'employee_code': self.employee_code,
+            'designation': self.designation,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'current_hourly_rate': self.current_hourly_rate,
+            'promotion_1_date': self.promotion_1_date.isoformat() if self.promotion_1_date else None,
+            'promotion_1_rate': self.promotion_1_rate,
+            'promotion_2_date': self.promotion_2_date.isoformat() if self.promotion_2_date else None,
+            'promotion_2_rate': self.promotion_2_rate,
+            'promotion_3_date': self.promotion_3_date.isoformat() if self.promotion_3_date else None,
+            'promotion_3_rate': self.promotion_3_rate,
+            'promotion_4_date': self.promotion_4_date.isoformat() if self.promotion_4_date else None,
+            'promotion_4_rate': self.promotion_4_rate,
+            'promotion_5_date': self.promotion_5_date.isoformat() if self.promotion_5_date else None,
+            'promotion_5_rate': self.promotion_5_rate
         }
 
 class Punch(db.Model):
@@ -331,9 +360,100 @@ def export_work_history(employee, work_entries):
 
     return jsonify({'error': 'Invalid format. Use csv or excel'}), 400
 
+
+def ensure_employee_schema():
+    """Add onboarding/profile columns for existing sqlite databases."""
+    if not DATABASE_URL.startswith('sqlite'):
+        return
+
+    required_columns = {
+        'employee_code': 'TEXT',
+        'designation': 'TEXT',
+        'start_date': 'DATE',
+        'current_hourly_rate': 'FLOAT',
+        'promotion_1_date': 'DATE',
+        'promotion_1_rate': 'FLOAT',
+        'promotion_2_date': 'DATE',
+        'promotion_2_rate': 'FLOAT',
+        'promotion_3_date': 'DATE',
+        'promotion_3_rate': 'FLOAT',
+        'promotion_4_date': 'DATE',
+        'promotion_4_rate': 'FLOAT',
+        'promotion_5_date': 'DATE',
+        'promotion_5_rate': 'FLOAT',
+    }
+
+    existing = {
+        row[1]
+        for row in db.session.execute(text("PRAGMA table_info(employee)")).fetchall()
+    }
+
+    for column_name, column_type in required_columns.items():
+        if column_name not in existing:
+            db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {column_name} {column_type}"))
+
+    db.session.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_employee_code "
+        "ON employee(employee_code)"
+    ))
+    db.session.commit()
+
+
+def parse_optional_date(value, field_name):
+    if value is None or value == '':
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError:
+        raise ValueError(f'{field_name} must be in YYYY-MM-DD format')
+
+
+def parse_optional_rate(value, field_name):
+    if value is None or value == '':
+        return None
+    try:
+        parsed = float(value)
+    except (ValueError, TypeError):
+        raise ValueError(f'{field_name} must be a valid number')
+    if parsed < 0:
+        raise ValueError(f'{field_name} must be non-negative')
+    return parsed
+
+
+def apply_employee_profile(employee, data):
+    if 'employee_code' in data:
+        code = (data.get('employee_code') or '').strip().upper()
+        if code:
+            existing = Employee.query.filter_by(employee_code=code).first()
+            if existing and existing.id != employee.id:
+                raise ValueError('Employee code already exists')
+            employee.employee_code = code
+        else:
+            employee.employee_code = None
+
+    if 'designation' in data:
+        designation = (data.get('designation') or '').strip()
+        employee.designation = designation or None
+
+    if 'start_date' in data:
+        employee.start_date = parse_optional_date(data.get('start_date'), 'start_date')
+
+    if 'current_hourly_rate' in data:
+        employee.current_hourly_rate = parse_optional_rate(data.get('current_hourly_rate'), 'current_hourly_rate')
+
+    for idx in range(1, 6):
+        date_key = f'promotion_{idx}_date'
+        rate_key = f'promotion_{idx}_rate'
+
+        if date_key in data:
+            setattr(employee, date_key, parse_optional_date(data.get(date_key), date_key))
+        if rate_key in data:
+            setattr(employee, rate_key, parse_optional_rate(data.get(rate_key), rate_key))
+
 # Initialize database
 with app.app_context():
     db.create_all()
+    ensure_employee_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
     if legacy_null_descriptions:
@@ -529,7 +649,7 @@ def get_employees(current_user):
 @token_required
 @admin_required
 def create_employee(current_user):
-    data = request.json
+    data = request.json or {}
     
     if not data.get('name') or not data.get('email') or not data.get('password'):
         return jsonify({'error': 'Name, email, and password are required'}), 400
@@ -544,11 +664,33 @@ def create_employee(current_user):
         is_admin=False
     )
     employee.set_password(data['password'])
+
+    try:
+        apply_employee_profile(employee, data)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     
     db.session.add(employee)
     db.session.commit()
     
     return jsonify(employee.to_dict()), 201
+
+@app.route('/api/employees/<int:employee_id>/profile', methods=['PUT'])
+@token_required
+@admin_required
+def update_employee_profile(current_user, employee_id):
+    employee = Employee.query.get(employee_id)
+    if not employee:
+        return jsonify({'error': 'Employee not found'}), 404
+
+    data = request.json or {}
+    try:
+        apply_employee_profile(employee, data)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    db.session.commit()
+    return jsonify(employee.to_dict()), 200
 
 @app.route('/api/employees/<int:employee_id>', methods=['DELETE'])
 @token_required
