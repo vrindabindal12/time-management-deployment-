@@ -140,6 +140,8 @@ export default function AdminDashboard() {
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [showAddProjectForm, setShowAddProjectForm] = useState(false);
   const [projectForm, setProjectForm] = useState({ name: '', code: '' });
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
+  const [projectEditForm, setProjectEditForm] = useState({ name: '', code: '' });
 
   // Project Rate states
   const [projectRates, setProjectRates] = useState<ProjectRate[]>([]);
@@ -176,6 +178,8 @@ export default function AdminDashboard() {
     if (selectedClient) {
       loadClientProjects(selectedClient);
     }
+    setEditingProjectId(null);
+    setProjectEditForm({ name: '', code: '' });
   }, [selectedClient]);
 
   useEffect(() => {
@@ -490,6 +494,9 @@ export default function AdminDashboard() {
       await clientApi.createClient(clientForm.name, clientForm.code);
       setClientForm({ name: '', code: '' });
       setShowAddClientForm(false);
+      setSelectedClient(null);
+      setSelectedProject(null);
+      setProjects([]);
       await loadClients();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create client');
@@ -582,6 +589,41 @@ export default function AdminDashboard() {
       setProjectRates([]);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to delete project');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startEditProject = (project: Project) => {
+    setEditingProjectId(project.id);
+    setProjectEditForm({ name: project.name, code: project.code });
+    setShowAddProjectForm(false);
+  };
+
+  const cancelEditProject = () => {
+    setEditingProjectId(null);
+    setProjectEditForm({ name: '', code: '' });
+  };
+
+  const handleUpdateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProjectId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await projectApi.updateProject(editingProjectId, {
+        name: projectEditForm.name,
+        code: projectEditForm.code,
+      });
+      cancelEditProject();
+      if (selectedClient) {
+        await loadClientProjects(selectedClient);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update project');
+      clearError();
     } finally {
       setLoading(false);
     }
@@ -716,6 +758,7 @@ export default function AdminDashboard() {
       .filter((employee): employee is Employee => Boolean(employee)),
     ...nonAdminEmployees.filter((employee) => !employeeCardOrder.includes(employee.id)),
   ];
+  const selectedClientData = clients.find((client) => client.id === selectedClient) || null;
 
   if (!user) {
     return (
@@ -1228,9 +1271,12 @@ export default function AdminDashboard() {
         {activeTab === 'clients' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* LEFT: Clients */}
-            <div className="glass-panel rounded-3xl p-6">
+            <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-amber-50/70 via-white/75 to-orange-100/60">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-slate-800">Clients</h2>
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">Clients</h2>
+                  <p className="text-sm text-slate-600">Choose a client to open project workspace</p>
+                </div>
                 <button
                   onClick={() => setShowAddClientForm(!showAddClientForm)}
                   className="glass-primary-btn hover:brightness-95 text-white px-3 py-1 rounded text-sm transition"
@@ -1275,21 +1321,24 @@ export default function AdminDashboard() {
                 </form>
               )}
 
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
                 {clients.map((client) => (
                   <div
                     key={client.id}
                     onClick={() => setSelectedClient(client.id)}
-                    className={`p-3 rounded-lg border-2 cursor-pointer transition ${
+                    className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
                       selectedClient === client.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-white/60 hover:border-blue-300 bg-white/45'
+                        ? 'border-amber-300 bg-gradient-to-br from-amber-100/85 via-white/75 to-orange-100/80 shadow-lg'
+                        : 'border-white/60 hover:border-amber-200 bg-gradient-to-br from-white/80 via-white/70 to-amber-50/70 shadow-md'
                     }`}
                   >
+                    <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-amber-300/20 blur-2xl" />
+                    <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-orange-300/20 blur-2xl" />
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <p className="font-bold text-gray-800">{client.name}</p>
-                        <p className="text-sm font-mono text-gray-600">{client.code}</p>
+                        <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-amber-700">Client</p>
+                        <p className="font-black text-slate-900 text-lg mt-1">{client.name}</p>
+                        <p className="text-sm font-mono text-slate-600 mt-1">{client.code}</p>
                       </div>
                       <button
                         onClick={(e) => {
@@ -1314,20 +1363,28 @@ export default function AdminDashboard() {
             {/* RIGHT: Projects & Rates */}
             <div className="space-y-6">
               {/* Projects Section */}
-              {selectedClient && (
-                <div className="glass-panel rounded-3xl p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-slate-800">New Project Details</h3>
+              {selectedClient && selectedClientData && (
+                <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/75 via-white/75 to-blue-100/65 transition-all duration-500">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] font-bold text-cyan-700">Project Workspace</p>
+                      <h3 className="text-2xl font-black text-slate-900 mt-1">{selectedClientData.name}</h3>
+                      <p className="text-sm text-slate-600">Client code: <span className="font-mono font-semibold">{selectedClientData.code}</span></p>
+                    </div>
                     <button
-                      onClick={() => setShowAddProjectForm(!showAddProjectForm)}
-                      className="glass-primary-btn hover:brightness-95 text-white px-3 py-1 rounded text-sm transition"
+                      onClick={() => {
+                        setShowAddProjectForm(!showAddProjectForm);
+                        setEditingProjectId(null);
+                      }}
+                      className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm transition"
                     >
-                      {showAddProjectForm ? 'Cancel' : '+ Add'}
+                      {showAddProjectForm ? 'Hide Create Form' : '+ Create Project'}
                     </button>
                   </div>
 
                   {showAddProjectForm && (
-                    <form onSubmit={handleAddProject} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
+                    <form onSubmit={handleAddProject} className="mb-4 p-4 glass-subtle rounded-2xl border border-white/60 bg-white/65">
+                      <p className="text-xs uppercase tracking-[0.18em] font-bold text-blue-700 mb-3">Create New Project</p>
                       <div className="space-y-3">
                         <div>
                           <label className="block text-xs font-bold text-blue-700 mb-1">PROJECT NAME</label>
@@ -1362,32 +1419,91 @@ export default function AdminDashboard() {
                     </form>
                   )}
 
-                  <div className="space-y-2">
+                  {editingProjectId !== null && (
+                    <form onSubmit={handleUpdateProject} className="mb-4 p-4 rounded-2xl border border-cyan-200/70 bg-cyan-50/70 backdrop-blur-sm">
+                      <p className="text-xs uppercase tracking-[0.18em] font-bold text-cyan-700 mb-3">Edit Project</p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-cyan-700 mb-1">PROJECT NAME</label>
+                          <input
+                            type="text"
+                            value={projectEditForm.name}
+                            onChange={(e) => setProjectEditForm({ ...projectEditForm, name: e.target.value })}
+                            required
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-cyan-700 mb-1">PROJECT CODE</label>
+                          <input
+                            type="text"
+                            value={projectEditForm.code}
+                            onChange={(e) => setProjectEditForm({ ...projectEditForm, code: e.target.value.toUpperCase() })}
+                            required
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                        >
+                          {loading ? 'Saving...' : 'Save Project'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditProject}
+                          className="px-4 py-2 rounded-xl text-sm border border-slate-300 bg-white/70 text-slate-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  <div className="space-y-3">
                     {projects.map((project) => (
                       <div
                         key={project.id}
                         onClick={() => setSelectedProject(project.id)}
-                        className={`p-3 rounded-lg border-2 cursor-pointer transition ${
+                        className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
                           selectedProject === project.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-white/60 hover:border-blue-300 bg-white/45'
+                            ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/75 shadow-lg'
+                            : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
                         }`}
                       >
+                        <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-cyan-300/20 blur-2xl" />
+                        <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-blue-300/20 blur-2xl" />
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
-                            <p className="font-bold text-gray-800">{project.name}</p>
-                            <p className="text-sm text-red-600 font-semibold">{clients.find(c => c.id === selectedClient)?.code}-{project.code}</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-cyan-700">Project</p>
+                            <p className="font-black text-slate-900 text-lg mt-1">{project.name}</p>
+                            <p className="text-sm text-cyan-700 font-semibold mt-1">{selectedClientData.code}-{project.code}</p>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteProject(project.id);
-                            }}
-                            disabled={loading}
-                            className="ml-2 px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
+                          <div className="ml-2 flex gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditProject(project);
+                              }}
+                              disabled={loading}
+                              className="px-2 py-1 text-xs rounded bg-cyan-100 text-cyan-800 border border-cyan-200 hover:bg-cyan-200 transition disabled:opacity-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteProject(project.id);
+                              }}
+                              disabled={loading}
+                              className="px-2 py-1 text-xs glass-danger-btn rounded hover:brightness-95 transition disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1509,8 +1625,11 @@ export default function AdminDashboard() {
               )}
 
               {!selectedClient && (
-                <div className="min-h-64 glass-panel rounded-3xl p-6 flex items-center justify-center">
-                  <p className="text-slate-500">Select a client to view/manage projects</p>
+                <div className="min-h-64 glass-panel rounded-3xl p-6 flex items-center justify-center border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/70 to-blue-100/65">
+                  <div className="text-center">
+                    <p className="text-xs uppercase tracking-[0.2em] font-bold text-cyan-700">Project Workspace</p>
+                    <p className="text-slate-700 font-semibold mt-2">Select a client to open create/edit project section</p>
+                  </div>
                 </div>
               )}
             </div>
