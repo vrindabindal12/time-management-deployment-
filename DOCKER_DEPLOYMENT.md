@@ -27,7 +27,8 @@ Update these values:
 ```env
 DB_PASSWORD=your-secure-database-password
 SECRET_KEY=your-super-secret-key-at-least-32-characters-long
-ADMIN_EMAIL=mananbedi.tech@gmail.com
+ADMIN_EMAIL=admin@your-domain.com
+ADMIN_PASSWORD=your-secure-admin-password
 ```
 
 ### 3. Build and Start Services
@@ -50,9 +51,7 @@ The database will be automatically created on first run. The admin user will be 
 - **Backend API**: http://localhost:5000/api
 - **Database**: localhost:5432
 
-Default login:
-- Email: `mananbedi.tech@gmail.com`
-- Password: `admin123`
+Default login is defined by `ADMIN_EMAIL` / `ADMIN_PASSWORD` in your `.env`.
 
 ⚠️ **Change the admin password immediately!**
 

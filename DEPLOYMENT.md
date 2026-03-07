@@ -430,7 +430,7 @@ curl https://your-backend-url.com/api/employees
 # Test login
 curl -X POST https://your-backend-url.com/api/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"mananbedi.tech@gmail.com","password":"admin123"}'
+  -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}'
 ```
 
 ### 2. Change Admin Password

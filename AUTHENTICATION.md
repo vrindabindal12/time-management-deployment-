@@ -27,8 +27,10 @@ The Time Tracking System now includes secure authentication and role-based acces
 ## User Roles
 
 ### Admin Role
-**Email:** mananbedi.tech@gmail.com  
-**Default Password:** admin123 (change immediately!)
+Admin credentials are configured via environment variables:
+
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
 
 **Permissions:**
 - ✅ View all employees
@@ -153,15 +155,15 @@ GET  /api/report               - Full report
 ```
 Navigate to: http://localhost:3000
 Login with:
-  Email: mananbedi.tech@gmail.com
-  Password: admin123
+  Email: <ADMIN_EMAIL>
+  Password: <ADMIN_PASSWORD>
 ```
 
 2. **Change Admin Password**
 ```
 Go to: Settings
 Enter:
-  Current Password: admin123
+  Current Password: <your current admin password>
   New Password: [secure password]
   Confirm: [secure password]
 Click: Change Password
@@ -213,7 +215,7 @@ Dashboard → Punch Out
 ### For Admins
 
 1. **Change Default Password Immediately**
-   - Never use the default admin123 password in production
+   - Never use a weak/default admin password in production
 
 2. **Strong Passwords**
    - Use at least 12 characters

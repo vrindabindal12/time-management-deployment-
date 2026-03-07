@@ -73,7 +73,9 @@ export default function Login() {
           <div className="mt-8 space-y-3">
             <div className="glass-subtle rounded-2xl border border-white/70 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Admin Demo</p>
-              <p className="mt-2 text-sm font-semibold text-slate-800">mananbedi.tech@gmail.com / admin123</p>
+              <p className="mt-2 text-sm font-semibold text-slate-800">
+                Use your admin credentials (set via <span className="font-mono">ADMIN_EMAIL</span> / <span className="font-mono">ADMIN_PASSWORD</span>).
+              </p>
             </div>
             <p className="px-1 text-xs text-slate-500">Change the admin password after first login.</p>
           </div>

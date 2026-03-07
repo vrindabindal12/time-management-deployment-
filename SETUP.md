@@ -51,9 +51,9 @@ Open your browser and go to:
 1. **Admin Login**
    - Open http://localhost:3000
    - You'll be redirected to login page
-   - Login with default admin credentials:
-     - Email: `mananbedi.tech@gmail.com`
-     - Password: `admin123`
+   - Login with admin credentials from your backend `.env`:
+     - `ADMIN_EMAIL`
+     - `ADMIN_PASSWORD`
    - You'll be redirected to the admin dashboard
 
 2. **⚠️ IMPORTANT: Change Admin Password**

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test project code functionality"""
+import os
 import requests
 from datetime import date
 import random
@@ -17,9 +18,14 @@ print("="*70)
 
 # Admin login
 print("\n[Setup] Admin login...")
+admin_email = os.environ.get("ADMIN_EMAIL")
+admin_password = os.environ.get("ADMIN_PASSWORD")
+if not admin_email or not admin_password:
+    raise SystemExit("Set ADMIN_EMAIL and ADMIN_PASSWORD in your environment before running this script.")
+
 admin_login = requests.post(f"{BASE_URL}/login", json={
-    "email": "mananbedi.tech@gmail.com",
-    "password": "admin123"
+    "email": admin_email,
+    "password": admin_password
 }).json()
 admin_token = admin_login["token"]
 print("  PASS: Admin logged in")

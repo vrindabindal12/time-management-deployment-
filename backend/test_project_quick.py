@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import requests
 from datetime import date
 
@@ -9,9 +10,14 @@ print("QUICK TEST - Project Code Auto Population")
 print("="*60)
 
 # Login as admin
+admin_email = os.environ.get("ADMIN_EMAIL")
+admin_password = os.environ.get("ADMIN_PASSWORD")
+if not admin_email or not admin_password:
+    raise SystemExit("Set ADMIN_EMAIL and ADMIN_PASSWORD in your environment before running this script.")
+
 token_resp = requests.post(f"{BASE_URL}/login", json={
-    "email": "mananbedi.tech@gmail.com",
-    "password": "admin123"
+    "email": admin_email,
+    "password": admin_password
 }).json()
 admin_token = token_resp["token"]
 print("✓ Admin logged in")

@@ -1,4 +1,5 @@
 import os
+import secrets
 import unittest
 from datetime import date
 import csv
@@ -7,7 +8,7 @@ from openpyxl import load_workbook
 
 os.environ['DATABASE_URL'] = 'sqlite:///test_timetracking.db'
 os.environ['ADMIN_EMAIL'] = 'admin@test.local'
-os.environ['ADMIN_PASSWORD'] = 'admin123'
+os.environ.setdefault('ADMIN_PASSWORD', secrets.token_urlsafe(16))
 
 import app as backend_app
 
