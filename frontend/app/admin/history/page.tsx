@@ -16,7 +16,12 @@ export default function AdminHistory() {
   const [endDate, setEndDate] = useState('');
   const [projectFilter, setProjectFilter] = useState('ALL');
   const [projectOptions, setProjectOptions] = useState<string[]>([]);
-  
+
+  // Pagination (10 per page by default; user can change)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [recordsPerPage, setRecordsPerPage] = useState(10);
+  const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
   // Edit modal state
   const [editingEntry, setEditingEntry] = useState<any>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -47,10 +52,14 @@ export default function AdminHistory() {
     loadWorkHistory(selectedEmployee);
   }, [selectedEmployee, employees]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [workData, recordsPerPage]);
+
   const loadEmployees = async () => {
     try {
       const data = await employeeApi.getEmployees();
-      setEmployees(data);
+      setEmployees(data.filter((e) => !e.is_admin));
       setSelectedEmployee('ALL');
     } catch (err) {
       setError('Failed to load employees');
@@ -231,6 +240,15 @@ export default function AdminHistory() {
     link.remove();
     window.URL.revokeObjectURL(url);
   };
+
+  // Pagination slice (computed from workData so JSX stays simple)
+  const entries = workData?.work_entries ?? [];
+  const totalRecords = entries.length;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / recordsPerPage));
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const paginatedEntries = entries.slice(startIndex, startIndex + recordsPerPage);
+  const startItem = totalRecords === 0 ? 0 : startIndex + 1;
+  const endItem = totalRecords === 0 ? 0 : Math.min(startIndex + recordsPerPage, totalRecords);
 
   const handleDownloadCsv = async () => {
     setDownloading('csv');
@@ -433,14 +451,14 @@ export default function AdminHistory() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {workData.work_entries.length === 0 ? (
+                  {totalRecords === 0 ? (
                     <tr>
                       <td colSpan={selectedEmployee === 'ALL' ? 7 : 6} className="px-6 py-4 text-center text-gray-500">
                         No work entries found
                       </td>
                     </tr>
                   ) : (
-                    workData.work_entries.map((entry: any) => (
+                    paginatedEntries.map((entry: any) => (
                       <tr key={entry.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {formatDate(entry.work_date)}
@@ -490,6 +508,53 @@ export default function AdminHistory() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination: rows per page + range + prev/next (at bottom) */}
+            {totalRecords > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-4">
+                  <label htmlFor="rows-per-page" className="text-sm text-gray-600">
+                    Rows per page
+                  </label>
+                  <select
+                    id="rows-per-page"
+                    value={recordsPerPage}
+                    onChange={(e) => setRecordsPerPage(Number(e.target.value))}
+                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-sm text-gray-600">
+                    Showing {startItem}–{endItem} of {totalRecords}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
 
