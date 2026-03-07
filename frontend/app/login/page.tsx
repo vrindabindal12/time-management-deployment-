@@ -70,7 +70,7 @@ export default function Login() {
           <p className="mt-4 max-w-md text-slate-600">
             Sign in to continue managing teams, projects, invoices, and daily work with one elegant workspace.
           </p>
-          <div className="mt-8 space-y-3">
+          {/* <div className="mt-8 space-y-3">
             <div className="glass-subtle rounded-2xl border border-white/70 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Admin Demo</p>
               <p className="mt-2 text-sm font-semibold text-slate-800">
@@ -78,7 +78,7 @@ export default function Login() {
               </p>
             </div>
             <p className="px-1 text-xs text-slate-500">Change the admin password after first login.</p>
-          </div>
+          </div> */}
         </section>
 
         <div className="glass-panel rounded-3xl border border-white/70 p-7 shadow-xl sm:p-9">
