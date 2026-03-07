@@ -7,6 +7,7 @@ from openpyxl import load_workbook
 
 os.environ['DATABASE_URL'] = 'sqlite:///test_timetracking.db'
 os.environ['ADMIN_EMAIL'] = 'admin@test.local'
+os.environ['ADMIN_PASSWORD'] = 'admin123'
 
 import app as backend_app
 
@@ -25,12 +26,12 @@ class AddWorkValidationTests(unittest.TestCase):
                 email=backend_app.ADMIN_EMAIL,
                 is_admin=True
             )
-            admin.set_password('admin123')
+            admin.set_password(backend_app.ADMIN_PASSWORD)
             backend_app.db.session.add(admin)
             backend_app.db.session.commit()
 
         self.auth_headers = self._register_and_login()
-        self.admin_headers = self._login(backend_app.ADMIN_EMAIL, 'admin123')
+        self.admin_headers = self._login(backend_app.ADMIN_EMAIL, backend_app.ADMIN_PASSWORD)
 
     def _login(self, email, password):
         login_response = self.client.post(

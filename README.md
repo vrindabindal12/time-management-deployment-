@@ -17,7 +17,8 @@ A complete employee time tracking system with **authentication and role-based ac
 
 ## Security & Access Control
 
-### Admin (mananbedi.tech@gmail.com)
+### Admin
+(First admin is created from `ADMIN_EMAIL` in your backend env; see [SECRETS.md](SECRETS.md).)
 - View all employees' punch records
 - Generate comprehensive reports
 - Add new employees
@@ -70,6 +71,16 @@ time-tracking-system/
 ```
 
 ## Installation & Setup
+
+### Secrets and environment variables
+
+**Do not commit real secrets to GitHub.** All secrets and config go in env files that are gitignored.
+
+1. Copy `.env.example` to create your local env file(s):
+   - **Backend:** `backend/.env` (or use root `.env` and run backend from repo root)
+   - **Frontend:** `frontend/.env.local` with at least `NEXT_PUBLIC_API_URL`
+2. Fill in real values only in those env files. Keep `.env.example` as a template with placeholders.
+3. See [SECRETS.md](SECRETS.md) for the full list and rules.
 
 ### Backend Setup
 
@@ -126,9 +137,7 @@ The frontend will start on `http://localhost:3000`
 
 1. **Admin Login**
    - Navigate to http://localhost:3000
-   - Login with admin credentials:
-     - Email: `mananbedi.tech@gmail.com`
-     - Password: `admin123`
+   - Login with admin credentials (from `ADMIN_EMAIL` and `ADMIN_PASSWORD` in your backend `.env`)
    - **Important**: Change the admin password immediately in Settings
 
 2. **Add Employees** (Admin only)
@@ -170,13 +179,9 @@ The frontend will start on `http://localhost:3000`
    - Click "Full Report" to see all employees' statistics
    - View total hours, days worked, and averages
 
-## Default Credentials
+## Admin Credentials
 
-**Admin Account:**
-- Email: `mananbedi.tech@gmail.com`
-- Password: `admin123`
-
-**⚠️ IMPORTANT**: Change the admin password after first login!
+Admin email and password are set via `ADMIN_EMAIL` and `ADMIN_PASSWORD` in your backend `.env` (see [SECRETS.md](SECRETS.md)). Change the admin password after first login.
 
 ## API Endpoints
 

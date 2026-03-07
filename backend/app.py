@@ -18,10 +18,11 @@ app = Flask(__name__)
 from dotenv import load_dotenv
 load_dotenv()
 
-# Configuration
+# Configuration – all secrets from env; no defaults that contain real secrets
 basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'mananbedi.tech@gmail.com')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '')
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', '')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
 
 # Database configuration
 DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///' + os.path.join(basedir, 'timetracking.db'))
@@ -661,15 +662,17 @@ with app.app_context():
     # Create admin user if not exists
     admin = Employee.query.filter_by(email=ADMIN_EMAIL).first()
     if not admin:
+        if not ADMIN_EMAIL or not ADMIN_PASSWORD:
+            raise ValueError("ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env to create the initial admin user")
         admin = Employee(
             name='Admin',
             email=ADMIN_EMAIL,
             is_admin=True
         )
-        admin.set_password('admin123')  # Default password, change after first login
+        admin.set_password(ADMIN_PASSWORD)
         db.session.add(admin)
         db.session.commit()
-        print(f"Admin user created: {ADMIN_EMAIL} / password: admin123")
+        print(f"Admin user created: {ADMIN_EMAIL}")
 
 # Authentication decorator
 def token_required(f):

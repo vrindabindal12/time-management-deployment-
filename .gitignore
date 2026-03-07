@@ -119,15 +119,19 @@ pnpm-lock.yaml
 .netlify/
 .railway/
 
-# Secrets & Keys
+# Secrets & Keys – never commit these; use .env.example as template
 *.pem
 *.key
 *.cert
 .env
 .env.local
+.env.*.local
 .env.production
 .env.development
+.env.docker
 secrets.json
+*.secrets
+.env.secret
 
 # Backup files
 *.backup
