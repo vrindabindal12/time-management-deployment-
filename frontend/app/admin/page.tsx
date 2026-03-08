@@ -163,6 +163,9 @@ export default function AdminDashboard() {
   const [payablesReport, setPayablesReport] = useState<EmployeePayablesReport | null>(null);
   const [payablesLoading, setPayablesLoading] = useState(false);
   const [payablesProjectFilter, setPayablesProjectFilter] = useState('ALL');
+  const [payablesStatusFilter, setPayablesStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
+  const [selectedPaidIds, setSelectedPaidIds] = useState<number[]>([]);
+  const [savingPayables, setSavingPayables] = useState(false);
 
   // Project states
   const [projects, setProjects] = useState<Project[]>([]);
@@ -812,11 +815,43 @@ export default function AdminDashboard() {
       );
       setPayablesReport(data);
       setPayablesProjectFilter('ALL');
+      setPayablesStatusFilter('ALL');
+      setSelectedPaidIds(data.rows.filter(r => r.is_paid).map(r => r.work_id));
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load payables report');
       clearError();
     } finally {
       setPayablesLoading(false);
+    }
+  };
+
+  const savePayablesStatus = async () => {
+    if (!payablesReport) return;
+    setSavingPayables(true);
+    setError(null);
+    try {
+      const allIds = payablesReport.rows.map(r => r.work_id);
+      const pendingIds = allIds.filter(id => !selectedPaidIds.includes(id));
+
+      if (selectedPaidIds.length > 0) {
+        await employeeApi.markPayablesPaid(selectedPaidIds, true);
+      }
+      if (pendingIds.length > 0) {
+        await employeeApi.markPayablesPaid(pendingIds, false);
+      }
+
+      const data = await employeeApi.getEmployeePayablesReport(
+        payableStartDate,
+        payableEndDate,
+        payableEmployeeId || undefined
+      );
+      setPayablesReport(data);
+      setSelectedPaidIds(data.rows.filter(r => r.is_paid).map(r => r.work_id));
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to save payment status');
+      clearError();
+    } finally {
+      setSavingPayables(false);
     }
   };
 
@@ -890,12 +925,19 @@ export default function AdminDashboard() {
   // Reset payables pagination when filters or report change
   useEffect(() => {
     setPayablesPage(1);
-  }, [payablesReport, payablesProjectFilter, payablesRowsPerPage]);
+  }, [payablesReport, payablesProjectFilter, payablesStatusFilter, payablesRowsPerPage]);
   const payablesProjectOptions = payablesReport
     ? Array.from(new Set(payablesReport.rows.map((row) => row.project_code || '-'))).sort()
     : [];
   const filteredPayablesRows = payablesReport
-    ? payablesReport.rows.filter((row) => payablesProjectFilter === 'ALL' || (row.project_code || '-') === payablesProjectFilter)
+    ? payablesReport.rows.filter((row) => {
+      const matchesProject = payablesProjectFilter === 'ALL' || (row.project_code || '-') === payablesProjectFilter;
+      const isPaid = selectedPaidIds.includes(row.work_id);
+      const matchesStatus = payablesStatusFilter === 'ALL' ||
+        (payablesStatusFilter === 'PAID' && isPaid) ||
+        (payablesStatusFilter === 'PENDING' && !isPaid);
+      return matchesProject && matchesStatus;
+    })
     : [];
   const payablesTotalPages = Math.max(1, Math.ceil(filteredPayablesRows.length / payablesRowsPerPage));
   const paginatedPayablesRows = filteredPayablesRows.slice((payablesPage - 1) * payablesRowsPerPage, payablesPage * payablesRowsPerPage);
@@ -978,7 +1020,9 @@ export default function AdminDashboard() {
       'Task Performed',
     ]];
 
-    filteredPayablesRows.forEach((row) => {
+    const activeRows = filteredPayablesRows.filter(row => !selectedPaidIds.includes(row.work_id));
+
+    activeRows.forEach((row) => {
       rows.push([
         row.project_code || '',
         row.employee_name,
@@ -993,9 +1037,12 @@ export default function AdminDashboard() {
       ]);
     });
 
+    const activeTotalHours = activeRows.reduce((sum, row) => sum + row.hours, 0);
+    const activeTotalPayable = activeRows.reduce((sum, row) => sum + row.net_payable, 0);
+
     rows.push([]);
-    rows.push(['Total Hours', payablesReport.total_hours.toFixed(2)]);
-    rows.push(['Total Payable', payablesReport.total_net_payable.toFixed(2)]);
+    rows.push(['Total Hours', activeTotalHours.toFixed(2)]);
+    rows.push(['Total Payable', activeTotalPayable.toFixed(2)]);
 
     downloadCsvFile(
       `employee_payables_${payablesReport.start_date}_to_${payablesReport.end_date}.csv`,
@@ -1053,41 +1100,37 @@ export default function AdminDashboard() {
           <div className="flex">
             <button
               onClick={() => setActiveTab('onboarding')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'onboarding'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'onboarding'
+                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+                }`}
             >
               Employee Management
             </button>
             <button
               onClick={() => setActiveTab('clients')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'clients'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'clients'
+                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+                }`}
             >
               Clients & Projects
             </button>
             <button
               onClick={() => setActiveTab('invoicing')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'invoicing'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'invoicing'
+                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+                }`}
             >
               Invoicing
             </button>
             <button
               onClick={() => setActiveTab('payables')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'payables'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'payables'
+                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+                }`}
             >
               Payables
             </button>
@@ -1162,11 +1205,10 @@ export default function AdminDashboard() {
                   <div
                     key={employee.id}
                     onClick={() => setSelectedEmployee(employee.id)}
-                    className={`text-left p-4 rounded-lg border-2 transition cursor-pointer ${
-                      selectedEmployee === employee.id
-                        ? 'border-blue-500 bg-blue-50/70'
-                        : 'border-white/60 bg-white/45 hover:border-blue-300'
-                    }`}
+                    className={`text-left p-4 rounded-lg border-2 transition cursor-pointer ${selectedEmployee === employee.id
+                      ? 'border-blue-500 bg-blue-50/70'
+                      : 'border-white/60 bg-white/45 hover:border-blue-300'
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1200,14 +1242,12 @@ export default function AdminDashboard() {
                   {employeeStatus.employee.name}'s Status
                 </h2>
                 <div className="mb-4">
-                  <div className={`inline-flex items-center px-4 py-2 rounded-full ${
-                    employeeStatus.today_hours > 0
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    <div className={`w-3 h-3 rounded-full mr-2 ${
-                      employeeStatus.today_hours > 0 ? 'bg-green-500' : 'bg-gray-400'
-                    }`}></div>
+                  <div className={`inline-flex items-center px-4 py-2 rounded-full ${employeeStatus.today_hours > 0
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-100 text-gray-800'
+                    }`}>
+                    <div className={`w-3 h-3 rounded-full mr-2 ${employeeStatus.today_hours > 0 ? 'bg-green-500' : 'bg-gray-400'
+                      }`}></div>
                     Today's Hours: {employeeStatus.today_hours.toFixed(2)}h
                   </div>
                 </div>
@@ -1371,11 +1411,9 @@ export default function AdminDashboard() {
                     }
                   }}
                   onDrop={handleEmployeeCardDrop}
-                  className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${
-                    draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
-                  } ${
-                    dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
-                  }`}
+                  className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
+                    } ${dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
+                    }`}
                 >
                   <div
                     draggable
@@ -1618,11 +1656,10 @@ export default function AdminDashboard() {
                   <div
                     key={client.id}
                     onClick={() => setSelectedClient(client.id)}
-                    className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
-                      selectedClient === client.id
-                        ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/80 shadow-lg'
-                        : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
-                    }`}
+                    className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${selectedClient === client.id
+                      ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/80 shadow-lg'
+                      : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
+                      }`}
                   >
                     <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-cyan-300/20 blur-2xl" />
                     <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-blue-300/20 blur-2xl" />
@@ -1772,11 +1809,10 @@ export default function AdminDashboard() {
                       <div
                         key={project.id}
                         onClick={() => setSelectedProject(project.id)}
-                        className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
-                          selectedProject === project.id
-                            ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/75 shadow-lg'
-                            : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
-                        }`}
+                        className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${selectedProject === project.id
+                          ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/75 shadow-lg'
+                          : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
+                          }`}
                       >
                         <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-cyan-300/20 blur-2xl" />
                         <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-blue-300/20 blur-2xl" />
@@ -2264,7 +2300,7 @@ export default function AdminDashboard() {
             {payablesReport && (
               <div className="glass-panel rounded-3xl p-6">
                 <div className="mb-4 rounded-2xl border border-white/70 bg-white/60 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] items-center gap-3">
                     <div>
                       <p className="text-sm text-slate-600">
                         Period: {payablesReport.start_date} to {payablesReport.end_date}
@@ -2274,9 +2310,23 @@ export default function AdminDashboard() {
                       <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Currency</p>
                       <p className="text-lg font-black text-slate-900">INR</p>
                     </div>
+                    <div className="rounded-xl border border-green-200/80 bg-gradient-to-br from-green-50/80 to-emerald-50/80 px-4 py-2 text-right">
+                      <p className="text-xs uppercase tracking-[0.16em] text-green-700 font-bold">Total Paid</p>
+                      <p className="text-2xl font-black text-slate-900">
+                        {payablesReport.rows
+                          .filter(row => selectedPaidIds.includes(row.work_id))
+                          .reduce((sum, row) => sum + row.net_payable, 0)
+                          .toFixed(0)}
+                      </p>
+                    </div>
                     <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-lime-50/80 px-4 py-2 text-right">
-                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Total Payable</p>
-                      <p className="text-2xl font-black text-slate-900">{payablesReport.total_net_payable.toFixed(2)}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Total Pending</p>
+                      <p className="text-2xl font-black text-slate-900">
+                        {payablesReport.rows
+                          .filter(row => !selectedPaidIds.includes(row.work_id))
+                          .reduce((sum, row) => sum + row.net_payable, 0)
+                          .toFixed(0)}
+                      </p>
                     </div>
                   </div>
                   <button
@@ -2292,20 +2342,43 @@ export default function AdminDashboard() {
                     </svg>
                     <span className="text-sm font-semibold">Download CSV</span>
                   </button>
-                  <div className="mt-3 max-w-xs">
-                    <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Project Filter</label>
-                    <select
-                      value={payablesProjectFilter}
-                      onChange={(e) => setPayablesProjectFilter(e.target.value)}
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
-                    >
-                      <option value="ALL">All</option>
-                      {payablesProjectOptions.map((projectCode) => (
-                        <option key={projectCode} value={projectCode}>
-                          {projectCode}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="mt-3 flex flex-wrap gap-3 max-w-2xl items-end">
+                    <div className="flex-1 min-w-[150px]">
+                      <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Project Filter</label>
+                      <select
+                        value={payablesProjectFilter}
+                        onChange={(e) => setPayablesProjectFilter(e.target.value)}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
+                      >
+                        <option value="ALL">All Projects</option>
+                        {payablesProjectOptions.map((projectCode) => (
+                          <option key={projectCode} value={projectCode}>
+                            {projectCode}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1 min-w-[150px]">
+                      <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Status Filter</label>
+                      <select
+                        value={payablesStatusFilter}
+                        onChange={(e) => setPayablesStatusFilter(e.target.value as 'ALL' | 'PAID' | 'PENDING')}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
+                      >
+                        <option value="ALL">All Statuses</option>
+                        <option value="PENDING">Pending Only</option>
+                        <option value="PAID">Paid Only</option>
+                      </select>
+                    </div>
+                    <div>
+                      <button
+                        onClick={savePayablesStatus}
+                        disabled={savingPayables}
+                        className="glass-primary-btn hover:brightness-95 text-white px-5 py-2 rounded-xl transition disabled:opacity-50 h-[38px] flex items-center shadow-md font-semibold"
+                      >
+                        {savingPayables ? 'Saving...' : 'Save Paid Status'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -2313,6 +2386,7 @@ export default function AdminDashboard() {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-100/90">
                       <tr>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em] w-12"></th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Code</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Name</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Level</th>
@@ -2327,13 +2401,28 @@ export default function AdminDashboard() {
                     <tbody className="divide-y divide-slate-100">
                       {paginatedPayablesRows.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
+                          <td className="px-4 py-6 text-center text-slate-500" colSpan={10}>
                             No payable entries found for the selected filters
                           </td>
                         </tr>
                       ) : (
                         paginatedPayablesRows.map((row) => (
-                          <tr key={row.work_id} className="hover:bg-slate-50/70">
+                          <tr key={row.work_id} className={`hover:bg-slate-50/70 transition-colors ${selectedPaidIds.includes(row.work_id) ? 'opacity-50 bg-emerald-50/40' : ''}`}>
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedPaidIds.includes(row.work_id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedPaidIds(prev => [...prev, row.work_id]);
+                                  } else {
+                                    setSelectedPaidIds(prev => prev.filter(id => id !== row.work_id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer border-slate-300"
+                                title={selectedPaidIds.includes(row.work_id) ? "Mark as Pending" : "Mark as Paid"}
+                              />
+                            </td>
                             <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code || '-'}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>

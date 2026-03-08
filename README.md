@@ -372,7 +372,7 @@ Admin
 - Client filter employee history - done
 - Clients section gross rates (PROJECT LEVEL SHOULD AUTO POPULATE)
 - Rates locking in until promotion
-- payable mein tick (client invoicing also)
+- payable mein tick 
 - non billable work handling
 
 Employee

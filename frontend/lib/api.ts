@@ -158,6 +158,7 @@ export interface EmployeePayableRow {
   hours: number;
   net_payable: number;
   task_performed: string;
+  is_paid?: boolean;
 }
 
 export interface EmployeePayableTotal {
@@ -231,9 +232,9 @@ export const authApi = {
   },
 
   changePassword: async (oldPassword: string, newPassword: string): Promise<{ message: string }> => {
-    const response = await api.post('/change-password', { 
-      old_password: oldPassword, 
-      new_password: newPassword 
+    const response = await api.post('/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword
     });
     return response.data;
   },
@@ -414,6 +415,14 @@ export const employeeApi = {
     if (employeeId) params.employee_id = employeeId;
 
     const response = await api.get('/payables/employees', { params });
+    return response.data;
+  },
+
+  markPayablesPaid: async (workIds: number[], isPaid: boolean): Promise<any> => {
+    const response = await api.put('/payables/mark-paid', {
+      work_ids: workIds,
+      is_paid: isPaid
+    });
     return response.data;
   },
 

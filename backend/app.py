@@ -130,6 +130,7 @@ class Punch(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by_admin = db.Column(db.Boolean, default=False)
+    is_paid = db.Column(db.Boolean, default=False)  # New field for payables tracking
     project = db.relationship('Project', backref='punches', lazy=True)
 
     def to_dict(self):
@@ -148,7 +149,8 @@ class Punch(db.Model):
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'updated_by_admin': self.updated_by_admin
+            'updated_by_admin': self.updated_by_admin,
+            'is_paid': self.is_paid
         }
 
 class Client(db.Model):
@@ -1457,6 +1459,30 @@ def get_client_invoice_report(current_user):
         'total_net_billable': round(total_net_billable, 2)
     })
 
+@app.route('/api/payables/mark-paid', methods=['PUT'])
+@token_required
+@admin_required
+def mark_payables_paid(current_user):
+    data = request.json
+    if not data or 'work_ids' not in data or 'is_paid' not in data:
+        return jsonify({'error': 'work_ids and is_paid are required'}), 400
+    
+    work_ids = data['work_ids']
+    is_paid = bool(data['is_paid'])
+
+    if not isinstance(work_ids, list):
+        return jsonify({'error': 'work_ids must be a list'}), 400
+
+    if not work_ids:
+        return jsonify({'message': 'No changes made'}), 200
+
+    punches = Punch.query.filter(Punch.id.in_(work_ids)).all()
+    for punch in punches:
+        punch.is_paid = is_paid
+
+    db.session.commit()
+    return jsonify({'message': f'Successfully updated payment status for {len(punches)} entries.'}), 200
+
 
 @app.route('/api/payables/employees', methods=['GET'])
 @token_required
@@ -1554,7 +1580,8 @@ def get_employee_payables_report(current_user):
             'rate': rate,
             'hours': hours,
             'net_payable': net_payable,
-            'task_performed': punch.description or ''
+            'task_performed': punch.description or '',
+            'is_paid': punch.is_paid
         })
 
     employee_totals = list(employee_totals_map.values())
