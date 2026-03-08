@@ -369,7 +369,7 @@ For issues or questions, please open an issue in the repository.
 
 
 Admin 
-- Client filter employee history
+- Client filter employee history - done
 - Clients section gross rates (PROJECT LEVEL SHOULD AUTO POPULATE)
 - Rates locking in until promotion
 - payable mein tick (client invoicing also)

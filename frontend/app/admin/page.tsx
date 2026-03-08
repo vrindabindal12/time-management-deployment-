@@ -868,15 +868,37 @@ export default function AdminDashboard() {
   const invoiceProjectOptions = invoiceReport
     ? Array.from(new Set(invoiceReport.rows.map((row) => row.project_code))).sort()
     : [];
+
+  // Pagination state for invoicing
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [invoiceRowsPerPage, setInvoiceRowsPerPage] = useState(20);
+
+  // Reset invoice pagination when filters or report change
+  useEffect(() => {
+    setInvoicePage(1);
+  }, [invoiceReport, invoiceProjectFilter, invoiceRowsPerPage]);
   const filteredInvoiceRows = invoiceReport
     ? invoiceReport.rows.filter((row) => invoiceProjectFilter === 'ALL' || row.project_code === invoiceProjectFilter)
     : [];
+  const invoiceTotalPages = Math.max(1, Math.ceil(filteredInvoiceRows.length / invoiceRowsPerPage));
+  const paginatedInvoiceRows = filteredInvoiceRows.slice((invoicePage - 1) * invoiceRowsPerPage, invoicePage * invoiceRowsPerPage);
+
+  // Pagination state for payables
+  const [payablesPage, setPayablesPage] = useState(1);
+  const [payablesRowsPerPage, setPayablesRowsPerPage] = useState(20);
+
+  // Reset payables pagination when filters or report change
+  useEffect(() => {
+    setPayablesPage(1);
+  }, [payablesReport, payablesProjectFilter, payablesRowsPerPage]);
   const payablesProjectOptions = payablesReport
     ? Array.from(new Set(payablesReport.rows.map((row) => row.project_code || '-'))).sort()
     : [];
   const filteredPayablesRows = payablesReport
     ? payablesReport.rows.filter((row) => payablesProjectFilter === 'ALL' || (row.project_code || '-') === payablesProjectFilter)
     : [];
+  const payablesTotalPages = Math.max(1, Math.ceil(filteredPayablesRows.length / payablesRowsPerPage));
+  const paginatedPayablesRows = filteredPayablesRows.slice((payablesPage - 1) * payablesRowsPerPage, payablesPage * payablesRowsPerPage);
 
   const downloadCsvFile = (filename: string, rows: string[][]) => {
     const escapeCell = (value: string | number | null | undefined) => {
@@ -2110,14 +2132,14 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredInvoiceRows.length === 0 ? (
+                      {paginatedInvoiceRows.length === 0 ? (
                         <tr>
                           <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
                             No invoice entries found for the selected filters
                           </td>
                         </tr>
                       ) : (
-                        filteredInvoiceRows.map((row) => (
+                        paginatedInvoiceRows.map((row) => (
                           <tr key={row.work_id} className="hover:bg-slate-50/70">
                             <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
@@ -2143,6 +2165,55 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+                {/* Pagination Controls for Invoicing */}
+                {invoiceTotalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div>
+                      <span className="text-xs text-slate-600">
+                        Page {invoicePage} of {invoiceTotalPages}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        className="px-3 py-1 rounded border bg-white/80 text-slate-700 disabled:opacity-50"
+                        onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
+                        disabled={invoicePage === 1}
+                      >
+                        Previous
+                      </button>
+                      {Array.from({ length: invoiceTotalPages }, (_, i) => i + 1).map((pageNum) => (
+                        <button
+                          key={pageNum}
+                          className={`px-3 py-1 rounded border ${invoicePage === pageNum ? 'bg-blue-100 border-blue-400 font-bold' : 'bg-white/80 text-slate-700'}`}
+                          onClick={() => setInvoicePage(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+                      <button
+                        className="px-3 py-1 rounded border bg-white/80 text-slate-700 disabled:opacity-50"
+                        onClick={() => setInvoicePage((p) => Math.min(invoiceTotalPages, p + 1))}
+                        disabled={invoicePage === invoiceTotalPages}
+                      >
+                        Next
+                      </button>
+                    </div>
+                    <div>
+                      <select
+                        className="border rounded px-2 py-1 text-xs bg-white/80"
+                        value={invoiceRowsPerPage}
+                        onChange={(e) => {
+                          setInvoiceRowsPerPage(Number(e.target.value));
+                          setInvoicePage(1);
+                        }}
+                      >
+                        {[10, 20, 50, 100].map((n) => (
+                          <option key={n} value={n}>{n} / page</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
               </div>
             )}
@@ -2254,14 +2325,14 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredPayablesRows.length === 0 ? (
+                      {paginatedPayablesRows.length === 0 ? (
                         <tr>
                           <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
                             No payable entries found for the selected filters
                           </td>
                         </tr>
                       ) : (
-                        filteredPayablesRows.map((row) => (
+                        paginatedPayablesRows.map((row) => (
                           <tr key={row.work_id} className="hover:bg-slate-50/70">
                             <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code || '-'}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
@@ -2278,6 +2349,55 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+                {/* Pagination Controls for Payables */}
+                {payablesTotalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div>
+                      <span className="text-xs text-slate-600">
+                        Page {payablesPage} of {payablesTotalPages}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        className="px-3 py-1 rounded border bg-white/80 text-slate-700 disabled:opacity-50"
+                        onClick={() => setPayablesPage((p) => Math.max(1, p - 1))}
+                        disabled={payablesPage === 1}
+                      >
+                        Previous
+                      </button>
+                      {Array.from({ length: payablesTotalPages }, (_, i) => i + 1).map((pageNum) => (
+                        <button
+                          key={pageNum}
+                          className={`px-3 py-1 rounded border ${payablesPage === pageNum ? 'bg-emerald-100 border-emerald-400 font-bold' : 'bg-white/80 text-slate-700'}`}
+                          onClick={() => setPayablesPage(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+                      <button
+                        className="px-3 py-1 rounded border bg-white/80 text-slate-700 disabled:opacity-50"
+                        onClick={() => setPayablesPage((p) => Math.min(payablesTotalPages, p + 1))}
+                        disabled={payablesPage === payablesTotalPages}
+                      >
+                        Next
+                      </button>
+                    </div>
+                    <div>
+                      <select
+                        className="border rounded px-2 py-1 text-xs bg-white/80"
+                        value={payablesRowsPerPage}
+                        onChange={(e) => {
+                          setPayablesRowsPerPage(Number(e.target.value));
+                          setPayablesPage(1);
+                        }}
+                      >
+                        {[10, 20, 50, 100].map((n) => (
+                          <option key={n} value={n}>{n} / page</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
               </div>
             )}

@@ -29,7 +29,6 @@ export default function AdminHistory() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     project_name: '',
-    project_code: '',
     work_date: '',
     hours_worked: '',
     description: ''
@@ -165,7 +164,6 @@ export default function AdminHistory() {
     setEditingEntry(entry);
     setEditForm({
       project_name: entry.project_name,
-      project_code: entry.project_code || '',
       work_date: entry.work_date,
       hours_worked: entry.hours_worked.toString(),
       description: entry.description || ''
@@ -192,7 +190,6 @@ export default function AdminHistory() {
 
       await employeeApi.editWork(editingEntry.id, {
         project_name: editForm.project_name,
-        project_code: editForm.project_code || undefined,
         work_date: editForm.work_date,
         hours_worked: hours,
         description: editForm.description
@@ -343,9 +340,7 @@ export default function AdminHistory() {
                 const nextId = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value);
                 setSelectedEmployee(nextId);
                 setProjectFilter('ALL');
-                setClientFilter('ALL');
                 setProjectOptions([]);
-                setClientOptions([]);
               }}
               className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
@@ -409,9 +404,8 @@ export default function AdminHistory() {
                 setStartDate('');
                 setEndDate('');
                 setProjectFilter('ALL');
-                setClientFilter('ALL');
                 if (selectedEmployee) {
-                  loadWorkHistory(selectedEmployee, { startDate: '', endDate: '', projectName: '', clientName: '' });
+                  loadWorkHistory(selectedEmployee, { startDate: '', endDate: '', projectName: '' });
                 }
               }}
               className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition"
@@ -492,7 +486,7 @@ export default function AdminHistory() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {totalRecords === 0 ? (
                     <tr>
-                      <td colSpan={selectedEmployee === 'ALL' ? 9 : 8} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={selectedEmployee === 'ALL' ? 7 : 6} className="px-6 py-4 text-center text-gray-500">
                         No work entries found
                       </td>
                     </tr>
@@ -610,30 +604,16 @@ export default function AdminHistory() {
               <h3 className="text-xl font-bold text-gray-800 mb-4">Edit Work Entry</h3>
               
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Project Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.project_name}
-                      onChange={(e) => setEditForm({...editForm, project_name: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Project Code
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.project_code}
-                      onChange={(e) => setEditForm({...editForm, project_code: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Project Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.project_name}
+                    onChange={(e) => setEditForm({...editForm, project_name: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
