@@ -426,6 +426,11 @@ export const employeeApi = {
     return response.data;
   },
 
+  updateWorkPayableValues: async (workId: number, data: { payable_rate?: number; payable_designation?: string }): Promise<any> => {
+    const response = await api.put(`/work/${workId}/payable-values`, data);
+    return response.data;
+  },
+
   getProjectByCode: async (code: string): Promise<Project> => {
     const response = await api.get(`/projects/by-code/${code.trim().toUpperCase()}`);
     return response.data;

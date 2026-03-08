@@ -126,6 +126,8 @@ class Punch(db.Model):
     invoice_hours = db.Column(db.Float, nullable=True)
     invoice_gross_rate = db.Column(db.Float, nullable=True)
     invoice_discount = db.Column(db.Float, nullable=True)
+    payable_rate = db.Column(db.Float, nullable=True)  # New field for locked/overridden employee rate
+    payable_designation = db.Column(db.String(120), nullable=True)  # New field for locked/overridden designation
     description = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -146,6 +148,8 @@ class Punch(db.Model):
             'invoice_hours': self.invoice_hours,
             'invoice_gross_rate': self.invoice_gross_rate,
             'invoice_discount': self.invoice_discount,
+            'payable_rate': self.payable_rate,
+            'payable_designation': self.payable_designation,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
@@ -815,6 +819,29 @@ def verify_email(token):
     
     return jsonify({'message': 'Email verified successfully! You can now log in.'}), 200
 
+@app.route('/api/work/<int:work_id>/payable-values', methods=['PUT'])
+@token_required
+@admin_required
+def update_work_payable_values(current_user, work_id):
+    work_entry = Punch.query.get(work_id)
+    if not work_entry:
+        return jsonify({'error': 'Work entry not found'}), 404
+    
+    data = request.json or {}
+    if 'payable_rate' in data:
+        try:
+            work_entry.payable_rate = float(data['payable_rate'])
+        except ValueError:
+            return jsonify({'error': 'Invalid rate format'}), 400
+            
+    if 'payable_designation' in data:
+        work_entry.payable_designation = (data.get('payable_designation') or '').strip() or None
+
+    work_entry.updated_by_admin = True
+    work_entry.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'message': 'Payable values updated successfully', 'work': work_entry.to_dict()}), 200
+
 @app.route('/api/resend-verification', methods=['POST'])
 def resend_verification():
     data = request.json
@@ -1012,6 +1039,11 @@ def add_work(current_user):
         updated_by_admin=False
     )
     
+    # Auto-populate payable values based on date-aware compensation rules
+    resolved_rate, resolved_designation = get_employee_compensation_for_date(current_user, work_date)
+    work_entry.payable_rate = resolved_rate
+    work_entry.payable_designation = resolved_designation
+    
     db.session.add(work_entry)
     db.session.commit()
     
@@ -1076,7 +1108,15 @@ def edit_work(current_user, work_id):
     
     if 'work_date' in data:
         try:
-            work_entry.work_date = datetime.strptime(data['work_date'], '%Y-%m-%d').date()
+            new_date = datetime.strptime(data['work_date'], '%Y-%m-%d').date()
+            if new_date != work_entry.work_date:
+                work_entry.work_date = new_date
+                # Re-calculate default payable values for new date
+                employee = Employee.query.get(work_entry.employee_id)
+                if employee:
+                    res_rate, res_des = get_employee_compensation_for_date(employee, new_date)
+                    work_entry.payable_rate = res_rate
+                    work_entry.payable_designation = res_des
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
@@ -1546,8 +1586,16 @@ def get_employee_payables_report(current_user):
             continue
 
         hours = round(float(punch.hours_worked), 2)
-        resolved_rate, resolved_designation = get_employee_compensation_for_date(employee, punch.work_date)
-        rate = round(resolved_rate, 2)
+        
+        # Prefer stored payable rate if available
+        if punch.payable_rate is not None:
+            rate = punch.payable_rate
+            resolved_designation = punch.payable_designation or 'Unspecified'
+        else:
+            resolved_rate, resolved_designation = get_employee_compensation_for_date(employee, punch.work_date)
+            rate = resolved_rate
+            
+        rate = round(rate, 2)
         net_payable = round(hours * rate, 2)
 
         project = project_by_id.get(punch.project_id) if punch.project_id else None

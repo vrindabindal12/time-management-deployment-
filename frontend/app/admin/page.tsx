@@ -101,6 +101,36 @@ const getEmployeeAvatarGradient = (employee: Employee) => {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
 };
 
+const getEffectiveEmployeeCompensation = (employee: Employee, dateStr?: string) => {
+  const targetYMD = dateStr || new Date().toISOString().split('T')[0];
+
+  let effectiveRate = employee.current_hourly_rate ?? 0;
+  let effectiveDesignation = employee.designation || 'Unspecified';
+
+  const promotions: Array<{ date: string; rate: number | null; designation: string | null }> = [];
+  for (let i = 1; i <= 5; i++) {
+    const promoDate = (employee as any)[`promotion_${i}_date`];
+    const promoRate = (employee as any)[`promotion_${i}_rate`];
+    const promoDesignation = (employee as any)[`promotion_${i}_designation`];
+    if (promoDate) {
+      promotions.push({ date: promoDate, rate: promoRate, designation: promoDesignation });
+    }
+  }
+
+  promotions.sort((a, b) => a.date.localeCompare(b.date));
+
+  for (const promo of promotions) {
+    if (promo.date <= targetYMD) {
+      if (promo.rate !== null && promo.rate !== undefined) effectiveRate = promo.rate;
+      if (promo.designation) effectiveDesignation = promo.designation;
+    } else {
+      break;
+    }
+  }
+
+  return { rate: effectiveRate, designation: effectiveDesignation };
+};
+
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('onboarding');
@@ -166,6 +196,8 @@ export default function AdminDashboard() {
   const [payablesStatusFilter, setPayablesStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
   const [selectedPaidIds, setSelectedPaidIds] = useState<number[]>([]);
   const [savingPayables, setSavingPayables] = useState(false);
+  const [editingPayableId, setEditingPayableId] = useState<number | null>(null);
+  const [payableRateEdit, setPayableRateEdit] = useState<string>('');
 
   // Project states
   const [projects, setProjects] = useState<Project[]>([]);
@@ -855,6 +887,34 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSavePayableRate = async (workId: number) => {
+    try {
+      setSavingPayables(true);
+      setError(null);
+      const rateVal = parseFloat(payableRateEdit);
+      if (isNaN(rateVal) || rateVal < 0) {
+        throw new Error('Please enter a valid rate');
+      }
+      await employeeApi.updateWorkPayableValues(workId, {
+        payable_rate: rateVal
+      });
+      setEditingPayableId(null);
+      // Refresh only the portion needed OR the whole report
+      const data = await employeeApi.getEmployeePayablesReport(
+        payableStartDate,
+        payableEndDate,
+        payableEmployeeId || undefined
+      );
+      setPayablesReport(data);
+      setSelectedPaidIds(data.rows.filter(r => r.is_paid).map(r => r.work_id));
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Failed to update rate');
+      clearError();
+    } finally {
+      setSavingPayables(false);
+    }
+  };
+
   const moveEmployeeCard = (draggedEmployeeId: number, targetEmployeeId: number) => {
     if (draggedEmployeeId === targetEmployeeId) return;
     setEmployeeCardOrder((prev) => {
@@ -1395,166 +1455,169 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {orderedEmployeeCards.map((employee: Employee) => (
-                <div
-                  key={employee.id}
-                  style={{ perspective: '1000px' }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (dragOverEmployeeId !== employee.id) {
-                      setDragOverEmployeeId(employee.id);
-                    }
-                  }}
-                  onDragEnter={() => {
-                    if (draggingEmployeeId !== null && draggingEmployeeId !== employee.id) {
-                      moveEmployeeCard(draggingEmployeeId, employee.id);
-                    }
-                  }}
-                  onDrop={handleEmployeeCardDrop}
-                  className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
-                    } ${dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
-                    }`}
-                >
+              {orderedEmployeeCards.map((employee: Employee) => {
+                const effective = getEffectiveEmployeeCompensation(employee);
+                return (
                   <div
-                    draggable
-                    onDragStart={(e) => handleEmployeeCardDragStart(employee.id, e)}
-                    onDragEnd={handleEmployeeCardDragEnd}
-                    className="relative h-[29rem] w-full transition-transform duration-700"
-                    style={{
-                      transformStyle: 'preserve-3d',
-                      transform: flippedCards[employee.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                    key={employee.id}
+                    style={{ perspective: '1000px' }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragOverEmployeeId !== employee.id) {
+                        setDragOverEmployeeId(employee.id);
+                      }
                     }}
+                    onDragEnter={() => {
+                      if (draggingEmployeeId !== null && draggingEmployeeId !== employee.id) {
+                        moveEmployeeCard(draggingEmployeeId, employee.id);
+                      }
+                    }}
+                    onDrop={handleEmployeeCardDrop}
+                    className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
+                      } ${dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
+                      }`}
                   >
                     <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        if (!canFlipCard()) return;
-                        toggleCardFlip(employee.id);
+                      draggable
+                      onDragStart={(e) => handleEmployeeCardDragStart(employee.id, e)}
+                      onDragEnd={handleEmployeeCardDragEnd}
+                      className="relative h-[29rem] w-full transition-transform duration-700"
+                      style={{
+                        transformStyle: 'preserve-3d',
+                        transform: flippedCards[employee.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
+                    >
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
                           if (!canFlipCard()) return;
                           toggleCardFlip(employee.id);
-                        }
-                      }}
-                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl hover:shadow-2xl overflow-hidden border border-white/60 bg-gradient-to-br from-cyan-100/75 via-white/70 to-indigo-100/75 backdrop-blur-xl"
-                      style={{
-                        backfaceVisibility: 'hidden',
-                        pointerEvents: flippedCards[employee.id] ? 'none' : 'auto',
-                      }}
-                    >
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
-                        title="Drag from anywhere on card to reorder"
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            if (!canFlipCard()) return;
+                            toggleCardFlip(employee.id);
+                          }
+                        }}
+                        className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl hover:shadow-2xl overflow-hidden border border-white/60 bg-gradient-to-br from-cyan-100/75 via-white/70 to-indigo-100/75 backdrop-blur-xl"
+                        style={{
+                          backfaceVisibility: 'hidden',
+                          pointerEvents: flippedCards[employee.id] ? 'none' : 'auto',
+                        }}
                       >
-                        Drag
-                      </div>
-                      <div className="absolute -top-14 -right-10 w-36 h-36 bg-cyan-300/30 rounded-full blur-2xl" />
-                      <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
-                      <div className="mt-2 mb-5 flex items-center gap-4">
-                        <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-white/85 shadow-xl bg-white/70 shrink-0">
-                          {employee.profile_photo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={employee.profile_photo} alt={`${employee.name} profile`} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className={`w-full h-full bg-gradient-to-br ${getEmployeeAvatarGradient(employee)} flex items-center justify-center text-white font-black text-lg`}>
-                              {getEmployeeInitials(employee.name)}
-                            </div>
-                          )}
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
+                          title="Drag from anywhere on card to reorder"
+                        >
+                          Drag
                         </div>
-                        <div className="flex flex-col justify-center">
-                          <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-700 font-bold">Employee Profile</p>
-                          <p className="text-xs text-slate-500 mt-1">Tap card to flip details</p>
+                        <div className="absolute -top-14 -right-10 w-36 h-36 bg-cyan-300/30 rounded-full blur-2xl" />
+                        <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
+                        <div className="mt-2 mb-5 flex items-center gap-4">
+                          <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-white/85 shadow-xl bg-white/70 shrink-0">
+                            {employee.profile_photo ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={employee.profile_photo} alt={`${employee.name} profile`} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className={`w-full h-full bg-gradient-to-br ${getEmployeeAvatarGradient(employee)} flex items-center justify-center text-white font-black text-lg`}>
+                                {getEmployeeInitials(employee.name)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col justify-center">
+                            <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-700 font-bold">Employee Profile</p>
+                            <p className="text-xs text-slate-500 mt-1">Tap card to flip details</p>
+                          </div>
                         </div>
+                        <h3 className="text-2xl font-black text-slate-900 mt-2 leading-tight">{employee.name}</h3>
+                        <p className="text-slate-600 text-sm mt-1">{employee.email}</p>
+                        <div className="mt-5 rounded-2xl bg-white/72 border border-white/70 p-4">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-semibold">Emp ID</p>
+                          <p className="text-lg font-black text-slate-900 mt-1">{employee.employee_code || 'Not set'}</p>
+                          <p className="text-xs text-slate-500 mt-2">Designation</p>
+                          <p className="text-sm font-semibold text-slate-800">{effective.designation || 'Not set'}</p>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-4">Click to flip for key details</p>
                       </div>
-                      <h3 className="text-2xl font-black text-slate-900 mt-2 leading-tight">{employee.name}</h3>
-                      <p className="text-slate-600 text-sm mt-1">{employee.email}</p>
-                      <div className="mt-5 rounded-2xl bg-white/72 border border-white/70 p-4">
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-semibold">Emp ID</p>
-                        <p className="text-lg font-black text-slate-900 mt-1">{employee.employee_code || 'Not set'}</p>
-                        <p className="text-xs text-slate-500 mt-2">Designation</p>
-                        <p className="text-sm font-semibold text-slate-800">{employee.designation || 'Not set'}</p>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-4">Click to flip for key details</p>
-                    </div>
 
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        if (!canFlipCard()) return;
-                        setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
                           if (!canFlipCard()) return;
                           setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
-                        }
-                      }}
-                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl overflow-hidden border border-white/60 bg-gradient-to-br from-indigo-100/80 via-white/75 to-blue-100/75 backdrop-blur-xl"
-                      style={{
-                        backfaceVisibility: 'hidden',
-                        transform: 'rotateY(180deg)',
-                        pointerEvents: flippedCards[employee.id] ? 'auto' : 'none',
-                      }}
-                    >
-                      <div
-                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
-                        title="Drag from anywhere on card to reorder"
-                      >
-                        Drag
-                      </div>
-                      <div className="absolute -top-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
-                      <div className="absolute -bottom-14 -right-10 w-36 h-36 bg-blue-300/30 rounded-full blur-2xl" />
-                      <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-700 font-bold">Employee Details</p>
-                      <h4 className="text-xl font-black text-slate-900 mt-2">Core Information</h4>
-                      <div className="mt-4 grid grid-cols-1 gap-2.5 text-sm" onClick={(e) => e.stopPropagation()}>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Emp ID:</span> {employee.employee_code || '-'}</p>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Designation:</span> {employee.designation || '-'}</p>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
-                      </div>
-                      <div className="mt-5 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingEmployeeId(employee.id);
-                          }}
-                          className="glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm"
-                        >
-                          Edit Full Details
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeleteEmployeeModal(employee.id, employee.name);
-                          }}
-                          className="px-3 py-2 text-sm font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition"
-                        >
-                          Delete
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            if (!canFlipCard()) return;
                             setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
-                          }}
-                          className="px-3 py-2 rounded-lg bg-white/70 border border-white/70 text-slate-700 text-sm"
+                          }
+                        }}
+                        className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl overflow-hidden border border-white/60 bg-gradient-to-br from-indigo-100/80 via-white/75 to-blue-100/75 backdrop-blur-xl"
+                        style={{
+                          backfaceVisibility: 'hidden',
+                          transform: 'rotateY(180deg)',
+                          pointerEvents: flippedCards[employee.id] ? 'auto' : 'none',
+                        }}
+                      >
+                        <div
+                          className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
+                          title="Drag from anywhere on card to reorder"
                         >
-                          Flip Back
-                        </button>
+                          Drag
+                        </div>
+                        <div className="absolute -top-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
+                        <div className="absolute -bottom-14 -right-10 w-36 h-36 bg-blue-300/30 rounded-full blur-2xl" />
+                        <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-700 font-bold">Employee Details</p>
+                        <h4 className="text-xl font-black text-slate-900 mt-2">Core Information</h4>
+                        <div className="mt-4 grid grid-cols-1 gap-2.5 text-sm" onClick={(e) => e.stopPropagation()}>
+                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Emp ID:</span> {employee.employee_code || '-'}</p>
+                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Designation:</span> {effective.designation || '-'}</p>
+                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
+                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
+                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Current Rate:</span> {effective.rate ?? '-'}</p>
+                        </div>
+                        <div className="mt-5 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingEmployeeId(employee.id);
+                            }}
+                            className="glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm"
+                          >
+                            Edit Full Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDeleteEmployeeModal(employee.id, employee.name);
+                            }}
+                            className="px-3 py-2 text-sm font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
+                            }}
+                            className="px-3 py-2 rounded-lg bg-white/70 border border-white/70 text-slate-700 text-sm"
+                          >
+                            Flip Back
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -2428,7 +2491,44 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
                             <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
-                            <td className="px-4 py-3 text-slate-700">{row.rate.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">
+                              {editingPayableId === row.work_id ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={payableRateEdit}
+                                    onChange={(e) => setPayableRateEdit(e.target.value)}
+                                    className="w-20 border border-slate-300 rounded px-1 py-0.5 text-xs font-bold"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => handleSavePayableRate(row.work_id)}
+                                    className="text-emerald-600 hover:text-emerald-700 font-bold text-xs"
+                                    title="Save"
+                                  >
+                                    OK
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingPayableId(null)}
+                                    className="text-slate-400 hover:text-slate-600 font-bold text-xs"
+                                    title="Cancel"
+                                  >
+                                    ✖
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center group cursor-pointer" onClick={() => {
+                                  setEditingPayableId(row.work_id);
+                                  setPayableRateEdit(row.rate.toString());
+                                }}>
+                                  <span>{row.rate.toFixed(2)}</span>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-50 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </div>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-slate-700">{row.hours.toFixed(2)}</td>
                             <td className="px-4 py-3 font-bold text-slate-900">{row.net_payable.toFixed(2)}</td>
                             <td className="px-4 py-3 text-slate-700">{row.task_performed || '-'}</td>
