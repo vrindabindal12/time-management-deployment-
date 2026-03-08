@@ -953,12 +953,27 @@ export default function AdminDashboard() {
   const canFlipCard = () => !isCardDraggingRef.current && Date.now() >= suppressFlipUntilRef.current;
 
   const nonAdminEmployees = employees.filter((employee) => !employee.is_admin);
-  const orderedEmployeeCards = [
+  const [employeePage, setEmployeePage] = useState(1);
+  const employeeRowsPerPage = 10;
+  const allOrderedEmployeeCards = [
     ...employeeCardOrder
       .map((employeeId) => nonAdminEmployees.find((employee) => employee.id === employeeId))
       .filter((employee): employee is Employee => Boolean(employee)),
     ...nonAdminEmployees.filter((employee) => !employeeCardOrder.includes(employee.id)),
   ];
+  const employeeTotalRecords = allOrderedEmployeeCards.length;
+  const employeeTotalPages = Math.max(1, Math.ceil(employeeTotalRecords / employeeRowsPerPage));
+  const paginatedEmployeeCards = allOrderedEmployeeCards.slice((employeePage - 1) * employeeRowsPerPage, employeePage * employeeRowsPerPage);
+  const employeeStartItem = employeeTotalRecords === 0 ? 0 : (employeePage - 1) * employeeRowsPerPage + 1;
+  const employeeEndItem = Math.min(employeePage * employeeRowsPerPage, employeeTotalRecords);
+  const [clientPage, setClientPage] = useState(1);
+  const clientRowsPerPage = 10;
+  const clientTotalRecords = clients.length;
+  const clientTotalPages = Math.max(1, Math.ceil(clientTotalRecords / clientRowsPerPage));
+  const paginatedClients = clients.slice((clientPage - 1) * clientRowsPerPage, clientPage * clientRowsPerPage);
+  const clientStartItem = clientTotalRecords === 0 ? 0 : (clientPage - 1) * clientRowsPerPage + 1;
+  const clientEndItem = Math.min(clientPage * clientRowsPerPage, clientTotalRecords);
+
   const selectedClientData = clients.find((client) => client.id === selectedClient) || null;
   const invoiceProjectOptions = invoiceReport
     ? Array.from(new Set(invoiceReport.rows.map((row) => row.project_code))).sort()
@@ -966,7 +981,7 @@ export default function AdminDashboard() {
 
   // Pagination state for invoicing
   const [invoicePage, setInvoicePage] = useState(1);
-  const [invoiceRowsPerPage, setInvoiceRowsPerPage] = useState(20);
+  const [invoiceRowsPerPage, setInvoiceRowsPerPage] = useState(10);
 
   // Reset invoice pagination when filters or report change
   useEffect(() => {
@@ -977,10 +992,13 @@ export default function AdminDashboard() {
     : [];
   const invoiceTotalPages = Math.max(1, Math.ceil(filteredInvoiceRows.length / invoiceRowsPerPage));
   const paginatedInvoiceRows = filteredInvoiceRows.slice((invoicePage - 1) * invoiceRowsPerPage, invoicePage * invoiceRowsPerPage);
+  const invoiceTotalRecords = filteredInvoiceRows.length;
+  const invoiceStartItem = invoiceTotalRecords === 0 ? 0 : (invoicePage - 1) * invoiceRowsPerPage + 1;
+  const invoiceEndItem = Math.min(invoicePage * invoiceRowsPerPage, invoiceTotalRecords);
 
   // Pagination state for payables
   const [payablesPage, setPayablesPage] = useState(1);
-  const [payablesRowsPerPage, setPayablesRowsPerPage] = useState(20);
+  const [payablesRowsPerPage, setPayablesRowsPerPage] = useState(10);
 
   // Reset payables pagination when filters or report change
   useEffect(() => {
@@ -1001,6 +1019,9 @@ export default function AdminDashboard() {
     : [];
   const payablesTotalPages = Math.max(1, Math.ceil(filteredPayablesRows.length / payablesRowsPerPage));
   const paginatedPayablesRows = filteredPayablesRows.slice((payablesPage - 1) * payablesRowsPerPage, payablesPage * payablesRowsPerPage);
+  const payablesTotalRecords = filteredPayablesRows.length;
+  const payablesStartItem = payablesTotalRecords === 0 ? 0 : (payablesPage - 1) * payablesRowsPerPage + 1;
+  const payablesEndItem = Math.min(payablesPage * payablesRowsPerPage, payablesTotalRecords);
 
   const downloadCsvFile = (filename: string, rows: string[][]) => {
     const escapeCell = (value: string | number | null | undefined) => {
@@ -1455,7 +1476,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {orderedEmployeeCards.map((employee: Employee) => {
+              {paginatedEmployeeCards.map((employee: Employee) => {
                 const effective = getEffectiveEmployeeCompensation(employee);
                 return (
                   <div
@@ -1619,6 +1640,42 @@ export default function AdminDashboard() {
                 );
               })}
             </div>
+
+            {/* Standardized Pagination Controls for Employees */}
+            {employeeTotalRecords > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-4 mt-6 pt-4 border-t border-slate-200">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-slate-600">
+                    Showing <span className="font-semibold text-slate-900">{employeeStartItem}</span>–<span className="font-semibold text-slate-900">{employeeEndItem}</span> of <span className="font-semibold text-slate-900">{employeeTotalRecords}</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                    onClick={() => {
+                      setEmployeePage((p) => Math.max(1, p - 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    disabled={employeePage === 1}
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-slate-600 mx-2">
+                    Page <span className="font-semibold text-slate-900">{employeePage}</span> of <span className="font-semibold text-slate-900">{employeeTotalPages}</span>
+                  </span>
+                  <button
+                    className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                    onClick={() => {
+                      setEmployeePage((p) => Math.min(employeeTotalPages, p + 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    disabled={employeePage === employeeTotalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1715,7 +1772,7 @@ export default function AdminDashboard() {
               )}
 
               <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                {clients.map((client) => (
+                {paginatedClients.map((client) => (
                   <div
                     key={client.id}
                     onClick={() => setSelectedClient(client.id)}
@@ -1761,6 +1818,36 @@ export default function AdminDashboard() {
 
               {clients.length === 0 && !showAddClientForm && (
                 <p className="text-slate-500 text-center py-4">No clients found.</p>
+              )}
+
+              {/* Standardized Pagination Controls for Clients */}
+              {clientTotalRecords > 0 && (
+                <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600">
+                      Showing <span className="font-semibold text-slate-900">{clientStartItem}</span>–<span className="font-semibold text-slate-900">{clientEndItem}</span> of <span className="font-semibold text-slate-900">{clientTotalRecords}</span>
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      Page <span className="font-semibold text-slate-900">{clientPage}</span> of <span className="font-semibold text-slate-900">{clientTotalPages}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      className="flex-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                      onClick={() => setClientPage((p) => Math.max(1, p - 1))}
+                      disabled={clientPage === 1}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      className="flex-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                      onClick={() => setClientPage((p) => Math.min(clientTotalPages, p + 1))}
+                      disabled={clientPage === clientTotalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -2264,42 +2351,13 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
-                {/* Pagination Controls for Invoicing */}
-                {invoiceTotalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4">
-                    <div>
-                      <span className="text-xs text-slate-600">
-                        Page {invoicePage} of {invoiceTotalPages}
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        className="px-3 py-1 rounded border bg-white/80 text-slate-700 disabled:opacity-50"
-                        onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
-                        disabled={invoicePage === 1}
-                      >
-                        Previous
-                      </button>
-                      {Array.from({ length: invoiceTotalPages }, (_, i) => i + 1).map((pageNum) => (
-                        <button
-                          key={pageNum}
-                          className={`px-3 py-1 rounded border ${invoicePage === pageNum ? 'bg-blue-100 border-blue-400 font-bold' : 'bg-white/80 text-slate-700'}`}
-                          onClick={() => setInvoicePage(pageNum)}
-                        >
-                          {pageNum}
-                        </button>
-                      ))}
-                      <button
-                        className="px-3 py-1 rounded border bg-white/80 text-slate-700 disabled:opacity-50"
-                        onClick={() => setInvoicePage((p) => Math.min(invoiceTotalPages, p + 1))}
-                        disabled={invoicePage === invoiceTotalPages}
-                      >
-                        Next
-                      </button>
-                    </div>
-                    <div>
+                {/* Standardized Pagination Controls for Invoicing */}
+                {invoiceTotalRecords > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-4 border-t border-slate-200">
+                    <div className="flex items-center gap-4">
+                      <label className="text-sm text-slate-600 font-medium">Rows per page</label>
                       <select
-                        className="border rounded px-2 py-1 text-xs bg-white/80"
+                        className="border border-slate-300 rounded-xl px-3 py-1.5 text-sm bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         value={invoiceRowsPerPage}
                         onChange={(e) => {
                           setInvoiceRowsPerPage(Number(e.target.value));
@@ -2307,9 +2365,31 @@ export default function AdminDashboard() {
                         }}
                       >
                         {[10, 20, 50, 100].map((n) => (
-                          <option key={n} value={n}>{n} / page</option>
+                          <option key={n} value={n}>{n}</option>
                         ))}
                       </select>
+                      <span className="text-sm text-slate-600">
+                        Showing <span className="font-semibold text-slate-900">{invoiceStartItem}</span>–<span className="font-semibold text-slate-900">{invoiceEndItem}</span> of <span className="font-semibold text-slate-900">{invoiceTotalRecords}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
+                        disabled={invoicePage === 1}
+                      >
+                        Previous
+                      </button>
+                      <span className="text-sm text-slate-600 mx-2">
+                        Page <span className="font-semibold text-slate-900">{invoicePage}</span> of <span className="font-semibold text-slate-900">{invoiceTotalPages}</span>
+                      </span>
+                      <button
+                        className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        onClick={() => setInvoicePage((p) => Math.min(invoiceTotalPages, p + 1))}
+                        disabled={invoicePage === invoiceTotalPages}
+                      >
+                        Next
+                      </button>
                     </div>
                   </div>
                 )}
@@ -2538,42 +2618,13 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
-                {/* Pagination Controls for Payables */}
-                {payablesTotalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4">
-                    <div>
-                      <span className="text-xs text-slate-600">
-                        Page {payablesPage} of {payablesTotalPages}
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        className="px-3 py-1 rounded border bg-white/80 text-slate-700 disabled:opacity-50"
-                        onClick={() => setPayablesPage((p) => Math.max(1, p - 1))}
-                        disabled={payablesPage === 1}
-                      >
-                        Previous
-                      </button>
-                      {Array.from({ length: payablesTotalPages }, (_, i) => i + 1).map((pageNum) => (
-                        <button
-                          key={pageNum}
-                          className={`px-3 py-1 rounded border ${payablesPage === pageNum ? 'bg-emerald-100 border-emerald-400 font-bold' : 'bg-white/80 text-slate-700'}`}
-                          onClick={() => setPayablesPage(pageNum)}
-                        >
-                          {pageNum}
-                        </button>
-                      ))}
-                      <button
-                        className="px-3 py-1 rounded border bg-white/80 text-slate-700 disabled:opacity-50"
-                        onClick={() => setPayablesPage((p) => Math.min(payablesTotalPages, p + 1))}
-                        disabled={payablesPage === payablesTotalPages}
-                      >
-                        Next
-                      </button>
-                    </div>
-                    <div>
+                {/* Standardized Pagination Controls for Payables */}
+                {payablesTotalRecords > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-4 border-t border-slate-200">
+                    <div className="flex items-center gap-4">
+                      <label className="text-sm text-slate-600 font-medium">Rows per page</label>
                       <select
-                        className="border rounded px-2 py-1 text-xs bg-white/80"
+                        className="border border-slate-300 rounded-xl px-3 py-1.5 text-sm bg-white/80 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         value={payablesRowsPerPage}
                         onChange={(e) => {
                           setPayablesRowsPerPage(Number(e.target.value));
@@ -2581,9 +2632,31 @@ export default function AdminDashboard() {
                         }}
                       >
                         {[10, 20, 50, 100].map((n) => (
-                          <option key={n} value={n}>{n} / page</option>
+                          <option key={n} value={n}>{n}</option>
                         ))}
                       </select>
+                      <span className="text-sm text-slate-600">
+                        Showing <span className="font-semibold text-slate-900">{payablesStartItem}</span>–<span className="font-semibold text-slate-900">{payablesEndItem}</span> of <span className="font-semibold text-slate-900">{payablesTotalRecords}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        onClick={() => setPayablesPage((p) => Math.max(1, p - 1))}
+                        disabled={payablesPage === 1}
+                      >
+                        Previous
+                      </button>
+                      <span className="text-sm text-slate-600 mx-2">
+                        Page <span className="font-semibold text-slate-900">{payablesPage}</span> of <span className="font-semibold text-slate-900">{payablesTotalPages}</span>
+                      </span>
+                      <button
+                        className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        onClick={() => setPayablesPage((p) => Math.min(payablesTotalPages, p + 1))}
+                        disabled={payablesPage === payablesTotalPages}
+                      >
+                        Next
+                      </button>
                     </div>
                   </div>
                 )}
