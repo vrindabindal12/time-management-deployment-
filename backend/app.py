@@ -130,6 +130,7 @@ class Punch(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by_admin = db.Column(db.Boolean, default=False)
+    project = db.relationship('Project', backref='punches', lazy=True)
 
     def to_dict(self):
         return {
@@ -138,6 +139,7 @@ class Punch(db.Model):
             'project_name': self.project_name,
             'project_code': self.project_code,
             'project_id': self.project_id,
+            'client_name': self.project.client.name if self.project else None,
             'work_date': self.work_date.isoformat() if self.work_date else None,
             'hours_worked': self.hours_worked,
             'invoice_hours': self.invoice_hours,
@@ -276,8 +278,11 @@ def get_filtered_work_entries(employee_id):
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     project_name = (request.args.get('project_name') or '').strip()
+    client_name = (request.args.get('client_name') or '').strip()
 
-    query = Punch.query.filter_by(employee_id=employee_id)
+    query = Punch.query.filter_by(employee_id=employee_id).options(
+        db.joinedload(Punch.project).joinedload(Project.client)
+    )
 
     if start_date:
         try:
@@ -296,6 +301,14 @@ def get_filtered_work_entries(employee_id):
     if project_name:
         query = query.filter(Punch.project_name.ilike(f'%{project_name}%'))
 
+    if client_name:
+        query = query.filter(
+            db.and_(
+                Punch.project_id.isnot(None),
+                Client.name.ilike(f'%{client_name}%')
+            )
+        ).join(Project).join(Client)
+
     return query.order_by(Punch.work_date.desc(), Punch.id.desc()).all()
 
 
@@ -307,6 +320,8 @@ def build_export_rows(employee, work_entries):
             'Employee Name': employee.name,
             'Employee Email': employee.email,
             'Project Name': entry.project_name,
+            'Project Code': entry.project_code or '',
+            'Client Name': entry.project.client.name if entry.project else '',
             'Work Date': entry.work_date.isoformat() if entry.work_date else '',
             'Hours Worked': round(entry.hours_worked, 2),
             'Description': entry.description or '',

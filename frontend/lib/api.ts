@@ -76,6 +76,7 @@ export interface WorkEntry {
   project_name: string;
   project_code: string | null;
   project_id: number | null;
+  client_name: string | null;
   work_date: string;
   hours_worked: number;
   description: string;
@@ -327,12 +328,14 @@ export const employeeApi = {
     employeeId: number,
     startDate?: string,
     endDate?: string,
-    projectName?: string
+    projectName?: string,
+    clientName?: string
   ): Promise<EmployeeWork> => {
     const params: any = {};
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
     if (projectName) params.project_name = projectName;
+    if (clientName) params.client_name = clientName;
     const response = await api.get(`/employee/${employeeId}/work`, { params });
     return response.data;
   },
@@ -342,12 +345,14 @@ export const employeeApi = {
     format: 'csv' | 'excel' = 'csv',
     startDate?: string,
     endDate?: string,
-    projectName?: string
+    projectName?: string,
+    clientName?: string
   ): Promise<void> => {
     const params: any = { format };
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
     if (projectName) params.project_name = projectName;
+    if (clientName) params.client_name = clientName;
 
     const response = await api.get(`/employee/${employeeId}/work/export`, {
       params,

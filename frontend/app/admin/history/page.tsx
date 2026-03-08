@@ -16,6 +16,8 @@ export default function AdminHistory() {
   const [endDate, setEndDate] = useState('');
   const [projectFilter, setProjectFilter] = useState('ALL');
   const [projectOptions, setProjectOptions] = useState<string[]>([]);
+  const [clientFilter, setClientFilter] = useState('ALL');
+  const [clientOptions, setClientOptions] = useState<string[]>([]);
 
   // Pagination (10 per page by default; user can change)
   const [currentPage, setCurrentPage] = useState(1);
@@ -27,6 +29,7 @@ export default function AdminHistory() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     project_name: '',
+    project_code: '',
     work_date: '',
     hours_worked: '',
     description: ''
@@ -68,7 +71,7 @@ export default function AdminHistory() {
 
   const loadWorkHistory = async (
     employeeId: number | 'ALL',
-    filters?: { startDate?: string; endDate?: string; projectName?: string }
+    filters?: { startDate?: string; endDate?: string; projectName?: string; clientName?: string }
   ) => {
     setLoading(true);
     setError(null);
@@ -77,6 +80,8 @@ export default function AdminHistory() {
       const effectiveEndDate = (filters?.endDate ?? endDate) || undefined;
       const selectedProject = filters?.projectName ?? projectFilter;
       const effectiveProjectName = selectedProject && selectedProject !== 'ALL' ? selectedProject : undefined;
+      const selectedClient = filters?.clientName ?? clientFilter;
+      const effectiveClientName = selectedClient && selectedClient !== 'ALL' ? selectedClient : undefined;
 
       let projectEntriesSource: any[] = [];
       if (employeeId === 'ALL') {
@@ -90,7 +95,8 @@ export default function AdminHistory() {
               employee.id,
               effectiveStartDate,
               effectiveEndDate,
-              effectiveProjectName
+              effectiveProjectName,
+              effectiveClientName
             )
           )
         );
@@ -122,13 +128,14 @@ export default function AdminHistory() {
           employeeId,
           effectiveStartDate,
           effectiveEndDate,
-          effectiveProjectName
+          effectiveProjectName,
+          effectiveClientName
         );
         setWorkData(data);
         projectEntriesSource = data.work_entries || [];
       }
 
-      if (!effectiveProjectName) {
+      if (!effectiveProjectName && !effectiveClientName) {
         const uniqueProjectNames = Array.from(
           new Set(
             (projectEntriesSource || [])
@@ -137,6 +144,15 @@ export default function AdminHistory() {
           )
         ).sort();
         setProjectOptions(uniqueProjectNames);
+
+        const uniqueClientNames = Array.from(
+          new Set(
+            (projectEntriesSource || [])
+              .map((entry: any) => (entry.client_name || '').trim())
+              .filter((name: string) => Boolean(name))
+          )
+        ).sort();
+        setClientOptions(uniqueClientNames);
       }
     } catch (err) {
       setError('Failed to load work history');
@@ -149,6 +165,7 @@ export default function AdminHistory() {
     setEditingEntry(entry);
     setEditForm({
       project_name: entry.project_name,
+      project_code: entry.project_code || '',
       work_date: entry.work_date,
       hours_worked: entry.hours_worked.toString(),
       description: entry.description || ''
@@ -175,6 +192,7 @@ export default function AdminHistory() {
 
       await employeeApi.editWork(editingEntry.id, {
         project_name: editForm.project_name,
+        project_code: editForm.project_code || undefined,
         work_date: editForm.work_date,
         hours_worked: hours,
         description: editForm.description
@@ -318,14 +336,16 @@ export default function AdminHistory() {
         {/* Employee Selection */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Employee</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
             <select
               value={selectedEmployee || ''}
               onChange={(e) => {
                 const nextId = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value);
                 setSelectedEmployee(nextId);
                 setProjectFilter('ALL');
+                setClientFilter('ALL');
                 setProjectOptions([]);
+                setClientOptions([]);
               }}
               className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
@@ -360,6 +380,18 @@ export default function AdminHistory() {
                 </option>
               ))}
             </select>
+            <select
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ALL">All Clients</option>
+              {clientOptions.map((clientName) => (
+                <option key={clientName} value={clientName}>
+                  {clientName}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2 mt-3">
             <button
@@ -377,8 +409,9 @@ export default function AdminHistory() {
                 setStartDate('');
                 setEndDate('');
                 setProjectFilter('ALL');
+                setClientFilter('ALL');
                 if (selectedEmployee) {
-                  loadWorkHistory(selectedEmployee, { startDate: '', endDate: '', projectName: '' });
+                  loadWorkHistory(selectedEmployee, { startDate: '', endDate: '', projectName: '', clientName: '' });
                 }
               }}
               className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition"
@@ -437,6 +470,12 @@ export default function AdminHistory() {
                       Project
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Project Code
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Client
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Hours
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -453,7 +492,7 @@ export default function AdminHistory() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {totalRecords === 0 ? (
                     <tr>
-                      <td colSpan={selectedEmployee === 'ALL' ? 7 : 6} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={selectedEmployee === 'ALL' ? 9 : 8} className="px-6 py-4 text-center text-gray-500">
                         No work entries found
                       </td>
                     </tr>
@@ -470,6 +509,12 @@ export default function AdminHistory() {
                         )}
                         <td className="px-6 py-4 text-sm text-gray-900">
                           {entry.project_name}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {entry.project_code || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {entry.client_name || '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600">
                           {entry.hours_worked.toFixed(2)} hrs
@@ -565,16 +610,30 @@ export default function AdminHistory() {
               <h3 className="text-xl font-bold text-gray-800 mb-4">Edit Work Entry</h3>
               
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Project Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.project_name}
-                    onChange={(e) => setEditForm({...editForm, project_name: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Project Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.project_name}
+                      onChange={(e) => setEditForm({...editForm, project_name: e.target.value})}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Project Code
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.project_code}
+                      onChange={(e) => setEditForm({...editForm, project_code: e.target.value})}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
