@@ -1070,12 +1070,22 @@ def export_my_work(current_user):
 
 @app.route('/api/work/<int:work_id>', methods=['PUT'])
 @token_required
-@admin_required
 def edit_work(current_user, work_id):
     work_entry = Punch.query.get(work_id)
     
     if not work_entry:
         return jsonify({'error': 'Work entry not found'}), 404
+    
+    # Check permissions
+    if not current_user.is_admin:
+        if work_entry.employee_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Enforce 7-day rule for non-admins
+        utc_today = datetime.utcnow().date()
+        oldest_allowed = utc_today - timedelta(days=7)
+        if work_entry.work_date < oldest_allowed:
+            return jsonify({'error': 'Cannot edit entries older than 7 days'}), 400
     
     data = request.json
     
@@ -1126,7 +1136,7 @@ def edit_work(current_user, work_id):
             return jsonify({'error': 'Description is required'}), 400
         work_entry.description = description
     
-    work_entry.updated_by_admin = True
+    work_entry.updated_by_admin = current_user.is_admin
     work_entry.updated_at = datetime.utcnow()
     
     db.session.commit()
@@ -1135,12 +1145,22 @@ def edit_work(current_user, work_id):
 
 @app.route('/api/work/<int:work_id>', methods=['DELETE'])
 @token_required
-@admin_required
 def delete_work(current_user, work_id):
     work_entry = Punch.query.get(work_id)
     
     if not work_entry:
         return jsonify({'error': 'Work entry not found'}), 404
+        
+    # Check permissions
+    if not current_user.is_admin:
+        if work_entry.employee_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Enforce 7-day rule for non-admins
+        utc_today = datetime.utcnow().date()
+        oldest_allowed = utc_today - timedelta(days=7)
+        if work_entry.work_date < oldest_allowed:
+            return jsonify({'error': 'Cannot delete entries older than 7 days'}), 400
     
     db.session.delete(work_entry)
     db.session.commit()
