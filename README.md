@@ -365,16 +365,3 @@ MIT License - Feel free to use this project for your needs.
 ## Support
 
 For issues or questions, please open an issue in the repository.
-
-
-
-Admin 
-- Client filter employee history - done
-- payable mein tick - done
-- Rates locking in until promotion - done
-- Pagination - done
-- Clients section gross rates (PROJECT LEVEL SHOULD AUTO POPULATE)
-- non billable work handling 
-
-Employee
-- Weekly Update

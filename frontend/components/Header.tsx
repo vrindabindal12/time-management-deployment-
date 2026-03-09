@@ -58,16 +58,15 @@ export default function Header() {
               <Link
                 key={item.path}
                 href={item.path}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  pathname === item.path
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${pathname === item.path
                     ? 'glass-pill text-blue-900 shadow-md'
                     : 'text-slate-700 hover:bg-white/55 hover:shadow-md'
-                }`}
+                  }`}
               >
                 {item.name}
               </Link>
             ))}
-            
+
             {/* User Info & Logout */}
             {user && (
               <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-slate-300">

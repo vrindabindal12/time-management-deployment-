@@ -1076,17 +1076,22 @@ def edit_work(current_user, work_id):
     if not work_entry:
         return jsonify({'error': 'Work entry not found'}), 404
     
-    # Check permissions
+    # Check permissions: Admin can edit anything, Employee can only edit their own
+    if not current_user.is_admin and work_entry.employee_id != current_user.id:
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    # Check 7-day restriction for non-admins
     if not current_user.is_admin:
-        if work_entry.employee_id != current_user.id:
-            return jsonify({'error': 'Unauthorized'}), 403
-        
-        # Enforce 7-day rule for non-admins
         utc_today = datetime.utcnow().date()
-        oldest_allowed = utc_today - timedelta(days=7)
+        today = utc_today
+        # Allow client-reported today to handle timezone drift (same logic as add_work)
+        # Note: We don't have client_today in PUT request usually, so we rely on UTC+1 drift
+        oldest_allowed = today - timedelta(days=7)
         if work_entry.work_date < oldest_allowed:
             return jsonify({'error': 'Cannot edit entries older than 7 days'}), 400
-    
+        if work_entry.work_date > today + timedelta(days=1): # Allow 1 day future for TZ drift
+             return jsonify({'error': 'Cannot edit future entries'}), 400
+
     data = request.json
     
     # Handle project_code first (takes priority over project_name)
@@ -1110,7 +1115,7 @@ def edit_work(current_user, work_id):
     if 'hours_worked' in data:
         try:
             hours = float(data['hours_worked'])
-            if hours <= 0 or hours > 24:
+            if hours < 0 or hours > 24: # Allow 0 to effectively "clear" an entry? User said "edit".
                 return jsonify({'error': 'Hours worked must be between 0 and 24'}), 400
             work_entry.hours_worked = hours
         except ValueError:
@@ -1120,6 +1125,13 @@ def edit_work(current_user, work_id):
         try:
             new_date = datetime.strptime(data['work_date'], '%Y-%m-%d').date()
             if new_date != work_entry.work_date:
+                # If changing date, check the new date too
+                if not current_user.is_admin:
+                    utc_today = datetime.utcnow().date()
+                    oldest_allowed = utc_today - timedelta(days=7)
+                    if new_date < oldest_allowed or new_date > utc_today + timedelta(days=1):
+                        return jsonify({'error': 'Target work date must be within the last 7 days'}), 400
+                
                 work_entry.work_date = new_date
                 # Re-calculate default payable values for new date
                 employee = Employee.query.get(work_entry.employee_id)
@@ -1132,13 +1144,17 @@ def edit_work(current_user, work_id):
     
     if 'description' in data:
         description = (data.get('description') or '').strip()
-        if not description:
-            return jsonify({'error': 'Description is required'}), 400
+        # Allow empty description if hours are 0? Better to keep it consistent.
+        # if not description and work_entry.hours_worked > 0:
+        #    return jsonify({'error': 'Description is required'}), 400
         work_entry.description = description
     
-    work_entry.updated_by_admin = current_user.is_admin
-    work_entry.updated_at = datetime.utcnow()
+    if current_user.is_admin:
+        work_entry.updated_by_admin = True
+    else:
+        work_entry.updated_by_admin = False
     
+    work_entry.updated_at = datetime.utcnow()
     db.session.commit()
     
     return jsonify(work_entry.to_dict()), 200
@@ -1150,18 +1166,20 @@ def delete_work(current_user, work_id):
     
     if not work_entry:
         return jsonify({'error': 'Work entry not found'}), 404
-        
-    # Check permissions
+    
+    # Check permissions: Admin can delete anything, Employee can only delete their own
+    if not current_user.is_admin and work_entry.employee_id != current_user.id:
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    # Check 7-day restriction for non-admins
     if not current_user.is_admin:
-        if work_entry.employee_id != current_user.id:
-            return jsonify({'error': 'Unauthorized'}), 403
-            
-        # Enforce 7-day rule for non-admins
         utc_today = datetime.utcnow().date()
         oldest_allowed = utc_today - timedelta(days=7)
         if work_entry.work_date < oldest_allowed:
             return jsonify({'error': 'Cannot delete entries older than 7 days'}), 400
-    
+        if work_entry.work_date > utc_today + timedelta(days=1):
+            return jsonify({'error': 'Cannot delete future entries'}), 400
+
     db.session.delete(work_entry)
     db.session.commit()
     
