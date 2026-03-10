@@ -403,8 +403,8 @@ export default function Dashboard() {
                       <tr key={`${row.projectCode}-${row.task}-${rowIdx}`} className="hover:bg-slate-50/40 transition">
                         <td className="px-4 py-3 text-slate-700 font-medium">{row.projectCode}</td>
                         <td className="px-4 py-3 text-slate-600">{row.projectName}</td>
-                        <td className="px-4 py-3 text-slate-600 group">
-                          <span className="block truncate max-w-[200px]" title={row.task}>{row.task}</span>
+                        <td className="px-4 py-3 text-slate-600 group align-top">
+                          <span className="block whitespace-pre-line break-words max-w-[200px]" title={row.task}>{row.task}</span>
                         </td>
                         {weekDates.map((date) => {
                           const dateKey = formatLocalDate(date);

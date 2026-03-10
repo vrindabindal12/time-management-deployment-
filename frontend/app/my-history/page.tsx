@@ -358,7 +358,7 @@ export default function MyHistory() {
                           {entry.hours_worked.toFixed(2)} hrs
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
-                          {entry.description || '-'}
+                          <span className="block whitespace-pre-line break-words max-w-xs" title={entry.description || '-'}>{entry.description || '-'}</span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {entry.updated_by_admin ? (
@@ -485,7 +485,9 @@ export default function MyHistory() {
                       <tr key={`${row.projectCode}-${row.projectName}-${idx}`} className="border-b border-gray-100">
                         <td className="px-3 py-2">{row.projectCode}</td>
                         <td className="px-3 py-2">{row.projectName}</td>
-                        <td className="px-3 py-2">{row.task}</td>
+                        <td className="px-3 py-2 align-top">
+                          <span className="block whitespace-pre-line break-words max-w-[200px]" title={row.task}>{row.task}</span>
+                        </td>
                         {weekDates.map((d) => {
                           const key = formatLocalDate(d);
                           const value = row.dayHours[key] || 0;
