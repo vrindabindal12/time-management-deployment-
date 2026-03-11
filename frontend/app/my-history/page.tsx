@@ -362,9 +362,16 @@ export default function MyHistory() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {entry.updated_by_admin ? (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                              Edited by Admin
-                            </span>
+                            <div>
+                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                Edited by Admin
+                              </span>
+                              {entry.updated_at && (
+                                <p className="text-xs text-yellow-600 mt-1">
+                                  {new Date(entry.updated_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: '2-digit' })}
+                                </p>
+                              )}
+                            </div>
                           ) : (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                               Submitted

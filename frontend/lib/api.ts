@@ -178,6 +178,8 @@ export interface EmployeePayablesReport {
   employee_totals: EmployeePayableTotal[];
   total_hours: number;
   total_net_payable: number;
+  total_paid: number;
+  total_unpaid: number;
 }
 
 export interface ProjectRate {
@@ -235,11 +237,6 @@ export const authApi = {
     return response.data;
   },
 
-  resendVerification: async (email: string): Promise<{ message: string }> => {
-    const response = await api.post('/resend-verification', { email });
-    return response.data;
-  },
-
   changePassword: async (oldPassword: string, newPassword: string): Promise<{ message: string }> => {
     const response = await api.post('/change-password', {
       old_password: oldPassword,
@@ -292,6 +289,11 @@ export const employeeApi = {
 
   deleteEmployee: async (employeeId: number): Promise<{ message: string }> => {
     const response = await api.delete(`/employees/${employeeId}`);
+    return response.data;
+  },
+
+  resendWelcomeEmail: async (employeeId: number): Promise<{ message: string }> => {
+    const response = await api.post(`/employees/${employeeId}/resend-welcome`);
     return response.data;
   },
 

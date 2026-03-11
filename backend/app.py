@@ -13,6 +13,7 @@ import secrets
 import csv
 import io
 from functools import wraps
+from collections import defaultdict
 from openpyxl import Workbook
 from sqlalchemy import text
 
@@ -685,6 +686,13 @@ def parse_optional_rate(value, field_name):
     return parsed
 
 
+_ALLOWED_PHOTO_PREFIXES = (
+    'data:image/jpeg,', 'data:image/jpeg;',
+    'data:image/png,', 'data:image/png;',
+    'data:image/gif,', 'data:image/gif;',
+    'data:image/webp,', 'data:image/webp;',
+)
+
 def parse_profile_photo(value, field_name='profile_photo'):
     if value is None or value == '':
         return None
@@ -694,8 +702,8 @@ def parse_profile_photo(value, field_name='profile_photo'):
     photo_data = value.strip()
     if not photo_data:
         return None
-    if not photo_data.startswith('data:image/'):
-        raise ValueError(f'{field_name} must be a valid image data URL')
+    if not any(photo_data.startswith(p) for p in _ALLOWED_PHOTO_PREFIXES):
+        raise ValueError(f'{field_name} must be a JPEG, PNG, GIF, or WebP image')
     if len(photo_data) > 2_000_000:
         raise ValueError(f'{field_name} is too large')
     return photo_data
@@ -946,8 +954,9 @@ def reset_password():
     if not token or not new_password:
         return jsonify({'error': 'Token and new password are required'}), 400
 
-    if len(new_password) < 6:
-        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    pwd_error = validate_password_strength(new_password)
+    if pwd_error:
+        return jsonify({'error': pwd_error}), 400
 
     employee = Employee.query.filter_by(password_reset_token=token).first()
     if not employee:
@@ -1506,22 +1515,25 @@ def get_employee_punches(current_user, employee_id):
 @admin_required
 def get_report(current_user):
     employees = Employee.query.all()
-    report = []
-    
-    for employee in employees:
-        work_entries = Punch.query.filter_by(employee_id=employee.id).all()
-        total_hours = sum(entry.hours_worked for entry in work_entries)
-        
-        # Count unique work days
-        unique_dates = set(entry.work_date for entry in work_entries)
-        
-        report.append({
-            'employee': employee.to_dict(),
-            'total_hours': round(total_hours, 2),
-            'total_days': len(unique_dates),
-            'total_entries': len(work_entries)
-        })
-    
+    # Single aggregation pass — avoids N+1 query (one query instead of one per employee)
+    all_punches = Punch.query.all()
+    hours_by_emp = defaultdict(float)
+    entries_by_emp = defaultdict(int)
+    dates_by_emp = defaultdict(set)
+    for punch in all_punches:
+        hours_by_emp[punch.employee_id] += punch.hours_worked
+        entries_by_emp[punch.employee_id] += 1
+        dates_by_emp[punch.employee_id].add(punch.work_date)
+
+    report = [
+        {
+            'employee': emp.to_dict(),
+            'total_hours': round(hours_by_emp[emp.id], 2),
+            'total_days': len(dates_by_emp[emp.id]),
+            'total_entries': entries_by_emp[emp.id]
+        }
+        for emp in employees
+    ]
     return jsonify(report)
 
 
@@ -1782,6 +1794,7 @@ def get_employee_payables_report(current_user):
     employee_totals_map = {}
     total_hours = 0.0
     total_net_payable = 0.0
+    total_paid = 0.0
 
     for punch in punches:
         employee = employee_by_id.get(punch.employee_id)
@@ -1807,6 +1820,8 @@ def get_employee_payables_report(current_user):
 
         total_hours += hours
         total_net_payable += net_payable
+        if punch.is_paid:
+            total_paid += net_payable
 
         if employee.id not in employee_totals_map:
             employee_totals_map[employee.id] = {
@@ -1847,7 +1862,9 @@ def get_employee_payables_report(current_user):
         'rows': rows,
         'employee_totals': employee_totals,
         'total_hours': round(total_hours, 2),
-        'total_net_payable': round(total_net_payable, 2)
+        'total_net_payable': round(total_net_payable, 2),
+        'total_paid': round(total_paid, 2),
+        'total_unpaid': round(total_net_payable - total_paid, 2)
     })
 
 # ==================== CLIENT ROUTES ====================
@@ -2318,6 +2335,19 @@ def get_all_projects(current_user):
             'client_name': client.name if client else None,
         })
     return jsonify(result)
+
+@app.route('/api/employees/<int:employee_id>/resend-welcome', methods=['POST'])
+@token_required
+@admin_required
+def resend_employee_welcome(current_user, employee_id):
+    employee = Employee.query.get(employee_id)
+    if not employee:
+        return jsonify({'error': 'Employee not found'}), 404
+    reset_token = employee.generate_password_reset_token()
+    db.session.commit()
+    send_welcome_email(employee, reset_token)
+    return jsonify({'message': f'Welcome email resent to {employee.email}'}), 200
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

@@ -127,6 +127,8 @@ export default function AdminDashboard() {
   const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
   const [employeeProfileEdits, setEmployeeProfileEdits] = useState<Record<number, EmployeeProfileEdit>>({});
   const [savingEmployeeProfileId, setSavingEmployeeProfileId] = useState<number | null>(null);
+  const [resendingWelcomeId, setResendingWelcomeId] = useState<number | null>(null);
+  const [resendWelcomeSuccessId, setResendWelcomeSuccessId] = useState<number | null>(null);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [employeeCardOrder, setEmployeeCardOrder] = useState<number[]>([]);
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<number | null>(null);
@@ -173,6 +175,8 @@ export default function AdminDashboard() {
   const [invoicePageSize, setInvoicePageSize] = useState(10);
   const [payablesPage, setPayablesPage] = useState(1);
   const [payablesPageSize, setPayablesPageSize] = useState(10);
+  const [selectedPayableIds, setSelectedPayableIds] = useState<Set<number>>(new Set());
+  const [payableMarkPaidModal, setPayableMarkPaidModal] = useState<{ open: boolean; isPaid: boolean } | null>(null);
   const [employeeCardsPage, setEmployeeCardsPage] = useState(1);
   const EMPLOYEE_CARDS_PAGE_SIZE = 9;
 
@@ -554,6 +558,21 @@ export default function AdminDashboard() {
       clearError();
     } finally {
       setSavingEmployeeProfileId(null);
+    }
+  };
+
+  const handleResendWelcome = async (employeeId: number) => {
+    setResendingWelcomeId(employeeId);
+    setError(null);
+    try {
+      await employeeApi.resendWelcomeEmail(employeeId);
+      setResendWelcomeSuccessId(employeeId);
+      setTimeout(() => setResendWelcomeSuccessId(null), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to resend welcome email');
+      clearError();
+    } finally {
+      setResendingWelcomeId(null);
     }
   };
 
@@ -976,11 +995,30 @@ export default function AdminDashboard() {
       setPayablesReport(data);
       setPayablesProjectFilter('ALL');
       setPayablesPage(1);
+      setSelectedPayableIds(new Set());
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load payables report');
       clearError();
     } finally {
       setPayablesLoading(false);
+    }
+  };
+
+  const handleMarkPayablesPaid = async (isPaid: boolean) => {
+    const ids = Array.from(selectedPayableIds);
+    if (ids.length === 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await employeeApi.markPayablesPaid(ids, isPaid);
+      setSelectedPayableIds(new Set());
+      setPayableMarkPaidModal(null);
+      await runPayablesReport();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update payment status');
+      clearError();
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1056,6 +1094,8 @@ export default function AdminDashboard() {
   const payablesStartIndex = (payablesPage - 1) * payablesPageSize;
   const pagedPayablesRows = filteredPayablesRows.slice(payablesStartIndex, payablesStartIndex + payablesPageSize);
   const payablesEndItem = payablesTotalRecords === 0 ? 0 : Math.min(payablesStartIndex + payablesPageSize, payablesTotalRecords);
+  const filteredTotalPaid = filteredPayablesRows.reduce((sum, r) => sum + (r.is_paid ? r.net_payable : 0), 0);
+  const filteredTotalPayable = filteredPayablesRows.reduce((sum, r) => sum + (!r.is_paid ? r.net_payable : 0), 0);
 
   const downloadCsvFile = (filename: string, rows: string[][]) => {
     const escapeCell = (value: string | number | null | undefined) => {
@@ -1291,7 +1331,7 @@ export default function AdminDashboard() {
                       value={employeeForm.password}
                       onChange={(e) => setEmployeeForm({ ...employeeForm, password: e.target.value })}
                       required
-                      minLength={6}
+                      minLength={8}
                       className="border border-slate-300 rounded-xl px-4 py-2 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <input
@@ -1589,6 +1629,18 @@ export default function AdminDashboard() {
                           className="glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm"
                         >
                           Edit Full Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleResendWelcome(employee.id); }}
+                          disabled={resendingWelcomeId === employee.id}
+                          className={`px-3 py-2 text-sm font-semibold rounded-lg transition disabled:opacity-40 ${
+                            resendWelcomeSuccessId === employee.id
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200'
+                          }`}
+                        >
+                          {resendingWelcomeId === employee.id ? 'Sending...' : resendWelcomeSuccessId === employee.id ? '\u2713 Sent!' : 'Resend Welcome'}
                         </button>
                         <button
                           type="button"
@@ -2588,7 +2640,7 @@ export default function AdminDashboard() {
             {payablesReport && (
               <div className="glass-panel rounded-3xl p-6">
                 <div className="mb-4 rounded-2xl border border-white/70 bg-white/60 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-[1fr_auto_auto_auto] items-center gap-3">
                     <div>
                       <p className="text-sm text-slate-600">
                         Period: {payablesReport.start_date} to {payablesReport.end_date}
@@ -2600,7 +2652,11 @@ export default function AdminDashboard() {
                     </div>
                     <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-lime-50/80 px-4 py-2 text-right">
                       <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Total Payable</p>
-                      <p className="text-2xl font-black text-slate-900">{payablesReport.total_net_payable.toFixed(2)}</p>
+                      <p className="text-2xl font-black text-slate-900">{filteredTotalPayable.toFixed(2)}</p>
+                    </div>
+                    <div className="rounded-xl border border-blue-200/80 bg-gradient-to-br from-blue-50/80 to-indigo-50/80 px-4 py-2 text-right">
+                      <p className="text-xs uppercase tracking-[0.16em] text-blue-700 font-bold">Total Paid</p>
+                      <p className="text-2xl font-black text-slate-900">{filteredTotalPaid.toFixed(2)}</p>
                     </div>
                   </div>
                   <button
@@ -2633,10 +2689,60 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                {selectedPayableIds.size > 0 && (
+                  <div className="mb-3 flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+                    <span className="text-sm font-semibold text-emerald-800">
+                      {selectedPayableIds.size} {selectedPayableIds.size === 1 ? 'entry' : 'entries'} selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPayableMarkPaidModal({ open: true, isPaid: true })}
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition"
+                    >
+                      Mark as Paid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPayableMarkPaidModal({ open: true, isPaid: false })}
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-500 text-white hover:bg-slate-600 transition"
+                    >
+                      Mark as Unpaid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPayableIds(new Set())}
+                      className="ml-auto text-xs text-slate-500 hover:text-slate-700 underline"
+                    >
+                      Clear selection
+                    </button>
+                  </div>
+                )}
                 <div className="overflow-x-auto rounded-2xl border border-white/60 bg-white/65">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-100/90">
                       <tr>
+                        <th className="px-3 py-3 text-center font-bold text-slate-600 w-10">
+                          <input
+                            type="checkbox"
+                            checked={pagedPayablesRows.length > 0 && pagedPayablesRows.every((r) => selectedPayableIds.has(r.work_id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedPayableIds((prev) => {
+                                  const next = new Set(prev);
+                                  pagedPayablesRows.forEach((r) => next.add(r.work_id));
+                                  return next;
+                                });
+                              } else {
+                                setSelectedPayableIds((prev) => {
+                                  const next = new Set(prev);
+                                  pagedPayablesRows.forEach((r) => next.delete(r.work_id));
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="rounded border-slate-300"
+                          />
+                        </th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Code</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Name</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Level</th>
@@ -2645,19 +2751,35 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Rate</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Hours</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Net Payable</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Status</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Task Performed</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredPayablesRows.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
+                          <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
                             No payable entries found for the selected filters
                           </td>
                         </tr>
                       ) : (
                         pagedPayablesRows.map((row) => (
                           <tr key={row.work_id} className="hover:bg-slate-50/70">
+                            <td className="px-3 py-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedPayableIds.has(row.work_id)}
+                                onChange={(e) => {
+                                  setSelectedPayableIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(row.work_id);
+                                    else next.delete(row.work_id);
+                                    return next;
+                                  });
+                                }}
+                                className="rounded border-slate-300"
+                              />
+                            </td>
                             <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code || '-'}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
@@ -2666,6 +2788,13 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-slate-700">{row.rate.toFixed(2)}</td>
                             <td className="px-4 py-3 text-slate-700">{row.hours.toFixed(2)}</td>
                             <td className="px-4 py-3 font-bold text-slate-900">{row.net_payable.toFixed(2)}</td>
+                            <td className="px-4 py-3">
+                              {row.is_paid ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Paid</span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">Unpaid</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-slate-700 align-top">
                               <span className="block whitespace-pre-line break-words max-w-[200px]" title={row.task_performed || '-'}>{row.task_performed || '-'}</span>
                             </td>
@@ -2718,6 +2847,41 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {payableMarkPaidModal?.open && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-white/50">
+            <h3 className="text-xl font-bold text-slate-900 mb-2">
+              {payableMarkPaidModal.isPaid ? 'Mark as Paid' : 'Mark as Unpaid'}
+            </h3>
+            <p className="text-slate-600 text-sm mb-6">
+              This will mark{' '}
+              <span className="font-bold text-slate-900">{selectedPayableIds.size}</span>{' '}
+              selected {selectedPayableIds.size === 1 ? 'entry' : 'entries'} as{' '}
+              <span className="font-bold">{payableMarkPaidModal.isPaid ? 'paid' : 'unpaid'}</span>. This action can be reversed.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPayableMarkPaidModal(null)}
+                className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMarkPayablesPaid(payableMarkPaidModal.isPaid)}
+                disabled={loading}
+                className={`flex-1 px-4 py-3 rounded-xl text-white font-bold transition disabled:opacity-50 ${
+                  payableMarkPaidModal.isPaid ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-600 hover:bg-slate-700'
+                }`}
+              >
+                {loading ? 'Updating...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showOnboardingForm && (
         <div

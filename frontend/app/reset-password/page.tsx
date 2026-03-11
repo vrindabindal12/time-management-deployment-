@@ -33,8 +33,20 @@ export default function ResetPassword() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[!@#$%^&*()\-_=+[\]{}|;:'",./<>?`~\\]/.test(password)) {
+      setError('Password must contain at least one special character');
       return;
     }
 
@@ -117,7 +129,7 @@ export default function ResetPassword() {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     required
-                    minLength={6}
+                    minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="block w-full rounded-xl border border-white/70 bg-white/70 px-4 py-3 pr-12 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
@@ -134,7 +146,7 @@ export default function ResetPassword() {
                     {showPassword ? <EyeOff /> : <EyeOn />}
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">Minimum 6 characters</p>
+                <p className="mt-1 text-xs text-slate-500">Min 8 chars · uppercase · lowercase · special character (e.g. !@#$%)</p>
               </div>
 
               <div>
