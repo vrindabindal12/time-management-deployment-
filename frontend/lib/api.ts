@@ -192,6 +192,18 @@ export interface ProjectRate {
   updated_at: string;
 }
 
+export interface ClientRate {
+  id: number;
+  client_id: number;
+  employee_name?: string | null;
+  designation: string;
+  gross_rate: number;
+  discount: number;
+  net_rate: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Project {
   id: number;
   client_id: number;
@@ -208,6 +220,7 @@ export interface Client {
   code: string;
   created_at: string;
   updated_at: string;
+  rates?: ClientRate[];
   projects?: Project[];
 }
 
@@ -551,6 +564,47 @@ export const projectApi = {
 
   deleteProjectRate: async (rateId: number): Promise<{ message: string }> => {
     const response = await api.delete(`/rates/${rateId}`);
+    return response.data;
+  },
+
+  applyClientRates: async (projectId: number): Promise<{ message: string; rates: ProjectRate[] }> => {
+    const response = await api.post(`/projects/${projectId}/apply-client-rates`);
+    return response.data;
+  },
+};
+
+export const clientRateApi = {
+  getClientRates: async (clientId: number): Promise<ClientRate[]> => {
+    const response = await api.get(`/clients/${clientId}/rates`);
+    return response.data;
+  },
+
+  createClientRate: async (
+    clientId: number,
+    employeeName: string,
+    designation: string,
+    grossRate: number,
+    discount: number = 0
+  ): Promise<ClientRate> => {
+    const response = await api.post(`/clients/${clientId}/rates`, {
+      employee_name: employeeName,
+      designation,
+      gross_rate: grossRate,
+      discount
+    });
+    return response.data;
+  },
+
+  updateClientRate: async (
+    rateId: number,
+    data: Partial<Pick<ClientRate, 'employee_name' | 'designation' | 'gross_rate' | 'discount'>>
+  ): Promise<ClientRate> => {
+    const response = await api.put(`/client-rates/${rateId}`, data);
+    return response.data;
+  },
+
+  deleteClientRate: async (rateId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/client-rates/${rateId}`);
     return response.data;
   },
 };

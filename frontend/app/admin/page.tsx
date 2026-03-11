@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { employeeApi, clientApi, projectApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
-import type { Client, ClientInvoiceReport, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
+import { employeeApi, clientApi, projectApi, clientRateApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
+import type { Client, ClientInvoiceReport, ClientRate, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 const DESIGNATIONS = ['Managing Director', 'Associate Director', 'Senior Consultant'];
@@ -181,9 +181,17 @@ export default function AdminDashboard() {
   const [rateForm, setRateForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
   const [editingRateId, setEditingRateId] = useState<number | null>(null);
   const [rateEditForm, setRateEditForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+
+  // Client Rate states
+  const [clientRates, setClientRates] = useState<ClientRate[]>([]);
+  const [showAddClientRateForm, setShowAddClientRateForm] = useState(false);
+  const [clientRateForm, setClientRateForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+  const [editingClientRateId, setEditingClientRateId] = useState<number | null>(null);
+  const [clientRateEditForm, setClientRateEditForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+
   const [deleteEntityModal, setDeleteEntityModal] = useState<{
     open: boolean;
-    entityType: 'client' | 'project' | 'rate' | null;
+    entityType: 'client' | 'project' | 'rate' | 'client-rate' | null;
     entityId: number | null;
     entityName: string;
   }>({
@@ -223,6 +231,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (selectedClient) {
       loadClientProjects(selectedClient);
+      loadClientRates(selectedClient);
+    } else {
+      setClientRates([]);
     }
     setEditingClientId(null);
     setClientEditForm({ name: '', code: '' });
@@ -333,6 +344,16 @@ export default function AdminDashboard() {
       setProjectRates(project.rates);
     } catch (err: any) {
       setError('Failed to load project rates');
+      clearError();
+    }
+  };
+
+  const loadClientRates = async (clientId: number) => {
+    try {
+      const data = await clientRateApi.getClientRates(clientId);
+      setClientRates(data);
+    } catch (err: any) {
+      setError('Failed to load client rates');
       clearError();
     }
   };
@@ -622,7 +643,7 @@ export default function AdminDashboard() {
   };
 
   const openDeleteEntityModal = (
-    entityType: 'client' | 'project' | 'rate',
+    entityType: 'client' | 'project' | 'rate' | 'client-rate',
     entityId: number,
     entityName: string
   ) => {
@@ -679,6 +700,11 @@ export default function AdminDashboard() {
         await projectApi.deleteProjectRate(deleteEntityModal.entityId);
         if (selectedProject) {
           await loadProjectRates(selectedProject);
+        }
+      } else if (deleteEntityModal.entityType === 'client-rate') {
+        await clientRateApi.deleteClientRate(deleteEntityModal.entityId);
+        if (selectedClient) {
+          await loadClientRates(selectedClient);
         }
       }
 
@@ -795,6 +821,89 @@ export default function AdminDashboard() {
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to update rate');
+      clearError();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startEditClientRate = (rate: ClientRate) => {
+    setEditingClientRateId(rate.id);
+    setClientRateEditForm({
+      employeeName: rate.employee_name || '',
+      designation: rate.designation || DESIGNATIONS[0],
+      grossRate: String(rate.gross_rate ?? ''),
+      discount: String(rate.discount ?? 0),
+    });
+    setShowAddClientRateForm(false);
+  };
+
+  const cancelEditClientRate = () => {
+    setEditingClientRateId(null);
+    setClientRateEditForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+  };
+
+  const handleAddClientRate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClient) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await clientRateApi.createClientRate(
+        selectedClient,
+        clientRateForm.employeeName,
+        clientRateForm.designation,
+        parseFloat(clientRateForm.grossRate),
+        parseFloat(clientRateForm.discount)
+      );
+      setClientRateForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+      setShowAddClientRateForm(false);
+      await loadClientRates(selectedClient);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to create client rate');
+      clearError();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateClientRate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClientRateId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await clientRateApi.updateClientRate(editingClientRateId, {
+        employee_name: clientRateEditForm.employeeName,
+        designation: clientRateEditForm.designation,
+        gross_rate: parseFloat(clientRateEditForm.grossRate),
+        discount: parseFloat(clientRateEditForm.discount),
+      });
+      cancelEditClientRate();
+      if (selectedClient) {
+        await loadClientRates(selectedClient);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update client rate');
+      clearError();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApplyClientRatesToProject = async () => {
+    if (!selectedProject) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await projectApi.applyClientRates(selectedProject);
+      setProjectRates(result.rates);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to apply client rates');
       clearError();
     } finally {
       setLoading(false);
@@ -1604,7 +1713,8 @@ export default function AdminDashboard() {
         {/* CLIENTS & PROJECTS TAB */}
         {activeTab === 'clients' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* LEFT: Clients */}
+            {/* LEFT: Clients + Client Default Rates */}
+            <div className="space-y-6">
             <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/75 to-blue-100/60">
               <div className="flex justify-between items-center mb-4">
                 <div>
@@ -1743,6 +1853,205 @@ export default function AdminDashboard() {
                 <p className="text-slate-500 text-center py-4">No clients found.</p>
               )}
             </div>
+            {/* End clients panel */}
+
+            {/* Client Default Rates Section */}
+            {selectedClient && selectedClientData && (
+              <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-violet-50/70 via-white/75 to-purple-100/60">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] font-bold text-violet-700">Default Rates</p>
+                    <h3 className="text-xl font-black text-slate-900 mt-1">{selectedClientData.name}</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Auto-applied to all new projects · edit per project</p>
+                  </div>
+                  <button
+                    onClick={() => { setShowAddClientRateForm(!showAddClientRateForm); cancelEditClientRate(); }}
+                    className="px-4 py-2 text-sm font-semibold rounded-xl bg-violet-600 hover:bg-violet-700 text-white transition shrink-0"
+                  >
+                    {showAddClientRateForm ? 'Cancel' : '+ Add Rate'}
+                  </button>
+                </div>
+
+                {showAddClientRateForm && (
+                  <form onSubmit={handleAddClientRate} className="mb-4 p-4 bg-violet-50/80 border border-violet-200/70 rounded-2xl">
+                    <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-700 mb-3">New Default Rate</p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-violet-700 mb-1">EMPLOYEE NAME <span className="font-normal text-slate-400">(optional)</span></label>
+                        <input
+                          type="text"
+                          placeholder="e.g., Shashank Jain"
+                          value={clientRateForm.employeeName}
+                          onChange={(e) => setClientRateForm({ ...clientRateForm, employeeName: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-violet-700 mb-1">DESIGNATION</label>
+                        <select
+                          value={clientRateForm.designation}
+                          onChange={(e) => setClientRateForm({ ...clientRateForm, designation: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        >
+                          {DESIGNATIONS.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-bold text-violet-700 mb-1">GROSS RATE ($/hr)</label>
+                          <input
+                            type="number"
+                            placeholder="300"
+                            value={clientRateForm.grossRate}
+                            onChange={(e) => setClientRateForm({ ...clientRateForm, grossRate: e.target.value })}
+                            required
+                            step="0.01"
+                            min="0"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-violet-700 mb-1">DISCOUNT %</label>
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={clientRateForm.discount}
+                            onChange={(e) => setClientRateForm({ ...clientRateForm, discount: e.target.value })}
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="mt-3 w-full bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                    >
+                      {loading ? 'Adding...' : 'Add Default Rate'}
+                    </button>
+                  </form>
+                )}
+
+                {editingClientRateId !== null && (
+                  <form onSubmit={handleUpdateClientRate} className="mb-4 p-4 rounded-2xl border border-violet-200/70 bg-violet-50/70">
+                    <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-700 mb-3">Edit Default Rate</p>
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        placeholder="Employee name (optional)"
+                        value={clientRateEditForm.employeeName}
+                        onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, employeeName: e.target.value })}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+                      <select
+                        value={clientRateEditForm.designation}
+                        onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, designation: e.target.value })}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      >
+                        {DESIGNATIONS.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="Gross rate"
+                          value={clientRateEditForm.grossRate}
+                          onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, grossRate: e.target.value })}
+                          required
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        />
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          placeholder="Discount %"
+                          value={clientRateEditForm.discount}
+                          onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, discount: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                      >
+                        {loading ? 'Saving...' : 'Save Rate'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEditClientRate}
+                        className="px-4 py-2 rounded-xl text-sm border border-slate-300 bg-white/70 text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="space-y-2">
+                  {clientRates.length > 0 ? (
+                    clientRates.map((rate) => (
+                      <div key={rate.id} className="p-3 rounded-2xl border border-violet-100/80 bg-white/60 hover:bg-white/80 transition">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-slate-800 text-sm truncate">{rate.employee_name || <span className="text-slate-400 italic">Any employee</span>}</p>
+                            <p className="text-xs text-violet-700 font-semibold">{rate.designation}</p>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm shrink-0">
+                            <div className="text-center">
+                              <p className="font-bold text-slate-700">${rate.gross_rate}/hr</p>
+                              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Gross</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="font-bold text-orange-500">{rate.discount}%</p>
+                              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Off</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="font-bold text-green-600">${rate.net_rate.toFixed(2)}/hr</p>
+                              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Net</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1.5 shrink-0">
+                            <button
+                              onClick={() => startEditClientRate(rate)}
+                              disabled={loading}
+                              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-violet-100 text-violet-800 border border-violet-200 hover:bg-violet-200 transition disabled:opacity-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => openDeleteEntityModal('client-rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
+                              disabled={loading}
+                              className="px-3 py-1.5 text-xs font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6">
+                      <p className="text-slate-500 font-medium">No default rates yet.</p>
+                      <p className="text-xs text-slate-400 mt-1">Rates added here will be automatically applied to all new projects.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            </div>
+            {/* End left column wrapper */}
 
             {/* RIGHT: Projects & Rates */}
             <div className="space-y-6">
@@ -1902,29 +2211,40 @@ export default function AdminDashboard() {
               {/* Project Rates Section */}
               {selectedProject && (
                 <div className="glass-panel rounded-3xl p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-bold text-cyan-800 glass-subtle px-3 py-2 rounded-lg flex-1">
-                      GROSS RATES (Standard per hour)
-                    </h3>
-                    <button
-                      onClick={() => setShowAddRateForm(!showAddRateForm)}
-                      className="ml-2 glass-primary-btn hover:brightness-95 text-white px-3 py-1 rounded text-sm transition"
-                    >
-                      {showAddRateForm ? 'Cancel' : '+ Add'}
-                    </button>
+                  <div className="flex flex-col gap-2 mb-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] font-bold text-cyan-700">Project Rates</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Per-project overrides — edit or delete as needed</p>
+                      </div>
+                      <button
+                        onClick={() => { setShowAddRateForm(!showAddRateForm); cancelEditRate(); }}
+                        className="glass-primary-btn hover:brightness-95 text-white px-3 py-1.5 rounded-xl text-sm transition"
+                      >
+                        {showAddRateForm ? 'Cancel' : '+ Add Rate'}
+                      </button>
+                    </div>
+                    {clientRates.length > 0 && (
+                      <button
+                        onClick={handleApplyClientRatesToProject}
+                        disabled={loading}
+                        className="w-full py-2 px-4 rounded-xl text-xs font-semibold border border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 transition disabled:opacity-50"
+                      >
+                        ↓ Apply Default Client Rates (skips existing designations)
+                      </button>
+                    )}
                   </div>
 
                   {showAddRateForm && (
                     <form onSubmit={handleAddRate} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-xs font-bold text-cyan-700 mb-1">EMPLOYEE NAME</label>
+                          <label className="block text-xs font-bold text-cyan-700 mb-1">EMPLOYEE NAME <span className="font-normal text-slate-400">(optional)</span></label>
                           <input
                             type="text"
                             placeholder="e.g., Shashank Jain"
                             value={rateForm.employeeName}
                             onChange={(e) => setRateForm({ ...rateForm, employeeName: e.target.value })}
-                            required
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                           />
                         </div>
