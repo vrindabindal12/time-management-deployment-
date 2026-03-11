@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { employeeApi, getCurrentUser, logout, isAuthenticated, isAdmin, Project, WorkEntry } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import LiveClock from '@/components/LiveClock';
 
 const formatLocalDate = (date: Date) => {
   const yyyy = date.getFullYear();
@@ -40,7 +41,6 @@ export default function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
 
   const [weekAnchorDate, setWeekAnchorDate] = useState(() => getWeekStart(new Date()));
   const [weeklyRows, setWeeklyRows] = useState<WeeklyRow[]>([]);
@@ -82,9 +82,6 @@ export default function Dashboard() {
     loadProjects();
     loadWeeklyData(weekAnchorDate);
     fetchTodaysTotal();
-
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
   }, [router, weekAnchorDate]);
 
   const fetchTodaysTotal = async () => {
@@ -310,7 +307,7 @@ export default function Dashboard() {
             </div>
             <div className="text-right">
               <p className="font-semibold text-slate-800">{user.name}</p>
-              <p className="text-sm text-slate-500">{currentTime.toLocaleString()}</p>
+              <p className="text-sm text-slate-500"><LiveClock /></p>
             </div>
           </div>
 

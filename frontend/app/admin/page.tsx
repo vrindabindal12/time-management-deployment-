@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { employeeApi, clientApi, projectApi, clientRateApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
 import type { Client, ClientInvoiceReport, ClientRate, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import LiveClock from '@/components/LiveClock';
 
 const DESIGNATIONS = ['Managing Director', 'Associate Director', 'Senior Consultant'];
 
@@ -105,7 +106,6 @@ const getEmployeeAvatarGradient = (employee: Employee) => {
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('onboarding');
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalProjectsCount, setTotalProjectsCount] = useState(0);
@@ -218,8 +218,7 @@ export default function AdminDashboard() {
     loadEmployees();
     loadClients();
 
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    return () => {};
   }, [router]);
 
   useEffect(() => {
@@ -1131,7 +1130,7 @@ export default function AdminDashboard() {
               <h2 className="text-3xl font-black text-slate-900">Admin Dashboard</h2>
               <p className="text-slate-600 mt-1">Organization Overview</p>
             </div>
-            <p className="text-slate-500 text-sm">{currentTime.toLocaleString()}</p>
+            <p className="text-slate-500 text-sm"><LiveClock /></p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-2xl border border-white/70 bg-gradient-to-br from-cyan-100/80 via-white/80 to-blue-100/70 p-5 shadow-lg">
