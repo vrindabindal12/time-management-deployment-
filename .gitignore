@@ -147,3 +147,6 @@ secrets.json
 .cache/
 .temp/
 .trash/
+
+PRD_AND_TECHNICAL_DOCUMENTATION.md
+PRD_AND_TECHNICAL_DOCUMENTATION.pdf
