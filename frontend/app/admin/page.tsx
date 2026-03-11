@@ -118,6 +118,8 @@ export default function AdminDashboard() {
   const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false);
   const [employeeForm, setEmployeeForm] = useState({ name: '', email: '', password: '', reporting_manager: '' });
   const [showOnboardingForm, setShowOnboardingForm] = useState(false);
+  const [showOnboardingPassword, setShowOnboardingPassword] = useState(false);
+  const [onboardingEmailError, setOnboardingEmailError] = useState<string | null>(null);
   const [onboardingForm, setOnboardingForm] = useState(emptyOnboardingForm);
   const [employeeRoleEdit, setEmployeeRoleEdit] = useState<Record<number, string>>({});
   const [savingRoleId, setSavingRoleId] = useState<number | null>(null);
@@ -390,6 +392,16 @@ export default function AdminDashboard() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setOnboardingEmailError(null);
+
+    const emailExists = employees.some(
+      (emp) => emp.email.toLowerCase() === onboardingForm.email.trim().toLowerCase()
+    );
+    if (emailExists) {
+      setOnboardingEmailError('This email is already registered to an existing account.');
+      setLoading(false);
+      return;
+    }
 
     try {
       await employeeApi.createEmployee(
@@ -422,6 +434,7 @@ export default function AdminDashboard() {
 
       setOnboardingForm(emptyOnboardingForm);
       setShowOnboardingForm(false);
+      setOnboardingEmailError(null);
       await loadEmployees();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to onboard employee');
@@ -1338,158 +1351,18 @@ export default function AdminDashboard() {
         {activeTab === 'onboarding' && (
           <div className="space-y-6">
             <div className="glass-panel rounded-3xl p-6">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-800">Employee Management</h2>
                   <p className="text-sm text-slate-600 mt-1">Create employee + compensation/promotion profile in one step.</p>
                 </div>
                 <button
-                  onClick={() => setShowOnboardingForm(!showOnboardingForm)}
+                  onClick={() => { setShowOnboardingForm(true); setShowOnboardingPassword(false); setOnboardingEmailError(null); }}
                   className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition"
                 >
-                  {showOnboardingForm ? 'Cancel' : '+ Add Employee Profile'}
+                  + Add Employee Profile
                 </button>
               </div>
-
-              {showOnboardingForm && (
-                <form onSubmit={handleOnboardEmployee} className="glass-subtle rounded-2xl border border-white/60 p-4 space-y-4">
-                  {/* Role selector — full-width, above all other fields */}
-                  <div className="rounded-2xl border border-indigo-200/70 bg-gradient-to-r from-indigo-50/80 to-violet-50/60 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] font-bold text-indigo-700 mb-3">Access Role</p>
-                    <div className="grid grid-cols-3 gap-3">
-                      {([
-                        { value: 'employee', label: 'Employee', desc: 'Time tracking only', icon: '👤', color: 'emerald' },
-                        { value: 'admin', label: 'Admin', desc: 'Full admin access', icon: '🛡️', color: 'violet' },
-                        { value: 'both', label: 'Both', desc: 'Admin + Employee', icon: '⚡', color: 'amber' },
-                      ] as const).map(({ value, label, desc, icon, color }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setOnboardingForm({ ...onboardingForm, role: value })}
-                          className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all duration-200 ${
-                            onboardingForm.role === value
-                              ? value === 'employee'
-                                ? 'border-emerald-400 bg-emerald-50 text-emerald-800 shadow-md'
-                                : value === 'admin'
-                                  ? 'border-violet-400 bg-violet-50 text-violet-800 shadow-md'
-                                  : 'border-amber-400 bg-amber-50 text-amber-800 shadow-md'
-                              : 'border-white/70 bg-white/60 text-slate-600 hover:border-slate-300'
-                          }`}
-                        >
-                          <span className="text-xl">{icon}</span>
-                          <span className="font-bold">{label}</span>
-                          <span className={`text-[10px] font-normal ${onboardingForm.role === value ? 'opacity-80' : 'text-slate-400'}`}>{desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <input
-                      type="text"
-                      placeholder="Employee Name *"
-                      value={onboardingForm.name}
-                      onChange={(e) => setOnboardingForm({ ...onboardingForm, name: e.target.value })}
-                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
-                      required
-                    />
-                    <input
-                      type="email"
-                      placeholder="Email *"
-                      value={onboardingForm.email}
-                      onChange={(e) => setOnboardingForm({ ...onboardingForm, email: e.target.value })}
-                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
-                      required
-                    />
-                    <input
-                      type="password"
-                      placeholder="Password *"
-                      value={onboardingForm.password}
-                      onChange={(e) => setOnboardingForm({ ...onboardingForm, password: e.target.value })}
-                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
-                      minLength={6}
-                      required
-                    />
-                    <input
-                      type="text"
-                      placeholder="Designation"
-                      value={onboardingForm.designation}
-                      onChange={(e) => setOnboardingForm({ ...onboardingForm, designation: e.target.value })}
-                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Reporting Manager *"
-                      value={onboardingForm.reporting_manager}
-                      onChange={(e) => setOnboardingForm({ ...onboardingForm, reporting_manager: e.target.value })}
-                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
-                      required
-                    />
-                    <input
-                      type="date"
-                      value={onboardingForm.start_date}
-                      onChange={(e) => setOnboardingForm({ ...onboardingForm, start_date: e.target.value })}
-                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Current Hourly Rate"
-                      value={onboardingForm.current_hourly_rate}
-                      onChange={(e) => setOnboardingForm({ ...onboardingForm, current_hourly_rate: e.target.value })}
-                      className="border border-slate-300 rounded-xl px-3 py-2 bg-white/80"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                    {[1, 2, 3, 4, 5].map((idx) => (
-                      <div key={idx} className="rounded-xl border border-white/70 bg-white/60 p-3 space-y-2">
-                        <p className="text-xs font-bold text-slate-600 uppercase">Promotion {idx}</p>
-                        <input
-                          type="date"
-                          value={onboardingForm[`promotion_${idx}_date` as keyof typeof onboardingForm] as string}
-                          onChange={(e) => setOnboardingForm({
-                            ...onboardingForm,
-                            [`promotion_${idx}_date`]: e.target.value,
-                          })}
-                          className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85"
-                        />
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="Hourly rate"
-                          value={onboardingForm[`promotion_${idx}_rate` as keyof typeof onboardingForm] as string}
-                          onChange={(e) => setOnboardingForm({
-                            ...onboardingForm,
-                            [`promotion_${idx}_rate`]: e.target.value,
-                          })}
-                          className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85"
-                        />
-                        <input
-                          type="text"
-                          placeholder="New designation (optional)"
-                          value={onboardingForm[`promotion_${idx}_designation` as keyof typeof onboardingForm] as string}
-                          onChange={(e) => setOnboardingForm({
-                            ...onboardingForm,
-                            [`promotion_${idx}_designation`]: e.target.value,
-                          })}
-                          className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85 col-span-2"
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="glass-primary-btn hover:brightness-95 text-white px-6 py-2 rounded-xl transition disabled:opacity-50"
-                  >
-                    {loading ? 'Saving...' : 'Create Employee Profile'}
-                  </button>
-                </form>
-              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -2707,6 +2580,202 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {showOnboardingForm && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-md flex items-center justify-center px-4 py-6"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); } }}
+        >
+          <div className="w-full max-w-4xl glass-panel rounded-3xl shadow-2xl flex flex-col max-h-[92vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/30 shrink-0">
+              <div>
+                <h3 className="text-2xl font-black text-slate-900">Add Employee Profile</h3>
+                <p className="text-sm text-slate-500 mt-0.5">Create employee + compensation/promotion profile in one step.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); }}
+                className="px-4 py-2 rounded-xl bg-white/70 border border-white/70 text-slate-700 text-sm font-semibold hover:bg-white/90 transition"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {/* Scrollable form */}
+            <form onSubmit={handleOnboardEmployee} autoComplete="off" className="overflow-y-auto px-6 py-5 space-y-5">
+              {/* Role selector */}
+              <div className="rounded-2xl border border-indigo-200/70 bg-gradient-to-r from-indigo-50/80 to-violet-50/60 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] font-bold text-indigo-700 mb-3">Access Role</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { value: 'employee', label: 'Employee', desc: 'Time tracking only', icon: '👤' },
+                    { value: 'admin', label: 'Admin', desc: 'Full admin access', icon: '🛡️' },
+                    { value: 'both', label: 'Both', desc: 'Admin + Employee', icon: '⚡' },
+                  ] as const).map(({ value, label, desc, icon }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setOnboardingForm({ ...onboardingForm, role: value })}
+                      className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all duration-200 ${
+                        onboardingForm.role === value
+                          ? value === 'employee'
+                            ? 'border-emerald-400 bg-emerald-50 text-emerald-800 shadow-md'
+                            : value === 'admin'
+                              ? 'border-violet-400 bg-violet-50 text-violet-800 shadow-md'
+                              : 'border-amber-400 bg-amber-50 text-amber-800 shadow-md'
+                          : 'border-white/70 bg-white/60 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      <span className="text-xl">{icon}</span>
+                      <span className="font-bold">{label}</span>
+                      <span className={`text-[10px] font-normal ${onboardingForm.role === value ? 'opacity-80' : 'text-slate-400'}`}>{desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Basic info */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  placeholder="Employee Name *"
+                  value={onboardingForm.name}
+                  onChange={(e) => setOnboardingForm({ ...onboardingForm, name: e.target.value })}
+                  autoComplete="off"
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white/85 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <input
+                  type="email"
+                  placeholder="Email *"
+                  value={onboardingForm.email}
+                  onChange={(e) => { setOnboardingForm({ ...onboardingForm, email: e.target.value }); if (onboardingEmailError) setOnboardingEmailError(null); }}
+                  autoComplete="off"
+                  className={`border rounded-xl px-3 py-2.5 bg-white/85 focus:outline-none focus:ring-2 ${
+                    onboardingEmailError ? 'border-red-400 focus:ring-red-300' : 'border-slate-300 focus:ring-blue-400'
+                  }`}
+                  required
+                />
+                <div className="relative">
+                  <input
+                    type={showOnboardingPassword ? 'text' : 'password'}
+                    placeholder="Password *"
+                    value={onboardingForm.password}
+                    onChange={(e) => setOnboardingForm({ ...onboardingForm, password: e.target.value })}
+                    autoComplete="new-password"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 pr-10 bg-white/85 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    minLength={6}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOnboardingPassword((v) => !v)}
+                    className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-700 transition"
+                    tabIndex={-1}
+                    title={showOnboardingPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showOnboardingPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    )}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Designation"
+                  value={onboardingForm.designation}
+                  onChange={(e) => setOnboardingForm({ ...onboardingForm, designation: e.target.value })}
+                  autoComplete="off"
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white/85 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <input
+                  type="text"
+                  placeholder="Reporting Manager *"
+                  value={onboardingForm.reporting_manager}
+                  onChange={(e) => setOnboardingForm({ ...onboardingForm, reporting_manager: e.target.value })}
+                  autoComplete="off"
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white/85 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <input
+                  type="date"
+                  value={onboardingForm.start_date}
+                  onChange={(e) => setOnboardingForm({ ...onboardingForm, start_date: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white/85 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Current Hourly Rate"
+                  value={onboardingForm.current_hourly_rate}
+                  onChange={(e) => setOnboardingForm({ ...onboardingForm, current_hourly_rate: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white/85 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+
+              {/* Duplicate email error */}
+              {onboardingEmailError && (
+                <div className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  {onboardingEmailError}
+                </div>
+              )}
+
+              {/* Promotions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                {[1, 2, 3, 4, 5].map((idx) => (
+                  <div key={idx} className="rounded-xl border border-white/70 bg-white/60 p-3 space-y-2">
+                    <p className="text-xs font-bold text-slate-600 uppercase">Promotion {idx}</p>
+                    <input
+                      type="date"
+                      value={onboardingForm[`promotion_${idx}_date` as keyof typeof onboardingForm] as string}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, [`promotion_${idx}_date`]: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Hourly rate"
+                      value={onboardingForm[`promotion_${idx}_rate` as keyof typeof onboardingForm] as string}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, [`promotion_${idx}_rate`]: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85"
+                    />
+                    <input
+                      type="text"
+                      placeholder="New designation (optional)"
+                      value={onboardingForm[`promotion_${idx}_designation` as keyof typeof onboardingForm] as string}
+                      onChange={(e) => setOnboardingForm({ ...onboardingForm, [`promotion_${idx}_designation`]: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white/85"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end gap-3 pt-2 pb-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); }}
+                  className="px-5 py-2.5 rounded-xl bg-white/70 border border-white/70 text-slate-700 text-sm font-semibold hover:bg-white/90 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="glass-primary-btn hover:brightness-95 text-white px-6 py-2.5 rounded-xl transition disabled:opacity-50 font-semibold"
+                >
+                  {loading ? 'Saving...' : 'Create Employee Profile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {editingEmployeeId !== null && employeeProfileEdits[editingEmployeeId] && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-md flex items-center justify-center px-4">
