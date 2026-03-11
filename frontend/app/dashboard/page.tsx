@@ -154,7 +154,7 @@ export default function Dashboard() {
 
   const handleCellChange = async (rowIdx: number, dateKey: string, value: string) => {
     const hours = value === '' ? 0 : parseFloat(value);
-    if (isNaN(hours) || hours < 0 || hours > 24) return;
+    if (isNaN(hours) || hours <= 0 || hours > 24) return;
 
     const updatedRows = [...weeklyRows];
     const row = updatedRows[rowIdx];

@@ -2,10 +2,13 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import os
+import secrets
 import csv
 import io
 from functools import wraps
@@ -20,8 +23,12 @@ load_dotenv()
 
 # Configuration – all secrets from env; no defaults that contain real secrets
 basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '')
-ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', '')
+_secret_key = os.environ.get('SECRET_KEY', '')
+if not _secret_key:
+    raise ValueError("SECRET_KEY must be set in .env — do not run with an empty key")
+app.config['SECRET_KEY'] = _secret_key
+ADMIN_EMAIL = (os.environ.get('ADMIN_EMAIL', '') or '').lower().strip()
+SUPER_ADMIN_EMAIL = ADMIN_EMAIL
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
 
 # Database configuration
@@ -49,6 +56,8 @@ app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.co
 mail = Mail(app)
 
 db = SQLAlchemy(app)
+
+limiter = Limiter(app=app, key_func=get_remote_address, storage_uri='memory://')
 
 # Models
 class Employee(db.Model):
@@ -79,7 +88,15 @@ class Employee(db.Model):
     promotion_5_rate = db.Column(db.Float, nullable=True)
     promotion_5_designation = db.Column(db.String(120), nullable=True)
     profile_photo = db.Column(db.Text, nullable=True)
+    password_reset_token = db.Column(db.String(100), nullable=True)
+    password_reset_expires = db.Column(db.DateTime, nullable=True)
     punches = db.relationship('Punch', backref='employee', lazy=True)
+
+    def generate_password_reset_token(self):
+        token = secrets.token_urlsafe(32)
+        self.password_reset_token = token
+        self.password_reset_expires = datetime.utcnow() + timedelta(hours=24)
+        return token
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -251,22 +268,22 @@ class ClientRate(db.Model):
         }
 
 
-def send_verification_email(employee):
-    verification_url = f"{FRONTEND_URL}/verify-email?token={employee.verification_token}"
-    
+def send_welcome_email(employee, reset_token):
+    set_password_url = f"{FRONTEND_URL}/reset-password?token={reset_token}&mode=welcome"
+
     msg = Message(
-        subject='Verify Your Email - Time Tracking System',
+        subject='Welcome to Time Tracking — Set Your Password',
         recipients=[employee.email],
         body=f'''Hello {employee.name},
 
-Thank you for registering with our Time Tracking System!
+Your account has been created on the Time Tracking System.
 
-Please click the following link to verify your email address:
-{verification_url}
+Please click the link below to set your password and activate your account:
+{set_password_url}
 
 This link will expire in 24 hours.
 
-If you did not register for this account, please ignore this email.
+If you did not expect this email, please contact your administrator.
 
 Best regards,
 Time Tracking System Team
@@ -275,39 +292,80 @@ Time Tracking System Team
 <html>
 <body>
     <h2>Hello {employee.name},</h2>
-    
-    <p>Thank you for registering with our Time Tracking System!</p>
-    
-    <p>Please click the button below to verify your email address:</p>
-    
+    <p>Your account has been created on the Time Tracking System.</p>
+    <p>Please click the button below to set your password:</p>
     <p style="margin: 20px 0;">
-        <a href="{verification_url}" 
-           style="background-color: #4CAF50; color: white; padding: 12px 24px; 
+        <a href="{set_password_url}"
+           style="background-color: #4CAF50; color: white; padding: 12px 24px;
                   text-decoration: none; border-radius: 4px; display: inline-block;">
-            Verify Email Address
+            Set Your Password
         </a>
     </p>
-    
     <p><strong>Important:</strong> This link will expire in 24 hours.</p>
-    
-    <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
-    <p><a href="{verification_url}">{verification_url}</a></p>
-    
-    <p>If you did not register for this account, please ignore this email.</p>
-    
+    <p>If the button doesn't work, copy and paste this link into your browser:</p>
+    <p><a href="{set_password_url}">{set_password_url}</a></p>
     <br>
-    <p>Best regards,<br>
-    Time Tracking System Team</p>
+    <p>Best regards,<br>Time Tracking System Team</p>
 </body>
 </html>
 '''
     )
-    
+
     try:
         mail.send(msg)
-        print(f"Verification email sent to {employee.email}")
+        print(f"Welcome email sent to {employee.email}")
     except Exception as e:
-        print(f"Failed to send verification email to {employee.email}: {str(e)}")
+        print(f"Failed to send welcome email to {employee.email}: {str(e)}")
+
+
+def send_password_reset_email(employee, reset_token):
+    reset_url = f"{FRONTEND_URL}/reset-password?token={reset_token}"
+
+    msg = Message(
+        subject='Reset Your Password - Time Tracking System',
+        recipients=[employee.email],
+        body=f'''Hello {employee.name},
+
+A password reset was requested for your account.
+
+Please click the link below to reset your password:
+{reset_url}
+
+This link will expire in 24 hours.
+
+If you did not request a password reset, please ignore this email.
+
+Best regards,
+Time Tracking System Team
+''',
+        html=f'''
+<html>
+<body>
+    <h2>Hello {employee.name},</h2>
+    <p>A password reset was requested for your account.</p>
+    <p style="margin: 20px 0;">
+        <a href="{reset_url}"
+           style="background-color: #3B82F6; color: white; padding: 12px 24px;
+                  text-decoration: none; border-radius: 4px; display: inline-block;">
+            Reset Password
+        </a>
+    </p>
+    <p><strong>Important:</strong> This link will expire in 24 hours.</p>
+    <p>If the button doesn't work, copy and paste this link into your browser:</p>
+    <p><a href="{reset_url}">{reset_url}</a></p>
+    <p>If you did not request this, please ignore this email.</p>
+    <br>
+    <p>Best regards,<br>Time Tracking System Team</p>
+</body>
+</html>
+'''
+    )
+
+    try:
+        mail.send(msg)
+        print(f"Password reset email sent to {employee.email}")
+    except Exception as e:
+        print(f"Failed to send password reset email to {employee.email}: {str(e)}")
 
 
 def get_filtered_work_entries(employee_id):
@@ -371,7 +429,7 @@ def build_export_rows(employee, work_entries):
 def create_csv_response(filename, rows):
     output = io.StringIO()
     fieldnames = [
-        'ID', 'Employee Name', 'Employee Email', 'Project Name',
+        'ID', 'Employee Name', 'Employee Email', 'Project Name', 'Project Code', 'Client Name',
         'Work Date', 'Hours Worked', 'Description', 'Updated By Admin',
         'Created At', 'Updated At'
     ]
@@ -398,7 +456,7 @@ def create_excel_response(filename, rows):
     worksheet.title = 'Work History'
 
     headers = [
-        'ID', 'Employee Name', 'Employee Email', 'Project Name',
+        'ID', 'Employee Name', 'Employee Email', 'Project Name', 'Project Code', 'Client Name',
         'Work Date', 'Hours Worked', 'Description', 'Updated By Admin',
         'Created At', 'Updated At'
     ]
@@ -506,8 +564,29 @@ def ensure_employee_schema():
     db.session.commit()
 
 
+def ensure_password_reset_schema():
+    """Add password_reset_token/expires columns for existing databases."""
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(employee)")).fetchall()
+        }
+        for col, col_type in [('password_reset_token', 'TEXT'), ('password_reset_expires', 'DATETIME')]:
+            if col not in existing:
+                db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {col} {col_type}"))
+        db.session.commit()
+    else:
+        for col, col_type in [('password_reset_token', 'VARCHAR(100)'), ('password_reset_expires', 'TIMESTAMP')]:
+            try:
+                db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {col} {col_type}"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+
 def generate_employee_code(employee_id):
-    return f'BKP-{employee_id:03d}'
+    prefix = os.environ.get('EMPLOYEE_CODE_PREFIX', 'BKP')
+    return f'{prefix}-{employee_id:03d}'
 
 
 def ensure_employee_codes():
@@ -734,6 +813,7 @@ with app.app_context():
     db.create_all()
     ensure_employee_schema()
     ensure_role_schema()
+    ensure_password_reset_schema()
     ensure_employee_codes()
     ensure_punch_invoice_schema()
     ensure_project_rate_schema()
@@ -798,13 +878,15 @@ def admin_required(f):
 
 # Routes
 @app.route('/api/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def login():
     data = request.json
     
     if not data.get('email') or not data.get('password'):
         return jsonify({'error': 'Email and password are required'}), 400
     
-    employee = Employee.query.filter_by(email=data['email']).first()
+    email = (data['email'] or '').lower().strip()
+    employee = Employee.query.filter_by(email=email).first()
     
     if not employee or not employee.check_password(data['password']):
         return jsonify({'error': 'Invalid email or password'}), 401
@@ -822,68 +904,49 @@ def login():
         'employee': employee.to_dict()
     }), 200
 
-@app.route('/api/register', methods=['POST'])
-def register():
-    data = request.json
-    
-    if not data.get('name') or not data.get('email') or not data.get('password'):
-        return jsonify({'error': 'Name, email, and password are required'}), 400
-    
-    existing_employee = Employee.query.filter_by(email=data['email']).first()
-    if existing_employee:
-        if existing_employee.is_verified:
-            return jsonify({'error': 'Employee with this email already exists'}), 400
-        else:
-            # Resend verification email for unverified account
-            verification_token = existing_employee.generate_verification_token()
-            db.session.commit()
-            send_verification_email(existing_employee)
-            return jsonify({
-                'message': 'Verification email sent. Please check your email to verify your account.',
-                'email_sent': True
-            }), 200
-    
-    employee = Employee(
-        name=data['name'],
-        email=data['email'],
-        is_admin=False,
-        is_verified=False
-    )
-    employee.set_password(data['password'])
-    
-    # Generate verification token
-    verification_token = employee.generate_verification_token()
-    
-    db.session.add(employee)
-    db.session.commit()
-    
-    # Send verification email
-    send_verification_email(employee)
-    
-    return jsonify({
-        'message': 'Registration successful. Please check your email to verify your account.',
-        'email_sent': True
-    }), 201
+@app.route('/api/forgot-password', methods=['POST'])
+@limiter.limit("5 per minute")
+def forgot_password():
+    data = request.json or {}
+    email = (data.get('email') or '').lower().strip()
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
 
-@app.route('/api/verify-email/<token>', methods=['GET'])
-def verify_email(token):
-    employee = Employee.query.filter_by(verification_token=token).first()
-    
+    employee = Employee.query.filter_by(email=email).first()
+    # Always return success to avoid user enumeration
+    if employee:
+        token = employee.generate_password_reset_token()
+        db.session.commit()
+        send_password_reset_email(employee, token)
+
+    return jsonify({'message': 'If that email exists in our system, a reset link has been sent.'}), 200
+
+
+@app.route('/api/reset-password', methods=['POST'])
+def reset_password():
+    data = request.json or {}
+    token = (data.get('token') or '').strip()
+    new_password = data.get('new_password') or ''
+
+    if not token or not new_password:
+        return jsonify({'error': 'Token and new password are required'}), 400
+
+    if len(new_password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+
+    employee = Employee.query.filter_by(password_reset_token=token).first()
     if not employee:
-        return jsonify({'error': 'Invalid verification token'}), 400
-    
-    if employee.verification_token_expires < datetime.utcnow():
-        return jsonify({'error': 'Verification token has expired. Please request a new verification email.'}), 400
-    
-    if employee.is_verified:
-        return jsonify({'message': 'Email already verified. You can now log in.'}), 200
-    
-    employee.is_verified = True
-    employee.verification_token = None
-    employee.verification_token_expires = None
+        return jsonify({'error': 'Invalid or expired reset token'}), 400
+
+    if employee.password_reset_expires < datetime.utcnow():
+        return jsonify({'error': 'Reset token has expired. Please request a new one.'}), 400
+
+    employee.set_password(new_password)
+    employee.password_reset_token = None
+    employee.password_reset_expires = None
     db.session.commit()
-    
-    return jsonify({'message': 'Email verified successfully! You can now log in.'}), 200
+
+    return jsonify({'message': 'Password updated successfully. You can now log in.'}), 200
 
 @app.route('/api/work/<int:work_id>/payable-values', methods=['PUT'])
 @token_required
@@ -907,30 +970,6 @@ def update_work_payable_values(current_user, work_id):
     work_entry.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify({'message': 'Payable values updated successfully', 'work': work_entry.to_dict()}), 200
-
-@app.route('/api/resend-verification', methods=['POST'])
-def resend_verification():
-    data = request.json
-    
-    if not data.get('email'):
-        return jsonify({'error': 'Email is required'}), 400
-    
-    employee = Employee.query.filter_by(email=data['email']).first()
-    
-    if not employee:
-        return jsonify({'error': 'No account found with this email address'}), 404
-    
-    if employee.is_verified:
-        return jsonify({'error': 'This email is already verified'}), 400
-    
-    # Generate new verification token
-    verification_token = employee.generate_verification_token()
-    db.session.commit()
-    
-    # Send verification email
-    send_verification_email(employee)
-    
-    return jsonify({'message': 'Verification email sent. Please check your email.'}), 200
 
 @app.route('/api/change-password', methods=['POST'])
 @token_required
@@ -978,8 +1017,13 @@ def create_employee(current_user):
         return jsonify({'error': 'Name, email, and password are required'}), 400
     if not (data.get('reporting_manager') or '').strip():
         return jsonify({'error': 'Reporting manager is required'}), 400
+
+    email = (data['email'] or '').lower().strip()
+    password = data.get('password') or ''
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
     
-    existing_employee = Employee.query.filter_by(email=data['email']).first()
+    existing_employee = Employee.query.filter_by(email=email).first()
     if existing_employee:
         return jsonify({'error': 'Employee with this email already exists'}), 400
 
@@ -989,11 +1033,11 @@ def create_employee(current_user):
 
     employee = Employee(
         name=data['name'],
-        email=data['email'],
+        email=email,
         is_admin=(role in ('admin', 'both')),
         role=role
     )
-    employee.set_password(data['password'])
+    employee.set_password(password)
 
     try:
         apply_employee_profile(employee, data)
@@ -1007,6 +1051,11 @@ def create_employee(current_user):
     if not employee.employee_code:
         employee.employee_code = generate_employee_code(employee.id)
         db.session.commit()
+
+    # Send welcome email with password-set link
+    reset_token = employee.generate_password_reset_token()
+    db.session.commit()
+    send_welcome_email(employee, reset_token)
     
     return jsonify(employee.to_dict()), 201
 
@@ -1057,6 +1106,9 @@ def delete_employee(current_user, employee_id):
 
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
+
+    if SUPER_ADMIN_EMAIL and employee.email.lower() == SUPER_ADMIN_EMAIL:
+        return jsonify({'error': 'The super admin account cannot be deleted'}), 403
 
     # Delete related work entries first to avoid foreign key constraint issues.
     Punch.query.filter_by(employee_id=employee_id).delete(synchronize_session=False)

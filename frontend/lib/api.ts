@@ -252,6 +252,16 @@ export const authApi = {
     });
     return response.data;
   },
+
+  forgotPassword: async (email: string): Promise<{ message: string }> => {
+    const response = await api.post('/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (token: string, newPassword: string): Promise<{ message: string }> => {
+    const response = await api.post('/reset-password', { token, new_password: newPassword });
+    return response.data;
+  },
 };
 
 export const employeeApi = {
