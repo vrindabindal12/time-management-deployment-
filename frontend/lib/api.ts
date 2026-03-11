@@ -429,6 +429,26 @@ export const employeeApi = {
     return response.data;
   },
 
+  downloadClientInvoicePdf: async (
+    clientId: number,
+    startDate: string,
+    endDate: string,
+    clientCode: string,
+    projectFilter?: string
+  ): Promise<void> => {
+    const params: any = {
+      client_id: clientId,
+      start_date: startDate,
+      end_date: endDate,
+    };
+    if (projectFilter && projectFilter !== 'ALL') params.project_filter = projectFilter;
+    const response = await api.get('/invoices/client/pdf', {
+      params,
+      responseType: 'blob',
+    });
+    triggerFileDownload(response.data, `invoice_${clientCode}_${startDate}_to_${endDate}.pdf`);
+  },
+
   getEmployeePayablesReport: async (
     startDate: string,
     endDate: string,

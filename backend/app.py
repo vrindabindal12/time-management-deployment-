@@ -16,6 +16,12 @@ from functools import wraps
 from collections import defaultdict
 from openpyxl import Workbook
 from sqlalchemy import text
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from reportlab.lib import colors as rl_colors
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 
 _PASSWORD_SPECIAL_RE = re.compile(r'[!@#$%^&*()\-_=+\[\]{}|;:\'",.<>?/`~\\]')
 
@@ -1538,6 +1544,327 @@ def get_report(current_user):
     return jsonify(report)
 
 
+def _build_client_invoice_data(client, start_date, end_date):
+    """Build the client invoice data dict shared by JSON and PDF endpoints."""
+    projects = Project.query.filter_by(client_id=client.id).all()
+    project_by_id = {project.id: project for project in projects}
+    project_by_code = {project.code: project for project in projects if project.code}
+    project_by_name = {project.name: project for project in projects if project.name}
+    project_ids = list(project_by_id.keys())
+
+    if not project_ids:
+        return {
+            'client': client.to_dict(),
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+            'rows': [],
+            'project_totals': [],
+            'total_hours': 0.0,
+            'total_net_billable': 0.0
+        }
+
+    base_query = Punch.query.filter(
+        Punch.work_date >= start_date,
+        Punch.work_date <= end_date
+    )
+    punches = base_query.filter(Punch.project_id.in_(project_ids)).all()
+    legacy_punches = base_query.filter(Punch.project_id.is_(None)).all()
+    for punch in legacy_punches:
+        if punch.project_code and punch.project_code in project_by_code:
+            punches.append(punch)
+        elif punch.project_name and punch.project_name in project_by_name:
+            punches.append(punch)
+
+    employee_ids = list({p.employee_id for p in punches})
+    employees = Employee.query.filter(Employee.id.in_(employee_ids)).all() if employee_ids else []
+    employee_by_id = {emp.id: emp for emp in employees}
+
+    def _norm(v):
+        return (v or '').strip().lower()
+
+    rates = ProjectRate.query.filter(ProjectRate.project_id.in_(project_ids)).all()
+    rate_by_ped, rate_by_pe, rate_by_pd = {}, {}, {}
+    employee_scoped_projects = set()
+    first_rate_by_project = {}
+    for rate in rates:
+        dk = _norm(rate.designation)
+        ek = _norm(rate.employee_name)
+        if ek and dk:
+            rate_by_ped[(rate.project_id, ek, dk)] = rate
+        if ek and (rate.project_id, ek) not in rate_by_pe:
+            rate_by_pe[(rate.project_id, ek)] = rate
+            employee_scoped_projects.add(rate.project_id)
+        if dk and (rate.project_id, dk) not in rate_by_pd:
+            rate_by_pd[(rate.project_id, dk)] = rate
+        if rate.project_id not in first_rate_by_project:
+            first_rate_by_project[rate.project_id] = rate
+
+    rows, project_totals_map = [], {}
+    total_hours = total_net_billable = 0.0
+
+    for punch in punches:
+        project = (
+            project_by_id.get(punch.project_id)
+            or (project_by_code.get(punch.project_code) if punch.project_code else None)
+            or (project_by_name.get(punch.project_name) if punch.project_name else None)
+        )
+        if not project:
+            continue
+
+        employee = employee_by_id.get(punch.employee_id)
+        _, designation = get_employee_compensation_for_date(employee, punch.work_date) if employee else (0.0, 'Unspecified')
+        ek = _norm(employee.name) if employee else ''
+        dk = _norm(designation)
+
+        sel = (rate_by_ped.get((project.id, ek, dk))
+               or rate_by_pe.get((project.id, ek)))
+        if not sel and project.id in employee_scoped_projects:
+            continue
+        sel = sel or rate_by_pd.get((project.id, dk)) or first_rate_by_project.get(project.id)
+        if not sel:
+            continue
+
+        gross_rate = sel.gross_rate
+        discount = sel.discount
+        hours = punch.hours_worked
+        net_rate = round(gross_rate * (1 - discount / 100), 2)
+        net_billable = round(net_rate * hours, 2)
+        total_hours += hours
+        total_net_billable += net_billable
+
+        pt = project_totals_map.setdefault(project.id, {
+            'project_id': project.id, 'project_code': project.code,
+            'project_name': project.name, 'total_hours': 0.0, 'total_net_billable': 0.0
+        })
+        pt['total_hours'] += hours
+        pt['total_net_billable'] += net_billable
+
+        rows.append({
+            'work_id': punch.id,
+            'work_date': punch.work_date.isoformat(),
+            'project_code': project.code,
+            'project_name': project.name,
+            'employee_name': employee.name if employee else 'Unknown',
+            'employee_designation': designation,
+            'gross_rate': gross_rate,
+            'discount': discount,
+            'net_rate': net_rate,
+            'hours': round(hours, 2),
+            'net_billable': net_billable,
+            'task_performed': punch.description or '',
+            'is_invoice_override': False
+        })
+
+    rows.sort(key=lambda r: (r['work_date'], r['project_code'], r['employee_name']))
+    project_totals = sorted(project_totals_map.values(), key=lambda t: t['project_code'])
+    for t in project_totals:
+        t['total_hours'] = round(t['total_hours'], 2)
+        t['total_net_billable'] = round(t['total_net_billable'], 2)
+
+    return {
+        'client': client.to_dict(),
+        'start_date': start_date.isoformat(),
+        'end_date': end_date.isoformat(),
+        'rows': rows,
+        'project_totals': project_totals,
+        'total_hours': round(total_hours, 2),
+        'total_net_billable': round(total_net_billable, 2)
+    }
+
+
+def _generate_invoice_pdf(data, project_filter=None):
+    """Generate a polished client billing report PDF. Returns a BytesIO buffer."""
+    buf = io.BytesIO()
+    PAGE_W_RAW, _ = A4
+    MARGIN = 1.8 * cm
+    PAGE_W = PAGE_W_RAW - 2 * MARGIN
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=MARGIN, rightMargin=MARGIN,
+        topMargin=MARGIN, bottomMargin=2 * cm
+    )
+
+    C_NAVY   = rl_colors.HexColor('#1a2c5b')
+    C_SKY    = rl_colors.HexColor('#0ea5e9')
+    C_LIGHT  = rl_colors.HexColor('#f1f5f9')
+    C_BORDER = rl_colors.HexColor('#e2e8f0')
+    C_WHITE  = rl_colors.white
+    C_TEXT   = rl_colors.HexColor('#1e293b')
+    C_MUTED  = rl_colors.HexColor('#64748b')
+
+    def ps(size=9, color=None, bold=False, align=TA_LEFT, leading=None):
+        return ParagraphStyle('x',
+            fontName='Helvetica-Bold' if bold else 'Helvetica',
+            fontSize=size, textColor=color or C_TEXT,
+            alignment=align, leading=leading or size * 1.3)
+
+    client        = data['client']
+    start_date_s  = data['start_date']
+    end_date_s    = data['end_date']
+    rows          = [r for r in data['rows']
+                     if not project_filter or project_filter == 'ALL'
+                     or r['project_code'] == project_filter]
+    project_totals     = data['project_totals']
+    total_hours        = data['total_hours']
+    total_net_billable = data['total_net_billable']
+
+    def fmt(d):
+        try:
+            return datetime.strptime(d, '%Y-%m-%d').strftime('%b %d, %Y')
+        except Exception:
+            return d
+
+    invoice_no   = f"INV-{client['code']}-{datetime.now().strftime('%Y%m%d%H%M')}"
+    issued_date  = datetime.now().strftime('%B %d, %Y')
+    elements     = []
+
+    # ── HEADER ─────────────────────────────────────────────────────────
+    hdr = Table([[
+        Paragraph('BKP CYGNUS CONSULTING INC.', ps(16, C_WHITE, bold=True)),
+        Paragraph('BILLING REPORT', ps(20, C_WHITE, bold=True, align=TA_RIGHT)),
+    ]], colWidths=[PAGE_W * 0.6, PAGE_W * 0.4])
+    hdr.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), C_NAVY),
+        ('TOPPADDING',    (0, 0), (-1, -1), 16),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 16),
+        ('LEFTPADDING',   (0, 0), (0, -1),  16),
+        ('RIGHTPADDING',  (-1, 0), (-1, -1), 16),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(hdr)
+    elements.append(Spacer(1, 0.5 * cm))
+
+    # ── META ───────────────────────────────────────────────────────────
+    meta = Table([
+        [ps(7, C_MUTED, bold=True), ps(7, C_MUTED, bold=True),
+         ps(7, C_MUTED, bold=True), ps(7, C_MUTED, bold=True)],
+        [Paragraph(client['name'],             ps(10, C_NAVY, bold=True)),
+         Paragraph(f"{fmt(start_date_s)} – {fmt(end_date_s)}", ps(10, C_NAVY, bold=True)),
+         Paragraph(invoice_no,                 ps(9,  C_NAVY, bold=True)),
+         Paragraph(issued_date,                ps(9,  C_NAVY, bold=True))],
+    ], colWidths=[PAGE_W * 0.28, PAGE_W * 0.32, PAGE_W * 0.24, PAGE_W * 0.16])
+    # replace label row with proper Paragraphs
+    meta._cellvalues[0] = [
+        Paragraph('CLIENT',         ps(7, C_MUTED, bold=True)),
+        Paragraph('BILLING PERIOD', ps(7, C_MUTED, bold=True)),
+        Paragraph('INVOICE #',      ps(7, C_MUTED, bold=True)),
+        Paragraph('ISSUED',         ps(7, C_MUTED, bold=True)),
+    ]
+    meta.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_LIGHT),
+        ('BOX',           (0, 0), (-1, -1), 0.75, C_BORDER),
+        ('LINEAFTER',     (0, 0), (-2, -1), 0.5,  C_BORDER),
+        ('TOPPADDING',    (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 12),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+    ]))
+    elements.append(meta)
+    elements.append(Spacer(1, 0.5 * cm))
+
+    # ── PROJECT SUMMARY ────────────────────────────────────────────────
+    elements.append(Paragraph('PROJECT SUMMARY', ps(7, C_MUTED, bold=True)))
+    elements.append(Spacer(1, 0.2 * cm))
+    sum_cols = [PAGE_W * 0.18, PAGE_W * 0.44, PAGE_W * 0.18, PAGE_W * 0.20]
+    sum_data = [[Paragraph(h, ps(8, C_WHITE, bold=True))
+                 for h in ['Project Code', 'Project Name', 'Total Hours', 'Net Billable (CAD$)']]]
+    sum_style = [
+        ('BACKGROUND', (0, 0), (-1, 0), C_SKY),
+        ('BOX',  (0, 0), (-1, -1), 0.75, C_BORDER),
+        ('GRID', (0, 0), (-1, -1), 0.4,  C_BORDER),
+        ('TOPPADDING',    (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
+        ('ALIGN',  (2, 0), (3, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]
+    for i, t in enumerate(project_totals):
+        bg = C_WHITE if i % 2 == 0 else C_LIGHT
+        sum_style.append(('BACKGROUND', (0, i + 1), (-1, i + 1), bg))
+        sum_data.append([
+            Paragraph(t['project_code'],               ps(8.5, C_NAVY, bold=True)),
+            Paragraph(t['project_name'],               ps(8.5)),
+            Paragraph(f"{t['total_hours']:.2f}",       ps(8.5, align=TA_RIGHT)),
+            Paragraph(f"{t['total_net_billable']:,.2f}", ps(8.5, bold=True, align=TA_RIGHT)),
+        ])
+    sum_table = Table(sum_data, colWidths=sum_cols)
+    sum_table.setStyle(TableStyle(sum_style))
+    elements.append(sum_table)
+    elements.append(Spacer(1, 0.5 * cm))
+
+    # ── DETAILED BILLING ───────────────────────────────────────────────
+    if rows:
+        elements.append(Paragraph('DETAILED BILLING', ps(7, C_MUTED, bold=True)))
+        elements.append(Spacer(1, 0.2 * cm))
+        d_cols = [
+            PAGE_W * 0.088, PAGE_W * 0.090, PAGE_W * 0.140, PAGE_W * 0.135,
+            PAGE_W * 0.060, PAGE_W * 0.100, PAGE_W * 0.062, PAGE_W * 0.100, PAGE_W * 0.125
+        ]
+        d_hdrs = ['Date', 'Project', 'Employee', 'Level',
+                  'Hrs', 'Gross Rate', 'Disc%', 'Net Rate', 'Net Billable']
+        d_data = [[Paragraph(h, ps(7, C_WHITE, bold=True)) for h in d_hdrs]]
+        d_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
+            ('BOX',  (0, 0), (-1, -1), 0.75, C_BORDER),
+            ('GRID', (0, 0), (-1, -1), 0.3,  C_BORDER),
+            ('TOPPADDING',    (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 5),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 5),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]
+        for i, row in enumerate(rows):
+            bg = C_WHITE if i % 2 == 0 else C_LIGHT
+            d_style.append(('BACKGROUND', (0, i + 1), (-1, i + 1), bg))
+            d_data.append([
+                Paragraph(row['work_date'],              ps(7.5)),
+                Paragraph(row['project_code'],           ps(7.5, C_NAVY, bold=True)),
+                Paragraph(row['employee_name'],          ps(7.5)),
+                Paragraph(row['employee_designation'],   ps(7.5, C_MUTED)),
+                Paragraph(f"{row['hours']:.2f}",         ps(7.5, align=TA_RIGHT)),
+                Paragraph(f"{row['gross_rate']:,.2f}",   ps(7.5, align=TA_RIGHT)),
+                Paragraph(f"{row['discount']:.1f}%",     ps(7.5, C_MUTED, align=TA_RIGHT)),
+                Paragraph(f"{row['net_rate']:,.2f}",     ps(7.5, align=TA_RIGHT)),
+                Paragraph(f"{row['net_billable']:,.2f}", ps(7.5, C_NAVY, bold=True, align=TA_RIGHT)),
+            ])
+        d_table = Table(d_data, colWidths=d_cols, repeatRows=1)
+        d_table.setStyle(TableStyle(d_style))
+        elements.append(d_table)
+        elements.append(Spacer(1, 0.5 * cm))
+
+    # ── TOTAL BAND ─────────────────────────────────────────────────────
+    tot = Table([[
+        Paragraph(f'TOTAL HOURS: {total_hours:.2f}',
+                  ps(10, C_WHITE, bold=True, align=TA_RIGHT)),
+        Paragraph(f'TOTAL BILLABLE:  CAD$ {total_net_billable:,.2f}',
+                  ps(14, C_WHITE, bold=True, align=TA_RIGHT)),
+    ]], colWidths=[PAGE_W * 0.40, PAGE_W * 0.60])
+    tot.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_NAVY),
+        ('TOPPADDING',    (0, 0), (-1, -1), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 14),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 14),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(tot)
+    elements.append(Spacer(1, 0.4 * cm))
+
+    # ── FOOTER ─────────────────────────────────────────────────────────
+    elements.append(Paragraph(
+        f'Confidential — Prepared by BKP Cygnus Consulting Inc. on {issued_date}. '
+        f'This document is intended solely for the named client.',
+        ps(7.5, C_MUTED, align=TA_CENTER)
+    ))
+
+    doc.build(elements)
+    buf.seek(0)
+    return buf
+
+
 @app.route('/api/invoices/client', methods=['GET'])
 @token_required
 @admin_required
@@ -1564,156 +1891,47 @@ def get_client_invoice_report(current_user):
     if not client:
         return jsonify({'error': 'Client not found'}), 404
 
-    projects = Project.query.filter_by(client_id=client_id).all()
-    project_by_id = {project.id: project for project in projects}
-    project_by_code = {project.code: project for project in projects if project.code}
-    project_by_name = {project.name: project for project in projects if project.name}
-    project_ids = list(project_by_id.keys())
+    return jsonify(_build_client_invoice_data(client, start_date, end_date))
 
-    if not project_ids:
-        return jsonify({
-            'client': client.to_dict(),
-            'start_date': start_date.isoformat(),
-            'end_date': end_date.isoformat(),
-            'rows': [],
-            'project_totals': [],
-            'total_hours': 0.0,
-            'total_net_billable': 0.0
-        })
 
-    base_query = Punch.query.filter(
-        Punch.work_date >= start_date,
-        Punch.work_date <= end_date
+@app.route('/api/invoices/client/pdf', methods=['GET'])
+@token_required
+@admin_required
+def get_client_invoice_pdf(current_user):
+    client_id = request.args.get('client_id', type=int)
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    project_filter = request.args.get('project_filter')
+
+    if not client_id:
+        return jsonify({'error': 'client_id is required'}), 400
+    if not start_date_str or not end_date_str:
+        return jsonify({'error': 'start_date and end_date are required'}), 400
+
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    if end_date < start_date:
+        return jsonify({'error': 'end_date cannot be before start_date'}), 400
+
+    client = Client.query.get(client_id)
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+
+    data = _build_client_invoice_data(client, start_date, end_date)
+    pdf_buf = _generate_invoice_pdf(data, project_filter=project_filter)
+    filename = f"invoice_{client.code}_{start_date_str}_to_{end_date_str}.pdf"
+    return send_file(
+        pdf_buf,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/pdf'
     )
 
-    punches = base_query.filter(Punch.project_id.in_(project_ids)).all()
-    legacy_punches = base_query.filter(Punch.project_id.is_(None)).all()
 
-    for punch in legacy_punches:
-        if punch.project_code and punch.project_code in project_by_code:
-            punches.append(punch)
-        elif punch.project_name and punch.project_name in project_by_name:
-            punches.append(punch)
-
-    employee_ids = list({p.employee_id for p in punches})
-    employees = Employee.query.filter(Employee.id.in_(employee_ids)).all() if employee_ids else []
-    employee_by_id = {employee.id: employee for employee in employees}
-
-    def _norm_text(value):
-        return (value or '').strip().lower()
-
-    rates = ProjectRate.query.filter(ProjectRate.project_id.in_(project_ids)).all()
-    rate_by_project_employee_designation = {}
-    rate_by_project_and_employee = {}
-    rate_by_project_and_designation = {}
-    employee_scoped_projects = set()
-    for rate in rates:
-        designation_key = _norm_text(rate.designation)
-        employee_key = _norm_text(rate.employee_name)
-        if employee_key and designation_key:
-            rate_by_project_employee_designation[(rate.project_id, employee_key, designation_key)] = rate
-        if employee_key and (rate.project_id, employee_key) not in rate_by_project_and_employee:
-            rate_by_project_and_employee[(rate.project_id, employee_key)] = rate
-            employee_scoped_projects.add(rate.project_id)
-        # Keep designation fallback available even when employee_name is present.
-        if designation_key and (rate.project_id, designation_key) not in rate_by_project_and_designation:
-            rate_by_project_and_designation[(rate.project_id, designation_key)] = rate
-    first_rate_by_project = {}
-    for rate in rates:
-        if rate.project_id not in first_rate_by_project:
-            first_rate_by_project[rate.project_id] = rate
-
-    rows = []
-    project_totals_map = {}
-    total_hours = 0.0
-    total_net_billable = 0.0
-
-    for punch in punches:
-        project = None
-        if punch.project_id and punch.project_id in project_by_id:
-            project = project_by_id[punch.project_id]
-        elif punch.project_code and punch.project_code in project_by_code:
-            project = project_by_code[punch.project_code]
-        elif punch.project_name and punch.project_name in project_by_name:
-            project = project_by_name[punch.project_name]
-
-        if not project:
-            continue
-
-        employee = employee_by_id.get(punch.employee_id)
-        _, designation = get_employee_compensation_for_date(employee, punch.work_date) if employee else (0.0, 'Unspecified')
-        employee_key = _norm_text(employee.name) if employee else ''
-        designation_key = _norm_text(designation)
-        selected_rate = rate_by_project_employee_designation.get((project.id, employee_key, designation_key))
-        if not selected_rate:
-            selected_rate = rate_by_project_and_employee.get((project.id, employee_key))
-        # If project has employee-specific rates, only those employees are invoiceable.
-        if not selected_rate and project.id in employee_scoped_projects:
-            continue
-        if not selected_rate:
-            selected_rate = rate_by_project_and_designation.get((project.id, designation_key))
-        if not selected_rate:
-            selected_rate = first_rate_by_project.get(project.id)
-        if not selected_rate:
-            continue
-
-        base_gross_rate = selected_rate.gross_rate if selected_rate else 0.0
-        base_discount = selected_rate.discount if selected_rate else 0.0
-
-        # Invoicing report is fully auto-populated from configured project rates and attendance hours.
-        gross_rate = base_gross_rate
-        discount = base_discount
-        hours = punch.hours_worked
-        net_rate = round(gross_rate * (1 - discount / 100), 2)
-        net_billable = round(net_rate * hours, 2)
-
-        total_hours += hours
-        total_net_billable += net_billable
-
-        if project.id not in project_totals_map:
-            project_totals_map[project.id] = {
-                'project_id': project.id,
-                'project_code': project.code,
-                'project_name': project.name,
-                'total_hours': 0.0,
-                'total_net_billable': 0.0
-            }
-        project_totals_map[project.id]['total_hours'] += hours
-        project_totals_map[project.id]['total_net_billable'] += net_billable
-
-        rows.append({
-            'work_id': punch.id,
-            'work_date': punch.work_date.isoformat(),
-            'project_code': project.code,
-            'project_name': project.name,
-            'employee_name': employee.name if employee else 'Unknown',
-            'employee_designation': designation,
-            'gross_rate': gross_rate,
-            'discount': discount,
-            'net_rate': net_rate,
-            'hours': round(hours, 2),
-            'net_billable': net_billable,
-            'task_performed': punch.description or '',
-            'is_invoice_override': False
-        })
-
-    rows.sort(key=lambda item: (item['work_date'], item['project_code'], item['employee_name']))
-
-    project_totals = list(project_totals_map.values())
-    for summary in project_totals:
-        summary['total_hours'] = round(summary['total_hours'], 2)
-        summary['total_net_billable'] = round(summary['total_net_billable'], 2)
-    project_totals.sort(key=lambda item: item['project_code'])
-
-    return jsonify({
-        'client': client.to_dict(),
-        'start_date': start_date.isoformat(),
-        'end_date': end_date.isoformat(),
-        'rows': rows,
-        'project_totals': project_totals,
-        'total_hours': round(total_hours, 2),
-        'total_net_billable': round(total_net_billable, 2)
-    })
 
 @app.route('/api/payables/mark-paid', methods=['PUT'])
 @token_required
