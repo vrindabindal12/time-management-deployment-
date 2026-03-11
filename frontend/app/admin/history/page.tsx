@@ -314,26 +314,26 @@ export default function AdminHistory() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen py-8 px-4">
+      <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* Success/Error Messages */}
+        {/* Toast messages */}
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="glass-panel bg-red-50/80 border border-red-200 text-red-700 px-4 py-3 rounded-2xl flex items-center gap-2 text-sm">
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
             {error}
           </div>
         )}
-        
         {success && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+          <div className="glass-panel bg-emerald-50/80 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-2xl flex items-center gap-2 text-sm">
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 5.3l-11 11-4.6-4.6-1.4 1.4 6 6L21.7 6.7z"/></svg>
             {success}
           </div>
         )}
 
-        {/* Employee Selection */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Employee</h2>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
+        {/* Filter bar */}
+        <div className="glass-panel rounded-3xl p-5">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
             <select
               value={selectedEmployee || ''}
               onChange={(e) => {
@@ -342,60 +342,32 @@ export default function AdminHistory() {
                 setProjectFilter('ALL');
                 setProjectOptions([]);
               }}
-              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
             >
               <option value="ALL">All Employees</option>
               {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
-                </option>
+                <option key={employee.id} value={employee.id}>{employee.name}</option>
               ))}
             </select>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <select
-              value={projectFilter}
-              onChange={(e) => setProjectFilter(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+              className="border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+              className="border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}
+              className="border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
               <option value="ALL">All Projects</option>
-              {projectOptions.map((projectName) => (
-                <option key={projectName} value={projectName}>
-                  {projectName}
-                </option>
-              ))}
+              {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
-            <select
-              value={clientFilter}
-              onChange={(e) => setClientFilter(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}
+              className="border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
               <option value="ALL">All Clients</option>
-              {clientOptions.map((clientName) => (
-                <option key={clientName} value={clientName}>
-                  {clientName}
-                </option>
-              ))}
+              {clientOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div className="flex gap-2 mt-3">
+          <div className="flex gap-2">
             <button
-              onClick={() => {
-                if (selectedEmployee) {
-                  loadWorkHistory(selectedEmployee);
-                }
-              }}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition"
+              onClick={() => { if (selectedEmployee) loadWorkHistory(selectedEmployee); }}
+              className="glass-primary-btn hover:brightness-95 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition"
             >
               Apply Filters
             </button>
@@ -408,188 +380,223 @@ export default function AdminHistory() {
                   loadWorkHistory(selectedEmployee, { startDate: '', endDate: '', projectName: '' });
                 }
               }}
-              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition"
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-white/70 border border-slate-200 hover:bg-white/90 transition"
             >
               Reset Filters
             </button>
           </div>
         </div>
 
-        {/* Work Records */}
+        {/* Data section */}
         {loading && !showEditModal ? (
-          <div className="bg-white rounded-lg shadow-lg p-6 text-center">
-            <p className="text-gray-600">Loading...</p>
+          <div className="glass-panel rounded-3xl p-12 text-center">
+            <div className="inline-flex items-center gap-3 text-slate-500 text-sm font-medium">
+              <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              </svg>
+              Loading entries…
+            </div>
           </div>
         ) : workData ? (
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <div className="mb-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div className="glass-panel rounded-3xl overflow-hidden">
+
+            {/* Section header */}
+            <div className="px-6 pt-6 pb-5 border-b border-slate-100/80">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                    {workData.employee.name}
-                  </h2>
-                  <p className="text-gray-600">{workData.employee.email}</p>
+                  <h2 className="text-2xl font-bold text-slate-900">{workData.employee.name}</h2>
+                  <p className="text-sm text-slate-500 mt-0.5">{workData.employee.email}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-200/60">
+                    <svg className="w-4 h-4 text-emerald-600" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                    </svg>
+                    <span className="text-sm font-bold text-emerald-700">{workData.total_hours.toFixed(2)} hrs total</span>
+                  </div>
                   <button
                     onClick={handleDownloadCsv}
                     disabled={downloading !== null || loading}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition disabled:bg-gray-400"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-slate-700 to-slate-800 text-white text-sm font-semibold hover:brightness-110 transition disabled:opacity-50 shadow-sm"
                   >
-                    {downloading === 'csv' ? 'Downloading CSV...' : 'Download CSV'}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>
+                    </svg>
+                    {downloading === 'csv' ? 'Downloading…' : 'Download CSV'}
                   </button>
                 </div>
               </div>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-2xl font-bold text-blue-600">
-                  Total Hours: {workData.total_hours.toFixed(2)}
-                </p>
-              </div>
             </div>
 
-            {/* Work Entries Table */}
-            <div>
-              <table className="w-full table-fixed">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="w-[82px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50/90 border-b border-slate-100">
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Date</th>
                     {selectedEmployee === 'ALL' && (
-                      <th className="w-[105px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Employee
-                      </th>
+                      <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Employee</th>
                     )}
-                    <th className="w-[105px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Project
-                    </th>
-                    <th className="w-[90px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Project Code
-                    </th>
-                    <th className="w-[85px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Client
-                    </th>
-                    <th className="w-[70px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Hours
-                    </th>
-                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Description
-                    </th>
-                    <th className="w-[105px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="w-[90px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Project</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Code</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Client</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Hours</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Description</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Status</th>
+                    <th className="px-5 py-3.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody>
                   {totalRecords === 0 ? (
                     <tr>
-                      <td colSpan={selectedEmployee === 'ALL' ? 7 : 6} className="px-6 py-4 text-center text-gray-500">
-                        No work entries found
+                      <td colSpan={selectedEmployee === 'ALL' ? 9 : 8} className="px-5 py-16 text-center">
+                        <div className="flex flex-col items-center gap-2 text-slate-400">
+                          <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+                          </svg>
+                          <p className="text-sm font-medium">No work entries found</p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
-                    paginatedEntries.map((entry: any) => (
-                      <tr key={entry.id} className="hover:bg-gray-50">
-                        <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-900">
-                          {formatDate(entry.work_date)}
-                        </td>
-                        {selectedEmployee === 'ALL' && (
-                          <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-900 overflow-hidden">
-                            <span className="block truncate" title={entry.employee_name || '-'}>{entry.employee_name || '-'}</span>
+                    paginatedEntries.map((entry: any, idx: number) => {
+                      const nameForAvatar = entry.employee_name || entry.project_name || 'U';
+                      const initials = nameForAvatar.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+                      const avatarPalette = [
+                        'bg-violet-100 text-violet-700',
+                        'bg-sky-100 text-sky-700',
+                        'bg-emerald-100 text-emerald-700',
+                        'bg-amber-100 text-amber-700',
+                        'bg-rose-100 text-rose-700',
+                      ];
+                      const avatarColor = avatarPalette[(nameForAvatar.charCodeAt(0) || 0) % avatarPalette.length];
+                      const isEdited = entry.updated_by_admin;
+                      return (
+                        <tr
+                          key={entry.id}
+                          className={`border-b border-slate-50 transition-colors duration-150 ${
+                            isEdited ? 'bg-amber-50/30' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
+                          } hover:bg-sky-50/60`}
+                        >
+                          <td className="px-5 py-3.5 whitespace-nowrap">
+                            <span className="text-xs font-semibold text-slate-500 bg-slate-100/80 px-2.5 py-1 rounded-lg">
+                              {formatDate(entry.work_date)}
+                            </span>
                           </td>
-                        )}
-                        <td className="px-2 py-3 text-sm text-gray-900 overflow-hidden">
-                          <span className="block truncate" title={entry.project_name}>{entry.project_name}</span>
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-900">
-                          {entry.project_code || '-'}
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-900 overflow-hidden">
-                          <span className="block truncate" title={entry.client_name || '-'}>{entry.client_name || '-'}</span>
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap text-sm font-semibold text-blue-600">
-                          {entry.hours_worked.toFixed(2)} hrs
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-600">
-                          <span className="block whitespace-pre-line break-words" title={entry.description || '-'}>{entry.description || '-'}</span>
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap">
-                          {entry.updated_by_admin ? (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                              Admin Edited
-                            </span>
-                          ) : (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                              Original
-                            </span>
+                          {selectedEmployee === 'ALL' && (
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${avatarColor}`}>
+                                  {initials}
+                                </span>
+                                <span className="text-sm font-medium text-slate-800 truncate max-w-[90px]" title={entry.employee_name}>
+                                  {entry.employee_name || '—'}
+                                </span>
+                              </div>
+                            </td>
                           )}
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap text-sm">
-                          <button
-                            onClick={() => handleEdit(entry)}
-                            className="text-blue-600 hover:text-blue-900 mr-3"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(entry.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-semibold text-slate-800 truncate max-w-[110px] block" title={entry.project_name}>
+                              {entry.project_name}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-xs font-mono font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md whitespace-nowrap">
+                              {entry.project_code || '—'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm text-slate-600 truncate max-w-[80px] block" title={entry.client_name || '—'}>
+                              {entry.client_name || '—'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm">
+                              {entry.hours_worked.toFixed(2)} hrs
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 max-w-[220px]">
+                            <p className="text-sm text-slate-600 line-clamp-2" title={entry.description || '—'}>
+                              {entry.description || <span className="text-slate-300">—</span>}
+                            </p>
+                          </td>
+                          <td className="px-5 py-3.5 whitespace-nowrap">
+                            {isEdited ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                                  Admin Edited
+                                </span>
+                                {entry.updated_at && (
+                                  <p className="text-[10px] text-slate-400 mt-0.5 ml-0.5">{formatDate(entry.updated_at)}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 5.3l-11 11-4.6-4.6-1.4 1.4 6 6L21.7 6.7z"/></svg>
+                                Original
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 whitespace-nowrap text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => handleEdit(entry)}
+                                title="Edit"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                              >
+                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                              </button>
+                              <button
+                                onClick={() => handleDelete(entry.id)}
+                                title="Delete"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* Pagination: rows per page + range + prev/next (at bottom) */}
+            {/* Pagination */}
             {totalRecords > 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-4 border-t border-gray-200">
-                <div className="flex items-center gap-4">
-                  <label htmlFor="rows-per-page" className="text-sm text-gray-600">
-                    Rows per page
-                  </label>
+              <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 border-t border-slate-100/80 bg-slate-50/60">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500 font-medium">Rows per page</span>
                   <select
-                    id="rows-per-page"
                     value={recordsPerPage}
                     onChange={(e) => setRecordsPerPage(Number(e.target.value))}
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-400"
                   >
-                    {PAGE_SIZE_OPTIONS.map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
+                    {PAGE_SIZE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
-                  <span className="text-sm text-gray-600">
-                    Showing {startItem}–{endItem} of {totalRecords}
-                  </span>
+                  <span className="text-xs text-slate-400">Showing {startItem}–{endItem} of {totalRecords}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage <= 1}
-                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
-                    Previous
+                    ← Previous
                   </button>
-                  <span className="text-sm text-gray-600">
+                  <span className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white/70 rounded-lg border border-slate-200">
                     Page {currentPage} of {totalPages}
                   </span>
                   <button
                     type="button"
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={currentPage >= totalPages}
-                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
-                    Next
+                    Next →
                   </button>
                 </div>
               </div>
@@ -599,40 +606,36 @@ export default function AdminHistory() {
 
         {/* Edit Modal */}
         {showEditModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Edit Work Entry</h3>
-              
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="glass-panel rounded-3xl shadow-2xl max-w-lg w-full p-7">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 rounded-2xl bg-blue-100">
+                  <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">Edit Work Entry</h3>
+              </div>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Project Name *
-                  </label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.12em] mb-1.5">Project Name</label>
                   <input
                     type="text"
                     value={editForm.project_name}
                     onChange={(e) => setEditForm({...editForm, project_name: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                   />
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Work Date *
-                    </label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.12em] mb-1.5">Work Date</label>
                     <input
                       type="date"
                       value={editForm.work_date}
                       onChange={(e) => setEditForm({...editForm, work_date: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Hours Worked *
-                    </label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.12em] mb-1.5">Hours Worked</label>
                     <input
                       type="number"
                       step="0.5"
@@ -640,40 +643,32 @@ export default function AdminHistory() {
                       max="24"
                       value={editForm.hours_worked}
                       onChange={(e) => setEditForm({...editForm, hours_worked: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
                   </div>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.12em] mb-1.5">Description</label>
                   <textarea
                     value={editForm.description}
                     onChange={(e) => setEditForm({...editForm, description: e.target.value})}
                     rows={3}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
                   />
                 </div>
               </div>
-
-              <div className="flex gap-4 mt-6">
+              <div className="flex gap-3 mt-6">
                 <button
                   onClick={handleSaveEdit}
                   disabled={loading}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg transition disabled:bg-gray-400"
+                  className="flex-1 glass-primary-btn hover:brightness-95 text-white py-2.5 px-4 rounded-xl text-sm font-semibold transition disabled:opacity-50"
                 >
-                  {loading ? 'Saving...' : 'Save Changes'}
+                  {loading ? 'Saving…' : 'Save Changes'}
                 </button>
                 <button
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingEntry(null);
-                    setError(null);
-                  }}
+                  onClick={() => { setShowEditModal(false); setEditingEntry(null); setError(null); }}
                   disabled={loading}
-                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition disabled:bg-gray-400"
+                  className="flex-1 py-2.5 px-4 rounded-xl text-sm font-semibold text-slate-600 bg-white/70 border border-slate-200 hover:bg-white/90 transition disabled:opacity-50"
                 >
                   Cancel
                 </button>

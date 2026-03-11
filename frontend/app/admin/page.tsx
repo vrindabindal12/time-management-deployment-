@@ -1704,16 +1704,21 @@ export default function AdminDashboard() {
             {/* LEFT: Clients + Client Default Rates */}
             <div className="space-y-6">
             <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/75 to-blue-100/60">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h2 className="text-xl font-black text-slate-900">Clients</h2>
-                  <p className="text-sm text-slate-600">Choose a client to open project workspace</p>
+              <div className="flex justify-between items-center mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-cyan-100/80">
+                    <svg className="w-4 h-4 text-cyan-600" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 leading-tight">Clients</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">{clients.length} client{clients.length !== 1 ? 's' : ''}</p>
+                  </div>
                 </div>
                 <button
                   onClick={() => setShowAddClientForm(!showAddClientForm)}
-                  className="glass-primary-btn hover:brightness-95 text-white px-3 py-1 rounded text-sm transition"
+                  className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm font-semibold transition"
                 >
-                  {showAddClientForm ? 'Cancel' : '+ Add'}
+                  {showAddClientForm ? 'Cancel' : '+ Add Client'}
                 </button>
               </div>
 
@@ -1791,50 +1796,53 @@ export default function AdminDashboard() {
                 </form>
               )}
 
-              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                {clients.map((client) => (
-                  <div
-                    key={client.id}
-                    onClick={() => setSelectedClient(client.id)}
-                    className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
-                      selectedClient === client.id
-                        ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/80 shadow-lg'
-                        : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
-                    }`}
-                  >
-                    <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-cyan-300/20 blur-2xl" />
-                    <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-blue-300/20 blur-2xl" />
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-cyan-700">Client</p>
-                        <p className="font-black text-slate-900 text-lg mt-1">{client.name}</p>
-                        <p className="text-sm font-mono text-slate-600 mt-1">{client.code}</p>
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                {clients.map((client) => {
+                  const cInitials = client.name.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+                  const cPalette = ['bg-cyan-500', 'bg-blue-500', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500'];
+                  const cBg = cPalette[(client.name.charCodeAt(0) || 0) % cPalette.length];
+                  const isSelected = selectedClient === client.id;
+                  return (
+                    <div
+                      key={client.id}
+                      onClick={() => setSelectedClient(client.id)}
+                      className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all duration-200 ${
+                        isSelected
+                          ? 'border-cyan-300/80 bg-gradient-to-r from-cyan-50 to-blue-50/60 shadow-md ring-1 ring-cyan-200/50'
+                          : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className={`w-9 h-9 rounded-xl ${cBg} flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm`}>
+                        {cInitials}
                       </div>
-                      <div className="ml-2 flex gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-900 truncate text-sm leading-tight">{client.name}</p>
+                        <p className="text-[11px] font-mono text-slate-400 mt-0.5 uppercase tracking-wider">{client.code}</p>
+                      </div>
+                      {isSelected && (
+                        <span className="text-[10px] font-bold text-cyan-600 bg-cyan-100 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                      )}
+                      <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEditClient(client);
-                          }}
+                          onClick={() => startEditClient(client)}
                           disabled={loading}
-                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-100 text-cyan-800 border border-cyan-200 hover:bg-cyan-200 transition disabled:opacity-50"
+                          title="Edit client"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
                         >
-                          Edit
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                         </button>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeleteEntityModal('client', client.id, client.name);
-                          }}
+                          onClick={() => openDeleteEntityModal('client', client.id, client.name)}
                           disabled={loading}
-                          className="px-3 py-1.5 text-xs font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition disabled:opacity-50"
+                          title="Delete client"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
                         >
-                          Delete
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                         </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {clients.length === 0 && !showAddClientForm && (
@@ -1990,42 +1998,41 @@ export default function AdminDashboard() {
                 <div className="space-y-2">
                   {clientRates.length > 0 ? (
                     clientRates.map((rate) => (
-                      <div key={rate.id} className="p-3 rounded-2xl border border-violet-100/80 bg-white/60 hover:bg-white/80 transition">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-slate-800 text-sm truncate">{rate.employee_name || <span className="text-slate-400 italic">Any employee</span>}</p>
-                            <p className="text-xs text-violet-700 font-semibold">{rate.designation}</p>
+                      <div key={rate.id} className="flex items-center gap-3 p-3.5 rounded-2xl border border-violet-100/70 bg-white/55 hover:bg-white/80 transition">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-slate-800 text-sm truncate leading-tight">{rate.employee_name || <span className="text-slate-400 italic text-xs">Any employee</span>}</p>
+                          <span className="inline-block mt-1 text-[10px] font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full uppercase tracking-wide">{rate.designation}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-right">
+                            <p className="text-xs font-bold text-slate-700">${rate.gross_rate}<span className="text-slate-400 font-normal">/hr</span></p>
+                            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Gross</p>
                           </div>
-                          <div className="flex items-center gap-3 text-sm shrink-0">
-                            <div className="text-center">
-                              <p className="font-bold text-slate-700">${rate.gross_rate}/hr</p>
-                              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Gross</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="font-bold text-orange-500">{rate.discount}%</p>
-                              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Off</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="font-bold text-green-600">${rate.net_rate.toFixed(2)}/hr</p>
-                              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Net</p>
-                            </div>
+                          <div className="w-px h-6 bg-slate-200" />
+                          <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">{rate.discount}% off</span>
+                          <div className="w-px h-6 bg-slate-200" />
+                          <div className="text-right">
+                            <p className="text-xs font-bold text-emerald-600">${rate.net_rate.toFixed(2)}<span className="text-emerald-400 font-normal">/hr</span></p>
+                            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Net</p>
                           </div>
-                          <div className="flex gap-1.5 shrink-0">
-                            <button
-                              onClick={() => startEditClientRate(rate)}
-                              disabled={loading}
-                              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-violet-100 text-violet-800 border border-violet-200 hover:bg-violet-200 transition disabled:opacity-50"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => openDeleteEntityModal('client-rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
-                              disabled={loading}
-                              className="px-3 py-1.5 text-xs font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition disabled:opacity-50"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            onClick={() => startEditClientRate(rate)}
+                            disabled={loading}
+                            title="Edit rate"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-violet-700 hover:bg-violet-50 transition disabled:opacity-50"
+                          >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                          </button>
+                          <button
+                            onClick={() => openDeleteEntityModal('client-rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
+                            disabled={loading}
+                            title="Delete rate"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                          >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                          </button>
                         </div>
                       </div>
                     ))
@@ -2046,20 +2053,27 @@ export default function AdminDashboard() {
               {/* Projects Section */}
               {selectedClient && selectedClientData && (
                 <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/75 via-white/75 to-blue-100/65 transition-all duration-500">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.2em] font-bold text-cyan-700">Project Workspace</p>
-                      <h3 className="text-2xl font-black text-slate-900 mt-1">{selectedClientData.name}</h3>
-                      <p className="text-sm text-slate-600">Client code: <span className="font-mono font-semibold">{selectedClientData.code}</span></p>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-2xl bg-cyan-100/80">
+                        <svg className="w-5 h-5 text-cyan-600" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-black text-slate-900 leading-tight">{selectedClientData.name}</h3>
+                          <span className="text-[10px] font-bold font-mono text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-lg border border-cyan-200">{selectedClientData.code}</span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">{projects.length} project{projects.length !== 1 ? 's' : ''}</p>
+                      </div>
                     </div>
                     <button
                       onClick={() => {
                         setShowAddProjectForm(!showAddProjectForm);
                         setEditingProjectId(null);
                       }}
-                      className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm transition"
+                      className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm font-semibold transition"
                     >
-                      {showAddProjectForm ? 'Hide Create Form' : '+ Create Project'}
+                      {showAddProjectForm ? 'Hide Form' : '+ New Project'}
                     </button>
                   </div>
 
@@ -2144,50 +2158,54 @@ export default function AdminDashboard() {
                     </form>
                   )}
 
-                  <div className="space-y-3">
-                    {projects.map((project) => (
-                      <div
-                        key={project.id}
-                        onClick={() => setSelectedProject(project.id)}
-                        className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
-                          selectedProject === project.id
-                            ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/75 shadow-lg'
-                            : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
-                        }`}
-                      >
-                        <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-cyan-300/20 blur-2xl" />
-                        <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-blue-300/20 blur-2xl" />
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-cyan-700">Project</p>
-                            <p className="font-black text-slate-900 text-lg mt-1">{project.name}</p>
-                            <p className="text-sm text-cyan-700 font-semibold mt-1">{selectedClientData.code}-{project.code}</p>
+                  <div className="space-y-2">
+                    {projects.map((project) => {
+                      const pIsSelected = selectedProject === project.id;
+                      return (
+                        <div
+                          key={project.id}
+                          onClick={() => setSelectedProject(project.id)}
+                          className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all duration-200 ${
+                            pIsSelected
+                              ? 'border-cyan-300/80 bg-gradient-to-r from-cyan-50 to-blue-50/60 shadow-md ring-1 ring-cyan-200/50'
+                              : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            pIsSelected ? 'bg-cyan-500' : 'bg-slate-100'
+                          }`}>
+                            <svg className={`w-4 h-4 ${pIsSelected ? 'text-white' : 'text-slate-400'}`} viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
                           </div>
-                          <div className="ml-2 flex gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-slate-900 truncate text-sm leading-tight">{project.name}</p>
+                            <span className="inline-block mt-0.5 text-[10px] font-bold font-mono text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-md">
+                              {selectedClientData.code}-{project.code}
+                            </span>
+                          </div>
+                          {pIsSelected && (
+                            <span className="text-[10px] font-bold text-cyan-600 bg-cyan-100 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                          )}
+                          <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startEditProject(project);
-                              }}
+                              onClick={() => startEditProject(project)}
                               disabled={loading}
-                              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-100 text-cyan-800 border border-cyan-200 hover:bg-cyan-200 transition disabled:opacity-50"
+                              title="Edit project"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
                             >
-                              Edit
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                             </button>
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDeleteEntityModal('project', project.id, project.name);
-                              }}
+                              onClick={() => openDeleteEntityModal('project', project.id, project.name)}
                               disabled={loading}
-                              className="px-3 py-1.5 text-xs font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition disabled:opacity-50"
+                              title="Delete project"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
                             >
-                              Delete
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {projects.length === 0 && !showAddProjectForm && (
@@ -2350,46 +2368,41 @@ export default function AdminDashboard() {
                   <div className="space-y-2">
                     {projectRates.length > 0 ? (
                       projectRates.map((rate) => (
-                        <div key={rate.id} className="p-4 border border-white/60 rounded-2xl bg-white/60 hover:bg-white/78 transition">
-                          <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1.1fr_.7fr_.7fr_.7fr_auto] gap-4 items-center text-sm">
-                            <div>
-                              <p className="font-bold text-gray-700">{rate.employee_name || '-'}</p>
-                              <p className="text-xs text-gray-500">Employee</p>
+                        <div key={rate.id} className="flex items-center gap-3 p-3.5 rounded-2xl border border-slate-100 bg-white/60 hover:bg-white/85 transition">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-slate-800 text-sm truncate leading-tight">{rate.employee_name || <span className="text-slate-400 italic text-xs">Any employee</span>}</p>
+                            <span className="inline-block mt-1 text-[10px] font-bold text-cyan-600 bg-cyan-50 border border-cyan-100 px-2 py-0.5 rounded-full uppercase tracking-wide">{rate.designation}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right">
+                              <p className="text-xs font-bold text-slate-700">${rate.gross_rate}<span className="text-slate-400 font-normal">/hr</span></p>
+                              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Gross</p>
                             </div>
-                            <div>
-                              <p className="font-bold text-gray-700">{rate.designation}</p>
-                              <p className="text-xs text-gray-500">Designation</p>
+                            <div className="w-px h-6 bg-slate-200" />
+                            <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">{rate.discount}% off</span>
+                            <div className="w-px h-6 bg-slate-200" />
+                            <div className="text-right">
+                              <p className="text-xs font-bold text-emerald-600">${rate.net_rate}<span className="text-emerald-400 font-normal">/hr</span></p>
+                              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Net</p>
                             </div>
-                            <div className="text-center">
-                              <p className="font-bold text-gray-700">${rate.gross_rate}</p>
-                              <p className="text-xs text-gray-500">Gross</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="font-bold text-red-600">{rate.discount}%</p>
-                              <p className="text-xs text-gray-500">Discount</p>
-                            </div>
-                            <div className="text-center">
-                              <div>
-                                <p className="font-bold text-green-600">${rate.net_rate}</p>
-                                <p className="text-xs text-gray-500">Net</p>
-                              </div>
-                            </div>
-                            <div className="flex justify-end gap-2">
-                              <button
-                                onClick={() => startEditRate(rate)}
-                                disabled={loading}
-                                className="min-w-[74px] px-4 py-2 text-xs font-semibold rounded-xl bg-cyan-100 text-cyan-800 border border-cyan-200 hover:bg-cyan-200 transition disabled:opacity-50"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => openDeleteEntityModal('rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
-                                disabled={loading}
-                                className="min-w-[74px] px-4 py-2 text-xs font-semibold glass-danger-btn rounded-xl hover:brightness-95 transition disabled:opacity-50"
-                              >
-                                Delete
-                              </button>
-                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => startEditRate(rate)}
+                              disabled={loading}
+                              title="Edit rate"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                            </button>
+                            <button
+                              onClick={() => openDeleteEntityModal('rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
+                              disabled={loading}
+                              title="Delete rate"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                            </button>
                           </div>
                         </div>
                       ))
@@ -2401,10 +2414,13 @@ export default function AdminDashboard() {
               )}
 
               {!selectedClient && (
-                <div className="min-h-64 glass-panel rounded-3xl p-6 flex items-center justify-center border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/70 to-blue-100/65">
+                <div className="min-h-64 glass-panel rounded-3xl p-8 flex items-center justify-center border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/70 to-blue-100/65">
                   <div className="text-center">
-                    <p className="text-xs uppercase tracking-[0.2em] font-bold text-cyan-700">Project Workspace</p>
-                    <p className="text-slate-700 font-semibold mt-2">Select a client to open create/edit project section</p>
+                    <div className="w-14 h-14 rounded-2xl bg-cyan-100/80 flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-7 h-7 text-cyan-400" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+                    </div>
+                    <p className="text-base font-bold text-slate-700">No client selected</p>
+                    <p className="text-sm text-slate-400 mt-1">Pick a client on the left to manage its projects and rates</p>
                   </div>
                 </div>
               )}
