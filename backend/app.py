@@ -436,6 +436,7 @@ def build_export_rows(employee, work_entries):
             'Hours Worked': round(entry.hours_worked, 2),
             'Description': entry.description or '',
             'Updated By Admin': 'Yes' if entry.updated_by_admin else 'No',
+            'Payment Status': 'Paid' if entry.is_paid else 'Unpaid',
             'Created At': entry.created_at.isoformat() if entry.created_at else '',
             'Updated At': entry.updated_at.isoformat() if entry.updated_at else ''
         })
@@ -446,7 +447,7 @@ def create_csv_response(filename, rows):
     output = io.StringIO()
     fieldnames = [
         'ID', 'Employee Name', 'Employee Email', 'Project Name', 'Project Code', 'Client Name',
-        'Work Date', 'Hours Worked', 'Description', 'Updated By Admin',
+        'Work Date', 'Hours Worked', 'Description', 'Updated By Admin', 'Payment Status',
         'Created At', 'Updated At'
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -473,7 +474,7 @@ def create_excel_response(filename, rows):
 
     headers = [
         'ID', 'Employee Name', 'Employee Email', 'Project Name', 'Project Code', 'Client Name',
-        'Work Date', 'Hours Worked', 'Description', 'Updated By Admin',
+        'Work Date', 'Hours Worked', 'Description', 'Updated By Admin', 'Payment Status',
         'Created At', 'Updated At'
     ]
     worksheet.append(headers)
