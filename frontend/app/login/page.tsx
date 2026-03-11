@@ -27,9 +27,13 @@ export default function Login() {
       localStorage.setItem('token', response.token);
       localStorage.setItem('user', JSON.stringify(response.employee));
 
-      if (response.employee.is_admin) {
+      const role = response.employee.role ?? (response.employee.is_admin ? 'admin' : 'employee');
+      // For 'both' role, default active panel to admin; for others set accordingly
+      if (role === 'both' || role === 'admin') {
+        localStorage.setItem('activeRole', 'admin');
         router.push('/admin');
       } else {
+        localStorage.setItem('activeRole', 'employee');
         router.push('/dashboard');
       }
     } catch (err: any) {

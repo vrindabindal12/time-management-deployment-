@@ -47,6 +47,7 @@ export interface Employee {
   name: string;
   email: string;
   is_admin: boolean;
+  role: 'admin' | 'employee' | 'both';
   employee_code?: string | null;
   designation?: string | null;
   reporting_manager?: string | null;
@@ -258,6 +259,11 @@ export const employeeApi = {
 
   updateEmployeeProfile: async (employeeId: number, profileData: Partial<Employee>): Promise<Employee> => {
     const response = await api.put(`/employees/${employeeId}/profile`, profileData);
+    return response.data;
+  },
+
+  updateEmployeeRole: async (employeeId: number, role: 'admin' | 'employee' | 'both'): Promise<Employee> => {
+    const response = await api.put(`/employees/${employeeId}/role`, { role });
     return response.data;
   },
 
@@ -560,14 +566,38 @@ export const isAuthenticated = (): boolean => {
   return !!localStorage.getItem('token');
 };
 
+export const getActiveRole = (): 'admin' | 'employee' => {
+  if (typeof window === 'undefined') return 'employee';
+  const stored = localStorage.getItem('activeRole');
+  if (stored === 'admin' || stored === 'employee') return stored;
+  const user = getCurrentUser();
+  return user?.role === 'employee' ? 'employee' : 'admin';
+};
+
+export const setActiveRole = (role: 'admin' | 'employee'): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('activeRole', role);
+  }
+};
+
+export const isBothRole = (): boolean => {
+  const user = getCurrentUser();
+  return (user?.role ?? 'employee') === 'both';
+};
+
 export const isAdmin = (): boolean => {
   const user = getCurrentUser();
-  return user?.is_admin || false;
+  if (!user) return false;
+  const role = user.role ?? (user.is_admin ? 'admin' : 'employee');
+  if (role === 'admin') return true;
+  if (role === 'both') return getActiveRole() === 'admin';
+  return false;
 };
 
 export const logout = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  localStorage.removeItem('activeRole');
   window.location.href = '/login';
 };
 

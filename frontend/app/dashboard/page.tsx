@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { employeeApi, getCurrentUser, logout, isAuthenticated, Project, WorkEntry } from '@/lib/api';
+import { employeeApi, getCurrentUser, logout, isAuthenticated, isAdmin, Project, WorkEntry } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 const formatLocalDate = (date: Date) => {
@@ -73,7 +73,7 @@ export default function Dashboard() {
     }
 
     const currentUser = getCurrentUser();
-    if (currentUser?.is_admin) {
+    if (isAdmin()) {
       router.push('/admin');
       return;
     }

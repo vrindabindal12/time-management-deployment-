@@ -57,6 +57,7 @@ class Employee(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
+    role = db.Column(db.String(20), nullable=False, server_default='employee')
     employee_code = db.Column(db.String(50), unique=True, nullable=True)
     designation = db.Column(db.String(120), nullable=True)
     reporting_manager = db.Column(db.String(120), nullable=True)
@@ -87,11 +88,13 @@ class Employee(db.Model):
         return check_password_hash(self.password_hash, password)
 
     def to_dict(self):
+        effective_role = self.role or 'employee'
         return {
             'id': self.id,
             'name': self.name,
             'email': self.email,
-            'is_admin': self.is_admin,
+            'is_admin': effective_role in ('admin', 'both'),
+            'role': effective_role,
             'employee_code': self.employee_code,
             'designation': self.designation,
             'reporting_manager': self.reporting_manager,
@@ -405,6 +408,32 @@ def export_work_history(employee, work_entries):
     return jsonify({'error': 'Invalid format. Use csv or excel'}), 400
 
 
+def ensure_role_schema():
+    """Add role column and backfill from is_admin for existing databases."""
+    # SQLite: add column if missing then backfill
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(employee)")).fetchall()
+        }
+        if 'role' not in existing:
+            db.session.execute(text("ALTER TABLE employee ADD COLUMN role TEXT NOT NULL DEFAULT 'employee'"))
+            db.session.execute(text("UPDATE employee SET role='admin' WHERE is_admin=1"))
+        else:
+            # Repair any rows with NULL role
+            db.session.execute(text("UPDATE employee SET role='admin' WHERE role IS NULL AND is_admin=1"))
+            db.session.execute(text("UPDATE employee SET role='employee' WHERE role IS NULL"))
+        db.session.commit()
+    else:
+        # PostgreSQL: attempt column add; ignore if it already exists
+        try:
+            db.session.execute(text("ALTER TABLE employee ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'employee'"))
+            db.session.execute(text("UPDATE employee SET role='admin' WHERE is_admin=TRUE AND role='employee'"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
 def ensure_employee_schema():
     """Add onboarding/profile columns for existing sqlite databases."""
     if not DATABASE_URL.startswith('sqlite'):
@@ -670,6 +699,7 @@ def build_employee_hierarchy(employee):
 with app.app_context():
     db.create_all()
     ensure_employee_schema()
+    ensure_role_schema()
     ensure_employee_codes()
     ensure_punch_invoice_schema()
     ensure_project_rate_schema()
@@ -688,7 +718,8 @@ with app.app_context():
         admin = Employee(
             name='Admin',
             email=ADMIN_EMAIL,
-            is_admin=True
+            is_admin=True,
+            role='admin'
         )
         admin.set_password(ADMIN_PASSWORD)
         db.session.add(admin)
@@ -916,11 +947,16 @@ def create_employee(current_user):
     existing_employee = Employee.query.filter_by(email=data['email']).first()
     if existing_employee:
         return jsonify({'error': 'Employee with this email already exists'}), 400
-    
+
+    role = (data.get('role') or 'employee').strip().lower()
+    if role not in ('admin', 'employee', 'both'):
+        return jsonify({'error': 'Invalid role. Must be admin, employee, or both'}), 400
+
     employee = Employee(
         name=data['name'],
         email=data['email'],
-        is_admin=False
+        is_admin=(role in ('admin', 'both')),
+        role=role
     )
     employee.set_password(data['password'])
 
@@ -938,6 +974,28 @@ def create_employee(current_user):
         db.session.commit()
     
     return jsonify(employee.to_dict()), 201
+
+@app.route('/api/employees/<int:employee_id>/role', methods=['PUT'])
+@token_required
+@admin_required
+def update_employee_role(current_user, employee_id):
+    employee = Employee.query.get(employee_id)
+    if not employee:
+        return jsonify({'error': 'Employee not found'}), 404
+
+    data = request.json or {}
+    role = (data.get('role') or '').strip().lower()
+    if role not in ('admin', 'employee', 'both'):
+        return jsonify({'error': 'Invalid role. Must be admin, employee, or both'}), 400
+
+    if employee.id == current_user.id:
+        return jsonify({'error': 'You cannot change your own role'}), 400
+
+    employee.role = role
+    employee.is_admin = (role in ('admin', 'both'))
+    db.session.commit()
+    return jsonify(employee.to_dict()), 200
+
 
 @app.route('/api/employees/<int:employee_id>/profile', methods=['PUT'])
 @token_required

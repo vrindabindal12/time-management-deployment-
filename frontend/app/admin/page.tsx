@@ -11,6 +11,7 @@ const emptyOnboardingForm = {
   name: '',
   email: '',
   password: '',
+  role: 'employee',
   designation: '',
   reporting_manager: '',
   start_date: '',
@@ -101,36 +102,6 @@ const getEmployeeAvatarGradient = (employee: Employee) => {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
 };
 
-const getEffectiveEmployeeCompensation = (employee: Employee, dateStr?: string) => {
-  const targetYMD = dateStr || new Date().toISOString().split('T')[0];
-
-  let effectiveRate = employee.current_hourly_rate ?? 0;
-  let effectiveDesignation = employee.designation || 'Unspecified';
-
-  const promotions: Array<{ date: string; rate: number | null; designation: string | null }> = [];
-  for (let i = 1; i <= 5; i++) {
-    const promoDate = (employee as any)[`promotion_${i}_date`];
-    const promoRate = (employee as any)[`promotion_${i}_rate`];
-    const promoDesignation = (employee as any)[`promotion_${i}_designation`];
-    if (promoDate) {
-      promotions.push({ date: promoDate, rate: promoRate, designation: promoDesignation });
-    }
-  }
-
-  promotions.sort((a, b) => a.date.localeCompare(b.date));
-
-  for (const promo of promotions) {
-    if (promo.date <= targetYMD) {
-      if (promo.rate !== null && promo.rate !== undefined) effectiveRate = promo.rate;
-      if (promo.designation) effectiveDesignation = promo.designation;
-    } else {
-      break;
-    }
-  }
-
-  return { rate: effectiveRate, designation: effectiveDesignation };
-};
-
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('onboarding');
@@ -148,6 +119,8 @@ export default function AdminDashboard() {
   const [employeeForm, setEmployeeForm] = useState({ name: '', email: '', password: '', reporting_manager: '' });
   const [showOnboardingForm, setShowOnboardingForm] = useState(false);
   const [onboardingForm, setOnboardingForm] = useState(emptyOnboardingForm);
+  const [employeeRoleEdit, setEmployeeRoleEdit] = useState<Record<number, string>>({});
+  const [savingRoleId, setSavingRoleId] = useState<number | null>(null);
   const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
   const [employeeProfileEdits, setEmployeeProfileEdits] = useState<Record<number, EmployeeProfileEdit>>({});
   const [savingEmployeeProfileId, setSavingEmployeeProfileId] = useState<number | null>(null);
@@ -193,11 +166,6 @@ export default function AdminDashboard() {
   const [payablesReport, setPayablesReport] = useState<EmployeePayablesReport | null>(null);
   const [payablesLoading, setPayablesLoading] = useState(false);
   const [payablesProjectFilter, setPayablesProjectFilter] = useState('ALL');
-  const [payablesStatusFilter, setPayablesStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
-  const [selectedPaidIds, setSelectedPaidIds] = useState<number[]>([]);
-  const [savingPayables, setSavingPayables] = useState(false);
-  const [editingPayableId, setEditingPayableId] = useState<number | null>(null);
-  const [payableRateEdit, setPayableRateEdit] = useState<string>('');
 
   // Project states
   const [projects, setProjects] = useState<Project[]>([]);
@@ -306,7 +274,7 @@ export default function AdminDashboard() {
     try {
       const data = await employeeApi.getEmployees();
       setEmployees(data);
-      const nonAdminIds = data.filter((employee: Employee) => !employee.is_admin).map((employee: Employee) => employee.id);
+      const nonAdminIds = data.filter((employee: Employee) => (employee.role ?? (employee.is_admin ? 'admin' : 'employee')) !== 'admin').map((employee: Employee) => employee.id);
       setEmployeeCardOrder((prev) => {
         const kept = prev.filter((id) => nonAdminIds.includes(id));
         const appended = nonAdminIds.filter((id) => !kept.includes(id));
@@ -409,6 +377,7 @@ export default function AdminDashboard() {
         onboardingForm.email.trim(),
         onboardingForm.password,
         {
+          role: onboardingForm.role as 'admin' | 'employee' | 'both',
           designation: toNullableText(onboardingForm.designation),
           reporting_manager: toNullableText(onboardingForm.reporting_manager),
           start_date: toNullableText(onboardingForm.start_date),
@@ -478,6 +447,23 @@ export default function AdminDashboard() {
         [field]: value,
       },
     }));
+  };
+
+  const handleUpdateRole = async (employeeId: number) => {
+    const newRole = employeeRoleEdit[employeeId];
+    if (!newRole) return;
+    setSavingRoleId(employeeId);
+    setError(null);
+    try {
+      const updated = await employeeApi.updateEmployeeRole(employeeId, newRole as 'admin' | 'employee' | 'both');
+      setEmployees((prev) => prev.map((e) => (e.id === employeeId ? updated : e)));
+      setEmployeeRoleEdit((prev) => { const next = { ...prev }; delete next[employeeId]; return next; });
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update role');
+      clearError();
+    } finally {
+      setSavingRoleId(null);
+    }
   };
 
   const saveEmployeeProfile = async (employeeId: number) => {
@@ -847,8 +833,6 @@ export default function AdminDashboard() {
       );
       setPayablesReport(data);
       setPayablesProjectFilter('ALL');
-      setPayablesStatusFilter('ALL');
-      setSelectedPaidIds(data.rows.filter(r => r.is_paid).map(r => r.work_id));
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load payables report');
       clearError();
@@ -857,68 +841,10 @@ export default function AdminDashboard() {
     }
   };
 
-  const savePayablesStatus = async () => {
-    if (!payablesReport) return;
-    setSavingPayables(true);
-    setError(null);
-    try {
-      const allIds = payablesReport.rows.map(r => r.work_id);
-      const pendingIds = allIds.filter(id => !selectedPaidIds.includes(id));
-
-      if (selectedPaidIds.length > 0) {
-        await employeeApi.markPayablesPaid(selectedPaidIds, true);
-      }
-      if (pendingIds.length > 0) {
-        await employeeApi.markPayablesPaid(pendingIds, false);
-      }
-
-      const data = await employeeApi.getEmployeePayablesReport(
-        payableStartDate,
-        payableEndDate,
-        payableEmployeeId || undefined
-      );
-      setPayablesReport(data);
-      setSelectedPaidIds(data.rows.filter(r => r.is_paid).map(r => r.work_id));
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save payment status');
-      clearError();
-    } finally {
-      setSavingPayables(false);
-    }
-  };
-
-  const handleSavePayableRate = async (workId: number) => {
-    try {
-      setSavingPayables(true);
-      setError(null);
-      const rateVal = parseFloat(payableRateEdit);
-      if (isNaN(rateVal) || rateVal < 0) {
-        throw new Error('Please enter a valid rate');
-      }
-      await employeeApi.updateWorkPayableValues(workId, {
-        payable_rate: rateVal
-      });
-      setEditingPayableId(null);
-      // Refresh only the portion needed OR the whole report
-      const data = await employeeApi.getEmployeePayablesReport(
-        payableStartDate,
-        payableEndDate,
-        payableEmployeeId || undefined
-      );
-      setPayablesReport(data);
-      setSelectedPaidIds(data.rows.filter(r => r.is_paid).map(r => r.work_id));
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to update rate');
-      clearError();
-    } finally {
-      setSavingPayables(false);
-    }
-  };
-
   const moveEmployeeCard = (draggedEmployeeId: number, targetEmployeeId: number) => {
     if (draggedEmployeeId === targetEmployeeId) return;
     setEmployeeCardOrder((prev) => {
-      const current = prev.length ? [...prev] : employees.filter((employee) => !employee.is_admin).map((employee) => employee.id);
+      const current = prev.length ? [...prev] : employees.filter((employee) => (employee.role ?? (employee.is_admin ? 'admin' : 'employee')) !== 'admin').map((employee) => employee.id);
       const fromIndex = current.indexOf(draggedEmployeeId);
       const toIndex = current.indexOf(targetEmployeeId);
       if (fromIndex === -1 || toIndex === -1) return prev;
@@ -952,76 +878,26 @@ export default function AdminDashboard() {
 
   const canFlipCard = () => !isCardDraggingRef.current && Date.now() >= suppressFlipUntilRef.current;
 
-  const nonAdminEmployees = employees.filter((employee) => !employee.is_admin);
-  const [employeePage, setEmployeePage] = useState(1);
-  const employeeRowsPerPage = 10;
-  const allOrderedEmployeeCards = [
+  const nonAdminEmployees = employees.filter((employee) => (employee.role ?? (employee.is_admin ? 'admin' : 'employee')) !== 'admin');
+  const orderedEmployeeCards = [
     ...employeeCardOrder
       .map((employeeId) => nonAdminEmployees.find((employee) => employee.id === employeeId))
       .filter((employee): employee is Employee => Boolean(employee)),
     ...nonAdminEmployees.filter((employee) => !employeeCardOrder.includes(employee.id)),
   ];
-  const employeeTotalRecords = allOrderedEmployeeCards.length;
-  const employeeTotalPages = Math.max(1, Math.ceil(employeeTotalRecords / employeeRowsPerPage));
-  const paginatedEmployeeCards = allOrderedEmployeeCards.slice((employeePage - 1) * employeeRowsPerPage, employeePage * employeeRowsPerPage);
-  const employeeStartItem = employeeTotalRecords === 0 ? 0 : (employeePage - 1) * employeeRowsPerPage + 1;
-  const employeeEndItem = Math.min(employeePage * employeeRowsPerPage, employeeTotalRecords);
-  const [clientPage, setClientPage] = useState(1);
-  const clientRowsPerPage = 10;
-  const clientTotalRecords = clients.length;
-  const clientTotalPages = Math.max(1, Math.ceil(clientTotalRecords / clientRowsPerPage));
-  const paginatedClients = clients.slice((clientPage - 1) * clientRowsPerPage, clientPage * clientRowsPerPage);
-  const clientStartItem = clientTotalRecords === 0 ? 0 : (clientPage - 1) * clientRowsPerPage + 1;
-  const clientEndItem = Math.min(clientPage * clientRowsPerPage, clientTotalRecords);
-
   const selectedClientData = clients.find((client) => client.id === selectedClient) || null;
   const invoiceProjectOptions = invoiceReport
     ? Array.from(new Set(invoiceReport.rows.map((row) => row.project_code))).sort()
     : [];
-
-  // Pagination state for invoicing
-  const [invoicePage, setInvoicePage] = useState(1);
-  const [invoiceRowsPerPage, setInvoiceRowsPerPage] = useState(10);
-
-  // Reset invoice pagination when filters or report change
-  useEffect(() => {
-    setInvoicePage(1);
-  }, [invoiceReport, invoiceProjectFilter, invoiceRowsPerPage]);
   const filteredInvoiceRows = invoiceReport
     ? invoiceReport.rows.filter((row) => invoiceProjectFilter === 'ALL' || row.project_code === invoiceProjectFilter)
     : [];
-  const invoiceTotalPages = Math.max(1, Math.ceil(filteredInvoiceRows.length / invoiceRowsPerPage));
-  const paginatedInvoiceRows = filteredInvoiceRows.slice((invoicePage - 1) * invoiceRowsPerPage, invoicePage * invoiceRowsPerPage);
-  const invoiceTotalRecords = filteredInvoiceRows.length;
-  const invoiceStartItem = invoiceTotalRecords === 0 ? 0 : (invoicePage - 1) * invoiceRowsPerPage + 1;
-  const invoiceEndItem = Math.min(invoicePage * invoiceRowsPerPage, invoiceTotalRecords);
-
-  // Pagination state for payables
-  const [payablesPage, setPayablesPage] = useState(1);
-  const [payablesRowsPerPage, setPayablesRowsPerPage] = useState(10);
-
-  // Reset payables pagination when filters or report change
-  useEffect(() => {
-    setPayablesPage(1);
-  }, [payablesReport, payablesProjectFilter, payablesStatusFilter, payablesRowsPerPage]);
   const payablesProjectOptions = payablesReport
     ? Array.from(new Set(payablesReport.rows.map((row) => row.project_code || '-'))).sort()
     : [];
   const filteredPayablesRows = payablesReport
-    ? payablesReport.rows.filter((row) => {
-      const matchesProject = payablesProjectFilter === 'ALL' || (row.project_code || '-') === payablesProjectFilter;
-      const isPaid = selectedPaidIds.includes(row.work_id);
-      const matchesStatus = payablesStatusFilter === 'ALL' ||
-        (payablesStatusFilter === 'PAID' && isPaid) ||
-        (payablesStatusFilter === 'PENDING' && !isPaid);
-      return matchesProject && matchesStatus;
-    })
+    ? payablesReport.rows.filter((row) => payablesProjectFilter === 'ALL' || (row.project_code || '-') === payablesProjectFilter)
     : [];
-  const payablesTotalPages = Math.max(1, Math.ceil(filteredPayablesRows.length / payablesRowsPerPage));
-  const paginatedPayablesRows = filteredPayablesRows.slice((payablesPage - 1) * payablesRowsPerPage, payablesPage * payablesRowsPerPage);
-  const payablesTotalRecords = filteredPayablesRows.length;
-  const payablesStartItem = payablesTotalRecords === 0 ? 0 : (payablesPage - 1) * payablesRowsPerPage + 1;
-  const payablesEndItem = Math.min(payablesPage * payablesRowsPerPage, payablesTotalRecords);
 
   const downloadCsvFile = (filename: string, rows: string[][]) => {
     const escapeCell = (value: string | number | null | undefined) => {
@@ -1101,9 +977,7 @@ export default function AdminDashboard() {
       'Task Performed',
     ]];
 
-    const activeRows = filteredPayablesRows.filter(row => !selectedPaidIds.includes(row.work_id));
-
-    activeRows.forEach((row) => {
+    filteredPayablesRows.forEach((row) => {
       rows.push([
         row.project_code || '',
         row.employee_name,
@@ -1118,12 +992,9 @@ export default function AdminDashboard() {
       ]);
     });
 
-    const activeTotalHours = activeRows.reduce((sum, row) => sum + row.hours, 0);
-    const activeTotalPayable = activeRows.reduce((sum, row) => sum + row.net_payable, 0);
-
     rows.push([]);
-    rows.push(['Total Hours', activeTotalHours.toFixed(2)]);
-    rows.push(['Total Payable', activeTotalPayable.toFixed(2)]);
+    rows.push(['Total Hours', payablesReport.total_hours.toFixed(2)]);
+    rows.push(['Total Payable', payablesReport.total_net_payable.toFixed(2)]);
 
     downloadCsvFile(
       `employee_payables_${payablesReport.start_date}_to_${payablesReport.end_date}.csv`,
@@ -1156,7 +1027,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-2xl border border-white/70 bg-gradient-to-br from-cyan-100/80 via-white/80 to-blue-100/70 p-5 shadow-lg">
               <p className="text-xs uppercase tracking-[0.18em] text-cyan-700 font-bold">Total Employees</p>
-              <p className="text-4xl font-black text-slate-900 mt-3">{employees.filter((emp) => !emp.is_admin).length}</p>
+              <p className="text-4xl font-black text-slate-900 mt-3">{employees.filter((emp) => (emp.role ?? (emp.is_admin ? 'admin' : 'employee')) !== 'admin').length}</p>
             </div>
             <div className="rounded-2xl border border-white/70 bg-gradient-to-br from-emerald-100/80 via-white/80 to-teal-100/70 p-5 shadow-lg">
               <p className="text-xs uppercase tracking-[0.18em] text-emerald-700 font-bold">Total Clients</p>
@@ -1181,37 +1052,41 @@ export default function AdminDashboard() {
           <div className="flex">
             <button
               onClick={() => setActiveTab('onboarding')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'onboarding'
-                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-                }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
+                activeTab === 'onboarding'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+              }`}
             >
               Employee Management
             </button>
             <button
               onClick={() => setActiveTab('clients')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'clients'
-                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-                }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
+                activeTab === 'clients'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+              }`}
             >
               Clients & Projects
             </button>
             <button
               onClick={() => setActiveTab('invoicing')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'invoicing'
-                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-                }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
+                activeTab === 'invoicing'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+              }`}
             >
               Invoicing
             </button>
             <button
               onClick={() => setActiveTab('payables')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'payables'
-                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-                }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
+                activeTab === 'payables'
+                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+              }`}
             >
               Payables
             </button>
@@ -1282,14 +1157,15 @@ export default function AdminDashboard() {
 
               {/* Employee List */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {employees.filter((employee: Employee) => !employee.is_admin).map((employee) => (
+                {employees.filter((employee: Employee) => (employee.role ?? (employee.is_admin ? 'admin' : 'employee')) !== 'admin').map((employee) => (
                   <div
                     key={employee.id}
                     onClick={() => setSelectedEmployee(employee.id)}
-                    className={`text-left p-4 rounded-lg border-2 transition cursor-pointer ${selectedEmployee === employee.id
-                      ? 'border-blue-500 bg-blue-50/70'
-                      : 'border-white/60 bg-white/45 hover:border-blue-300'
-                      }`}
+                    className={`text-left p-4 rounded-lg border-2 transition cursor-pointer ${
+                      selectedEmployee === employee.id
+                        ? 'border-blue-500 bg-blue-50/70'
+                        : 'border-white/60 bg-white/45 hover:border-blue-300'
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1311,7 +1187,7 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              {employees.filter((employee: Employee) => !employee.is_admin).length === 0 && !showAddEmployeeForm && (
+              {employees.filter((employee: Employee) => (employee.role ?? (employee.is_admin ? 'admin' : 'employee')) !== 'admin').length === 0 && !showAddEmployeeForm && (
                 <p className="text-slate-500 text-center py-4">No employees found.</p>
               )}
             </div>
@@ -1323,12 +1199,14 @@ export default function AdminDashboard() {
                   {employeeStatus.employee.name}'s Status
                 </h2>
                 <div className="mb-4">
-                  <div className={`inline-flex items-center px-4 py-2 rounded-full ${employeeStatus.today_hours > 0
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-800'
-                    }`}>
-                    <div className={`w-3 h-3 rounded-full mr-2 ${employeeStatus.today_hours > 0 ? 'bg-green-500' : 'bg-gray-400'
-                      }`}></div>
+                  <div className={`inline-flex items-center px-4 py-2 rounded-full ${
+                    employeeStatus.today_hours > 0
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    <div className={`w-3 h-3 rounded-full mr-2 ${
+                      employeeStatus.today_hours > 0 ? 'bg-green-500' : 'bg-gray-400'
+                    }`}></div>
                     Today's Hours: {employeeStatus.today_hours.toFixed(2)}h
                   </div>
                 </div>
@@ -1367,6 +1245,37 @@ export default function AdminDashboard() {
 
               {showOnboardingForm && (
                 <form onSubmit={handleOnboardEmployee} className="glass-subtle rounded-2xl border border-white/60 p-4 space-y-4">
+                  {/* Role selector — full-width, above all other fields */}
+                  <div className="rounded-2xl border border-indigo-200/70 bg-gradient-to-r from-indigo-50/80 to-violet-50/60 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] font-bold text-indigo-700 mb-3">Access Role</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {([
+                        { value: 'employee', label: 'Employee', desc: 'Time tracking only', icon: '👤', color: 'emerald' },
+                        { value: 'admin', label: 'Admin', desc: 'Full admin access', icon: '🛡️', color: 'violet' },
+                        { value: 'both', label: 'Both', desc: 'Admin + Employee', icon: '⚡', color: 'amber' },
+                      ] as const).map(({ value, label, desc, icon, color }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setOnboardingForm({ ...onboardingForm, role: value })}
+                          className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all duration-200 ${
+                            onboardingForm.role === value
+                              ? value === 'employee'
+                                ? 'border-emerald-400 bg-emerald-50 text-emerald-800 shadow-md'
+                                : value === 'admin'
+                                  ? 'border-violet-400 bg-violet-50 text-violet-800 shadow-md'
+                                  : 'border-amber-400 bg-amber-50 text-amber-800 shadow-md'
+                              : 'border-white/70 bg-white/60 text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          <span className="text-xl">{icon}</span>
+                          <span className="font-bold">{label}</span>
+                          <span className={`text-[10px] font-normal ${onboardingForm.role === value ? 'opacity-80' : 'text-slate-400'}`}>{desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <input
                       type="text"
@@ -1476,206 +1385,219 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {paginatedEmployeeCards.map((employee: Employee) => {
-                const effective = getEffectiveEmployeeCompensation(employee);
-                return (
+              {orderedEmployeeCards.map((employee: Employee) => (
+                <div
+                  key={employee.id}
+                  style={{ perspective: '1000px' }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dragOverEmployeeId !== employee.id) {
+                      setDragOverEmployeeId(employee.id);
+                    }
+                  }}
+                  onDragEnter={() => {
+                    if (draggingEmployeeId !== null && draggingEmployeeId !== employee.id) {
+                      moveEmployeeCard(draggingEmployeeId, employee.id);
+                    }
+                  }}
+                  onDrop={handleEmployeeCardDrop}
+                  className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${
+                    draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
+                  } ${
+                    dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
+                  }`}
+                >
                   <div
-                    key={employee.id}
-                    style={{ perspective: '1000px' }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      if (dragOverEmployeeId !== employee.id) {
-                        setDragOverEmployeeId(employee.id);
-                      }
+                    draggable
+                    onDragStart={(e) => handleEmployeeCardDragStart(employee.id, e)}
+                    onDragEnd={handleEmployeeCardDragEnd}
+                    className="relative h-[34rem] w-full transition-transform duration-700"
+                    style={{
+                      transformStyle: 'preserve-3d',
+                      transform: flippedCards[employee.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
                     }}
-                    onDragEnter={() => {
-                      if (draggingEmployeeId !== null && draggingEmployeeId !== employee.id) {
-                        moveEmployeeCard(draggingEmployeeId, employee.id);
-                      }
-                    }}
-                    onDrop={handleEmployeeCardDrop}
-                    className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
-                      } ${dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
-                      }`}
                   >
                     <div
-                      draggable
-                      onDragStart={(e) => handleEmployeeCardDragStart(employee.id, e)}
-                      onDragEnd={handleEmployeeCardDragEnd}
-                      className="relative h-[29rem] w-full transition-transform duration-700"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (!canFlipCard()) return;
+                        toggleCardFlip(employee.id);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          if (!canFlipCard()) return;
+                          toggleCardFlip(employee.id);
+                        }
+                      }}
+                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl hover:shadow-2xl overflow-hidden border border-white/60 bg-gradient-to-br from-cyan-100/75 via-white/70 to-indigo-100/75 backdrop-blur-xl"
                       style={{
-                        transformStyle: 'preserve-3d',
-                        transform: flippedCards[employee.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                        backfaceVisibility: 'hidden',
+                        pointerEvents: flippedCards[employee.id] ? 'none' : 'auto',
                       }}
                     >
                       <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
-                          if (!canFlipCard()) return;
-                          toggleCardFlip(employee.id);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            if (!canFlipCard()) return;
-                            toggleCardFlip(employee.id);
-                          }
-                        }}
-                        className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl hover:shadow-2xl overflow-hidden border border-white/60 bg-gradient-to-br from-cyan-100/75 via-white/70 to-indigo-100/75 backdrop-blur-xl"
-                        style={{
-                          backfaceVisibility: 'hidden',
-                          pointerEvents: flippedCards[employee.id] ? 'none' : 'auto',
-                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
+                        title="Drag from anywhere on card to reorder"
                       >
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
-                          title="Drag from anywhere on card to reorder"
-                        >
-                          Drag
-                        </div>
-                        <div className="absolute -top-14 -right-10 w-36 h-36 bg-cyan-300/30 rounded-full blur-2xl" />
-                        <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
-                        <div className="mt-2 mb-5 flex items-center gap-4">
-                          <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-white/85 shadow-xl bg-white/70 shrink-0">
-                            {employee.profile_photo ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={employee.profile_photo} alt={`${employee.name} profile`} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className={`w-full h-full bg-gradient-to-br ${getEmployeeAvatarGradient(employee)} flex items-center justify-center text-white font-black text-lg`}>
-                                {getEmployeeInitials(employee.name)}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-col justify-center">
-                            <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-700 font-bold">Employee Profile</p>
-                            <p className="text-xs text-slate-500 mt-1">Tap card to flip details</p>
-                          </div>
-                        </div>
-                        <h3 className="text-2xl font-black text-slate-900 mt-2 leading-tight">{employee.name}</h3>
-                        <p className="text-slate-600 text-sm mt-1">{employee.email}</p>
-                        <div className="mt-5 rounded-2xl bg-white/72 border border-white/70 p-4">
-                          <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-semibold">Emp ID</p>
-                          <p className="text-lg font-black text-slate-900 mt-1">{employee.employee_code || 'Not set'}</p>
-                          <p className="text-xs text-slate-500 mt-2">Designation</p>
-                          <p className="text-sm font-semibold text-slate-800">{effective.designation || 'Not set'}</p>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-4">Click to flip for key details</p>
+                        Drag
                       </div>
+                      <div className="absolute -top-14 -right-10 w-36 h-36 bg-cyan-300/30 rounded-full blur-2xl" />
+                      <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
+                      <div className="mt-2 mb-5 flex items-center gap-4">
+                        <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-white/85 shadow-xl bg-white/70 shrink-0">
+                          {employee.profile_photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={employee.profile_photo} alt={`${employee.name} profile`} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className={`w-full h-full bg-gradient-to-br ${getEmployeeAvatarGradient(employee)} flex items-center justify-center text-white font-black text-lg`}>
+                              {getEmployeeInitials(employee.name)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col justify-center">
+                          <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-700 font-bold">Employee Profile</p>
+                          <p className="text-xs text-slate-500 mt-1">Tap card to flip details</p>
+                        </div>
+                      </div>
+                      <h3 className="text-2xl font-black text-slate-900 mt-2 leading-tight">{employee.name}</h3>
+                      <p className="text-slate-600 text-sm mt-1">{employee.email}</p>
+                      <div className="mt-3">
+                        {(() => {
+                          const r = employee.role || 'employee';
+                          const cfg = r === 'both'
+                            ? { label: '⚡ Both', cls: 'bg-amber-100 text-amber-800 border-amber-200' }
+                            : r === 'admin'
+                              ? { label: '🛡️ Admin', cls: 'bg-violet-100 text-violet-800 border-violet-200' }
+                              : { label: '👤 Employee', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${cfg.cls}`}>
+                              {cfg.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <div className="mt-4 rounded-2xl bg-white/72 border border-white/70 p-4">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-semibold">Emp ID</p>
+                        <p className="text-lg font-black text-slate-900 mt-1">{employee.employee_code || 'Not set'}</p>
+                        <p className="text-xs text-slate-500 mt-2">Designation</p>
+                        <p className="text-sm font-semibold text-slate-800">{employee.designation || 'Not set'}</p>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-4">Click to flip for key details</p>
+                    </div>
 
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (!canFlipCard()) return;
+                        setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
                           if (!canFlipCard()) return;
                           setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            if (!canFlipCard()) return;
-                            setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
-                          }
-                        }}
-                        className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl overflow-hidden border border-white/60 bg-gradient-to-br from-indigo-100/80 via-white/75 to-blue-100/75 backdrop-blur-xl"
-                        style={{
-                          backfaceVisibility: 'hidden',
-                          transform: 'rotateY(180deg)',
-                          pointerEvents: flippedCards[employee.id] ? 'auto' : 'none',
-                        }}
+                        }
+                      }}
+                      className="absolute inset-0 w-full text-left rounded-2xl p-5 shadow-xl overflow-hidden border border-white/60 bg-gradient-to-br from-indigo-100/80 via-white/75 to-blue-100/75 backdrop-blur-xl"
+                      style={{
+                        backfaceVisibility: 'hidden',
+                        transform: 'rotateY(180deg)',
+                        pointerEvents: flippedCards[employee.id] ? 'auto' : 'none',
+                      }}
+                    >
+                      <div
+                        className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
+                        title="Drag from anywhere on card to reorder"
                       >
-                        <div
-                          className="absolute top-3 right-3 text-[10px] px-2 py-1 rounded-full border border-white/80 bg-white/75 text-slate-600 font-semibold cursor-grab"
-                          title="Drag from anywhere on card to reorder"
+                        Drag
+                      </div>
+                      <div className="absolute -top-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
+                      <div className="absolute -bottom-14 -right-10 w-36 h-36 bg-blue-300/30 rounded-full blur-2xl" />
+                      <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-700 font-bold">Employee Details</p>
+                      <h4 className="text-xl font-black text-slate-900 mt-2">Core Information</h4>
+                      <div className="mt-4 grid grid-cols-1 gap-2.5 text-sm" onClick={(e) => e.stopPropagation()}>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Emp ID:</span> {employee.employee_code || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Designation:</span> {employee.designation || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
+                      </div>
+
+                      {/* Role management */}
+                      <div className="mt-4 rounded-xl border border-indigo-200/70 bg-indigo-50/60 px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                        <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-indigo-700 mb-2">Access Role</p>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={employeeRoleEdit[employee.id] ?? (employee.role || 'employee')}
+                            onChange={(e) => setEmployeeRoleEdit((prev) => ({ ...prev, [employee.id]: e.target.value }))}
+                            className="flex-1 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                          >
+                            <option value="employee">👤 Employee</option>
+                            <option value="admin">🛡️ Admin</option>
+                            <option value="both">⚡ Both</option>
+                          </select>
+                          <button
+                            type="button"
+                            disabled={
+                              savingRoleId === employee.id ||
+                              !employeeRoleEdit[employee.id] ||
+                              employeeRoleEdit[employee.id] === (employee.role || 'employee')
+                            }
+                            onClick={(e) => { e.stopPropagation(); handleUpdateRole(employee.id); }}
+                            className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition"
+                          >
+                            {savingRoleId === employee.id ? '...' : 'Save'}
+                          </button>
+                        </div>
+                        <p className="mt-1.5 text-[10px] text-slate-500">
+                          Current: <span className={`font-semibold ${
+                            (employee.role || 'employee') === 'both' ? 'text-amber-600' :
+                            (employee.role || 'employee') === 'admin' ? 'text-violet-600' : 'text-emerald-600'
+                          }`}>{(employee.role || 'employee').charAt(0).toUpperCase() + (employee.role || 'employee').slice(1)}</span>
+                        </p>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingEmployeeId(employee.id);
+                          }}
+                          className="glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm"
                         >
-                          Drag
-                        </div>
-                        <div className="absolute -top-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
-                        <div className="absolute -bottom-14 -right-10 w-36 h-36 bg-blue-300/30 rounded-full blur-2xl" />
-                        <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-700 font-bold">Employee Details</p>
-                        <h4 className="text-xl font-black text-slate-900 mt-2">Core Information</h4>
-                        <div className="mt-4 grid grid-cols-1 gap-2.5 text-sm" onClick={(e) => e.stopPropagation()}>
-                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Emp ID:</span> {employee.employee_code || '-'}</p>
-                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Designation:</span> {effective.designation || '-'}</p>
-                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
-                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
-                          <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Current Rate:</span> {effective.rate ?? '-'}</p>
-                        </div>
-                        <div className="mt-5 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingEmployeeId(employee.id);
-                            }}
-                            className="glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-lg text-sm"
-                          >
-                            Edit Full Details
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openDeleteEmployeeModal(employee.id, employee.name);
-                            }}
-                            className="px-3 py-2 text-sm font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition"
-                          >
-                            Delete
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
-                            }}
-                            className="px-3 py-2 rounded-lg bg-white/70 border border-white/70 text-slate-700 text-sm"
-                          >
-                            Flip Back
-                          </button>
-                        </div>
+                          Edit Full Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteEmployeeModal(employee.id, employee.name);
+                          }}
+                          className="px-3 py-2 text-sm font-semibold glass-danger-btn rounded-lg hover:brightness-95 transition"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFlippedCards((prev) => ({ ...prev, [employee.id]: false }));
+                          }}
+                          className="px-3 py-2 rounded-lg bg-white/70 border border-white/70 text-slate-700 text-sm"
+                        >
+                          Flip Back
+                        </button>
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
-
-            {/* Standardized Pagination Controls for Employees */}
-            {employeeTotalRecords > 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-4 mt-6 pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-4">
-                  <span className="text-sm text-slate-600">
-                    Showing <span className="font-semibold text-slate-900">{employeeStartItem}</span>–<span className="font-semibold text-slate-900">{employeeEndItem}</span> of <span className="font-semibold text-slate-900">{employeeTotalRecords}</span>
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                    onClick={() => {
-                      setEmployeePage((p) => Math.max(1, p - 1));
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    disabled={employeePage === 1}
-                  >
-                    Previous
-                  </button>
-                  <span className="text-sm text-slate-600 mx-2">
-                    Page <span className="font-semibold text-slate-900">{employeePage}</span> of <span className="font-semibold text-slate-900">{employeeTotalPages}</span>
-                  </span>
-                  <button
-                    className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                    onClick={() => {
-                      setEmployeePage((p) => Math.min(employeeTotalPages, p + 1));
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    disabled={employeePage === employeeTotalPages}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1772,14 +1694,15 @@ export default function AdminDashboard() {
               )}
 
               <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                {paginatedClients.map((client) => (
+                {clients.map((client) => (
                   <div
                     key={client.id}
                     onClick={() => setSelectedClient(client.id)}
-                    className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${selectedClient === client.id
-                      ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/80 shadow-lg'
-                      : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
-                      }`}
+                    className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
+                      selectedClient === client.id
+                        ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/80 shadow-lg'
+                        : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
+                    }`}
                   >
                     <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-cyan-300/20 blur-2xl" />
                     <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-blue-300/20 blur-2xl" />
@@ -1818,36 +1741,6 @@ export default function AdminDashboard() {
 
               {clients.length === 0 && !showAddClientForm && (
                 <p className="text-slate-500 text-center py-4">No clients found.</p>
-              )}
-
-              {/* Standardized Pagination Controls for Clients */}
-              {clientTotalRecords > 0 && (
-                <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600">
-                      Showing <span className="font-semibold text-slate-900">{clientStartItem}</span>–<span className="font-semibold text-slate-900">{clientEndItem}</span> of <span className="font-semibold text-slate-900">{clientTotalRecords}</span>
-                    </span>
-                    <span className="text-xs text-slate-600">
-                      Page <span className="font-semibold text-slate-900">{clientPage}</span> of <span className="font-semibold text-slate-900">{clientTotalPages}</span>
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      className="flex-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                      onClick={() => setClientPage((p) => Math.max(1, p - 1))}
-                      disabled={clientPage === 1}
-                    >
-                      Previous
-                    </button>
-                    <button
-                      className="flex-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                      onClick={() => setClientPage((p) => Math.min(clientTotalPages, p + 1))}
-                      disabled={clientPage === clientTotalPages}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
               )}
             </div>
 
@@ -1959,10 +1852,11 @@ export default function AdminDashboard() {
                       <div
                         key={project.id}
                         onClick={() => setSelectedProject(project.id)}
-                        className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${selectedProject === project.id
-                          ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/75 shadow-lg'
-                          : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
-                          }`}
+                        className={`relative overflow-hidden p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
+                          selectedProject === project.id
+                            ? 'border-cyan-300 bg-gradient-to-br from-cyan-100/85 via-white/75 to-blue-100/75 shadow-lg'
+                            : 'border-white/60 hover:border-cyan-200 bg-gradient-to-br from-white/80 via-white/70 to-cyan-50/70 shadow-md'
+                        }`}
                       >
                         <div className="absolute -top-10 -right-8 w-28 h-28 rounded-full bg-cyan-300/20 blur-2xl" />
                         <div className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full bg-blue-300/20 blur-2xl" />
@@ -2318,14 +2212,14 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {paginatedInvoiceRows.length === 0 ? (
+                      {filteredInvoiceRows.length === 0 ? (
                         <tr>
                           <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
                             No invoice entries found for the selected filters
                           </td>
                         </tr>
                       ) : (
-                        paginatedInvoiceRows.map((row) => (
+                        filteredInvoiceRows.map((row) => (
                           <tr key={row.work_id} className="hover:bg-slate-50/70">
                             <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
@@ -2337,8 +2231,8 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-slate-700">{row.net_rate.toFixed(2)}</td>
                             <td className="px-4 py-3 text-slate-700">{row.hours.toFixed(2)}</td>
                             <td className="px-4 py-3 font-bold text-slate-900">{row.net_billable.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-slate-700">
-                              {row.task_performed || '-'}
+                            <td className="px-4 py-3 text-slate-700 align-top">
+                              <span className="block whitespace-pre-line break-words max-w-[200px]" title={row.task_performed || '-'}>{row.task_performed || '-'}</span>
                               {row.is_invoice_override && (
                                 <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-100 text-cyan-800">
                                   Admin Override
@@ -2351,48 +2245,6 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
-                {/* Standardized Pagination Controls for Invoicing */}
-                {invoiceTotalRecords > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-4 border-t border-slate-200">
-                    <div className="flex items-center gap-4">
-                      <label className="text-sm text-slate-600 font-medium">Rows per page</label>
-                      <select
-                        className="border border-slate-300 rounded-xl px-3 py-1.5 text-sm bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={invoiceRowsPerPage}
-                        onChange={(e) => {
-                          setInvoiceRowsPerPage(Number(e.target.value));
-                          setInvoicePage(1);
-                        }}
-                      >
-                        {[10, 20, 50, 100].map((n) => (
-                          <option key={n} value={n}>{n}</option>
-                        ))}
-                      </select>
-                      <span className="text-sm text-slate-600">
-                        Showing <span className="font-semibold text-slate-900">{invoiceStartItem}</span>–<span className="font-semibold text-slate-900">{invoiceEndItem}</span> of <span className="font-semibold text-slate-900">{invoiceTotalRecords}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                        onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
-                        disabled={invoicePage === 1}
-                      >
-                        Previous
-                      </button>
-                      <span className="text-sm text-slate-600 mx-2">
-                        Page <span className="font-semibold text-slate-900">{invoicePage}</span> of <span className="font-semibold text-slate-900">{invoiceTotalPages}</span>
-                      </span>
-                      <button
-                        className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                        onClick={() => setInvoicePage((p) => Math.min(invoiceTotalPages, p + 1))}
-                        disabled={invoicePage === invoiceTotalPages}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
 
               </div>
             )}
@@ -2411,7 +2263,7 @@ export default function AdminDashboard() {
                 >
                   <option value="">All Employees</option>
                   {employees
-                    .filter((emp) => !emp.is_admin)
+                    .filter((emp) => (emp.role ?? (emp.is_admin ? 'admin' : 'employee')) !== 'admin')
                     .map((employee) => (
                       <option key={employee.id} value={employee.id}>
                         {employee.name}
@@ -2443,7 +2295,7 @@ export default function AdminDashboard() {
             {payablesReport && (
               <div className="glass-panel rounded-3xl p-6">
                 <div className="mb-4 rounded-2xl border border-white/70 bg-white/60 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] items-center gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-3">
                     <div>
                       <p className="text-sm text-slate-600">
                         Period: {payablesReport.start_date} to {payablesReport.end_date}
@@ -2453,23 +2305,9 @@ export default function AdminDashboard() {
                       <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Currency</p>
                       <p className="text-lg font-black text-slate-900">INR</p>
                     </div>
-                    <div className="rounded-xl border border-green-200/80 bg-gradient-to-br from-green-50/80 to-emerald-50/80 px-4 py-2 text-right">
-                      <p className="text-xs uppercase tracking-[0.16em] text-green-700 font-bold">Total Paid</p>
-                      <p className="text-2xl font-black text-slate-900">
-                        {payablesReport.rows
-                          .filter(row => selectedPaidIds.includes(row.work_id))
-                          .reduce((sum, row) => sum + row.net_payable, 0)
-                          .toFixed(0)}
-                      </p>
-                    </div>
                     <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-lime-50/80 px-4 py-2 text-right">
-                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Total Pending</p>
-                      <p className="text-2xl font-black text-slate-900">
-                        {payablesReport.rows
-                          .filter(row => !selectedPaidIds.includes(row.work_id))
-                          .reduce((sum, row) => sum + row.net_payable, 0)
-                          .toFixed(0)}
-                      </p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-700 font-bold">Total Payable</p>
+                      <p className="text-2xl font-black text-slate-900">{payablesReport.total_net_payable.toFixed(2)}</p>
                     </div>
                   </div>
                   <button
@@ -2485,43 +2323,20 @@ export default function AdminDashboard() {
                     </svg>
                     <span className="text-sm font-semibold">Download CSV</span>
                   </button>
-                  <div className="mt-3 flex flex-wrap gap-3 max-w-2xl items-end">
-                    <div className="flex-1 min-w-[150px]">
-                      <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Project Filter</label>
-                      <select
-                        value={payablesProjectFilter}
-                        onChange={(e) => setPayablesProjectFilter(e.target.value)}
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
-                      >
-                        <option value="ALL">All Projects</option>
-                        {payablesProjectOptions.map((projectCode) => (
-                          <option key={projectCode} value={projectCode}>
-                            {projectCode}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex-1 min-w-[150px]">
-                      <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Status Filter</label>
-                      <select
-                        value={payablesStatusFilter}
-                        onChange={(e) => setPayablesStatusFilter(e.target.value as 'ALL' | 'PAID' | 'PENDING')}
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
-                      >
-                        <option value="ALL">All Statuses</option>
-                        <option value="PENDING">Pending Only</option>
-                        <option value="PAID">Paid Only</option>
-                      </select>
-                    </div>
-                    <div>
-                      <button
-                        onClick={savePayablesStatus}
-                        disabled={savingPayables}
-                        className="glass-primary-btn hover:brightness-95 text-white px-5 py-2 rounded-xl transition disabled:opacity-50 h-[38px] flex items-center shadow-md font-semibold"
-                      >
-                        {savingPayables ? 'Saving...' : 'Save Paid Status'}
-                      </button>
-                    </div>
+                  <div className="mt-3 max-w-xs">
+                    <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Project Filter</label>
+                    <select
+                      value={payablesProjectFilter}
+                      onChange={(e) => setPayablesProjectFilter(e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
+                    >
+                      <option value="ALL">All</option>
+                      {payablesProjectOptions.map((projectCode) => (
+                        <option key={projectCode} value={projectCode}>
+                          {projectCode}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -2529,7 +2344,6 @@ export default function AdminDashboard() {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-100/90">
                       <tr>
-                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em] w-12"></th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Code</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Name</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Level</th>
@@ -2542,124 +2356,32 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {paginatedPayablesRows.length === 0 ? (
+                      {filteredPayablesRows.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-6 text-center text-slate-500" colSpan={10}>
+                          <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
                             No payable entries found for the selected filters
                           </td>
                         </tr>
                       ) : (
-                        paginatedPayablesRows.map((row) => (
-                          <tr key={row.work_id} className={`hover:bg-slate-50/70 transition-colors ${selectedPaidIds.includes(row.work_id) ? 'opacity-50 bg-emerald-50/40' : ''}`}>
-                            <td className="px-4 py-3">
-                              <input
-                                type="checkbox"
-                                checked={selectedPaidIds.includes(row.work_id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedPaidIds(prev => [...prev, row.work_id]);
-                                  } else {
-                                    setSelectedPaidIds(prev => prev.filter(id => id !== row.work_id));
-                                  }
-                                }}
-                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer border-slate-300"
-                                title={selectedPaidIds.includes(row.work_id) ? "Mark as Pending" : "Mark as Paid"}
-                              />
-                            </td>
+                        filteredPayablesRows.map((row) => (
+                          <tr key={row.work_id} className="hover:bg-slate-50/70">
                             <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code || '-'}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
                             <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
-                            <td className="px-4 py-3 text-slate-700">
-                              {editingPayableId === row.work_id ? (
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={payableRateEdit}
-                                    onChange={(e) => setPayableRateEdit(e.target.value)}
-                                    className="w-20 border border-slate-300 rounded px-1 py-0.5 text-xs font-bold"
-                                    autoFocus
-                                  />
-                                  <button
-                                    onClick={() => handleSavePayableRate(row.work_id)}
-                                    className="text-emerald-600 hover:text-emerald-700 font-bold text-xs"
-                                    title="Save"
-                                  >
-                                    OK
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingPayableId(null)}
-                                    className="text-slate-400 hover:text-slate-600 font-bold text-xs"
-                                    title="Cancel"
-                                  >
-                                    ✖
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center group cursor-pointer" onClick={() => {
-                                  setEditingPayableId(row.work_id);
-                                  setPayableRateEdit(row.rate.toString());
-                                }}>
-                                  <span>{row.rate.toFixed(2)}</span>
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-50 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                  </svg>
-                                </div>
-                              )}
-                            </td>
+                            <td className="px-4 py-3 text-slate-700">{row.rate.toFixed(2)}</td>
                             <td className="px-4 py-3 text-slate-700">{row.hours.toFixed(2)}</td>
                             <td className="px-4 py-3 font-bold text-slate-900">{row.net_payable.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-slate-700">{row.task_performed || '-'}</td>
+                            <td className="px-4 py-3 text-slate-700 align-top">
+                              <span className="block whitespace-pre-line break-words max-w-[200px]" title={row.task_performed || '-'}>{row.task_performed || '-'}</span>
+                            </td>
                           </tr>
                         ))
                       )}
                     </tbody>
                   </table>
                 </div>
-                {/* Standardized Pagination Controls for Payables */}
-                {payablesTotalRecords > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-4 border-t border-slate-200">
-                    <div className="flex items-center gap-4">
-                      <label className="text-sm text-slate-600 font-medium">Rows per page</label>
-                      <select
-                        className="border border-slate-300 rounded-xl px-3 py-1.5 text-sm bg-white/80 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        value={payablesRowsPerPage}
-                        onChange={(e) => {
-                          setPayablesRowsPerPage(Number(e.target.value));
-                          setPayablesPage(1);
-                        }}
-                      >
-                        {[10, 20, 50, 100].map((n) => (
-                          <option key={n} value={n}>{n}</option>
-                        ))}
-                      </select>
-                      <span className="text-sm text-slate-600">
-                        Showing <span className="font-semibold text-slate-900">{payablesStartItem}</span>–<span className="font-semibold text-slate-900">{payablesEndItem}</span> of <span className="font-semibold text-slate-900">{payablesTotalRecords}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                        onClick={() => setPayablesPage((p) => Math.max(1, p - 1))}
-                        disabled={payablesPage === 1}
-                      >
-                        Previous
-                      </button>
-                      <span className="text-sm text-slate-600 mx-2">
-                        Page <span className="font-semibold text-slate-900">{payablesPage}</span> of <span className="font-semibold text-slate-900">{payablesTotalPages}</span>
-                      </span>
-                      <button
-                        className="px-4 py-1.5 text-sm font-semibold rounded-xl border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                        onClick={() => setPayablesPage((p) => Math.min(payablesTotalPages, p + 1))}
-                        disabled={payablesPage === payablesTotalPages}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
 
               </div>
             )}
@@ -2844,4 +2566,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-
