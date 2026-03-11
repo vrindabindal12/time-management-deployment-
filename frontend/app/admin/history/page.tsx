@@ -448,37 +448,37 @@ export default function AdminHistory() {
             </div>
 
             {/* Work Entries Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div>
+              <table className="w-full table-fixed">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[82px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Date
                     </th>
                     {selectedEmployee === 'ALL' && (
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-[105px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Employee
                       </th>
                     )}
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[105px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Project
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[90px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Project Code
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[85px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Client
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[70px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Hours
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Description
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[105px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[90px] px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -493,30 +493,30 @@ export default function AdminHistory() {
                   ) : (
                     paginatedEntries.map((entry: any) => (
                       <tr key={entry.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-900">
                           {formatDate(entry.work_date)}
                         </td>
                         {selectedEmployee === 'ALL' && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {entry.employee_name || '-'}
+                          <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-900 overflow-hidden">
+                            <span className="block truncate" title={entry.employee_name || '-'}>{entry.employee_name || '-'}</span>
                           </td>
                         )}
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          {entry.project_name}
+                        <td className="px-2 py-3 text-sm text-gray-900 overflow-hidden">
+                          <span className="block truncate" title={entry.project_name}>{entry.project_name}</span>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
+                        <td className="px-2 py-3 text-sm text-gray-900">
                           {entry.project_code || '-'}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          {entry.client_name || '-'}
+                        <td className="px-2 py-3 text-sm text-gray-900 overflow-hidden">
+                          <span className="block truncate" title={entry.client_name || '-'}>{entry.client_name || '-'}</span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600">
+                        <td className="px-2 py-3 whitespace-nowrap text-sm font-semibold text-blue-600">
                           {entry.hours_worked.toFixed(2)} hrs
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
-                          {entry.description || '-'}
+                        <td className="px-2 py-3 text-sm text-gray-600">
+                          <span className="block whitespace-pre-line break-words" title={entry.description || '-'}>{entry.description || '-'}</span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 py-3 whitespace-nowrap">
                           {entry.updated_by_admin ? (
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
                               Admin Edited
@@ -527,7 +527,7 @@ export default function AdminHistory() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <td className="px-2 py-3 whitespace-nowrap text-sm">
                           <button
                             onClick={() => handleEdit(entry)}
                             className="text-blue-600 hover:text-blue-900 mr-3"
