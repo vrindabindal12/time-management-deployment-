@@ -120,6 +120,7 @@ export default function AdminDashboard() {
   const [showOnboardingForm, setShowOnboardingForm] = useState(false);
   const [showOnboardingPassword, setShowOnboardingPassword] = useState(false);
   const [onboardingEmailError, setOnboardingEmailError] = useState<string | null>(null);
+  const [onboardingPasswordError, setOnboardingPasswordError] = useState<string | null>(null);
   const [onboardingForm, setOnboardingForm] = useState(emptyOnboardingForm);
   const [employeeRoleEdit, setEmployeeRoleEdit] = useState<Record<number, string>>({});
   const [savingRoleId, setSavingRoleId] = useState<number | null>(null);
@@ -393,6 +394,19 @@ export default function AdminDashboard() {
     setLoading(true);
     setError(null);
     setOnboardingEmailError(null);
+    setOnboardingPasswordError(null);
+
+    const pwd = onboardingForm.password;
+    let pwdMsg: string | null = null;
+    if (pwd.length < 8) pwdMsg = 'Password must be at least 8 characters.';
+    else if (!/[a-z]/.test(pwd)) pwdMsg = 'Password must contain at least one lowercase letter.';
+    else if (!/[A-Z]/.test(pwd)) pwdMsg = 'Password must contain at least one uppercase letter.';
+    else if (!/[!@#$%^&*()\-_=+[\]{}|;:'",./<>?`~\\]/.test(pwd)) pwdMsg = 'Password must contain at least one special character.';
+    if (pwdMsg) {
+      setOnboardingPasswordError(pwdMsg);
+      setLoading(false);
+      return;
+    }
 
     const emailExists = employees.some(
       (emp) => emp.email.toLowerCase() === onboardingForm.email.trim().toLowerCase()
@@ -1357,7 +1371,7 @@ export default function AdminDashboard() {
                   <p className="text-sm text-slate-600 mt-1">Create employee + compensation/promotion profile in one step.</p>
                 </div>
                 <button
-                  onClick={() => { setShowOnboardingForm(true); setShowOnboardingPassword(false); setOnboardingEmailError(null); }}
+                  onClick={() => { setShowOnboardingForm(true); setShowOnboardingPassword(false); setOnboardingEmailError(null); setOnboardingPasswordError(null); }}
                   className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition"
                 >
                   + Add Employee Profile
@@ -2584,7 +2598,7 @@ export default function AdminDashboard() {
       {showOnboardingForm && (
         <div
           className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-md flex items-center justify-center px-4 py-6"
-          onClick={(e) => { if (e.target === e.currentTarget) { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); } }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); setOnboardingPasswordError(null); } }}
         >
           <div className="w-full max-w-4xl glass-panel rounded-3xl shadow-2xl flex flex-col max-h-[92vh]">
             {/* Header */}
@@ -2595,7 +2609,7 @@ export default function AdminDashboard() {
               </div>
               <button
                 type="button"
-                onClick={() => { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); }}
+                onClick={() => { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); setOnboardingPasswordError(null); }}
                 className="px-4 py-2 rounded-xl bg-white/70 border border-white/70 text-slate-700 text-sm font-semibold hover:bg-white/90 transition"
               >
                 Cancel
@@ -2657,15 +2671,16 @@ export default function AdminDashboard() {
                   }`}
                   required
                 />
+                <div className="space-y-1">
                 <div className="relative">
                   <input
                     type={showOnboardingPassword ? 'text' : 'password'}
                     placeholder="Password *"
                     value={onboardingForm.password}
-                    onChange={(e) => setOnboardingForm({ ...onboardingForm, password: e.target.value })}
+                    onChange={(e) => { setOnboardingForm({ ...onboardingForm, password: e.target.value }); if (onboardingPasswordError) setOnboardingPasswordError(null); }}
                     autoComplete="new-password"
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 pr-10 bg-white/85 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    minLength={6}
+                    className={`w-full border rounded-xl px-3 py-2.5 pr-10 bg-white/85 focus:outline-none focus:ring-2 ${onboardingPasswordError ? 'border-red-400 focus:ring-red-300' : 'border-slate-300 focus:ring-blue-400'}`}
+                    minLength={8}
                     required
                   />
                   <button
@@ -2681,6 +2696,11 @@ export default function AdminDashboard() {
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     )}
                   </button>
+                </div>
+                  <p className="text-xs text-slate-500 px-1">Min 8 chars · uppercase · lowercase · special character (e.g. !@#$%)</p>
+                  {onboardingPasswordError && (
+                    <p className="text-xs text-red-600 font-medium px-1">{onboardingPasswordError}</p>
+                  )}
                 </div>
                 <input
                   type="text"
@@ -2759,7 +2779,7 @@ export default function AdminDashboard() {
               <div className="flex justify-end gap-3 pt-2 pb-1">
                 <button
                   type="button"
-                  onClick={() => { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); }}
+                  onClick={() => { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); setOnboardingPasswordError(null); }}
                   className="px-5 py-2.5 rounded-xl bg-white/70 border border-white/70 text-slate-700 text-sm font-semibold hover:bg-white/90 transition"
                 >
                   Cancel

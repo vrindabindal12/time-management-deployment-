@@ -29,7 +29,7 @@ export default function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  if (pathname === '/login' || pathname === '/register') {
+  if (['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'].includes(pathname)) {
     return null;
   }
 

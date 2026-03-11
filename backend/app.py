@@ -8,12 +8,27 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import os
+import re
 import secrets
 import csv
 import io
 from functools import wraps
 from openpyxl import Workbook
 from sqlalchemy import text
+
+_PASSWORD_SPECIAL_RE = re.compile(r'[!@#$%^&*()\-_=+\[\]{}|;:\'",.<>?/`~\\]')
+
+def validate_password_strength(password: str):
+    """Returns an error message string, or None if the password passes all rules."""
+    if len(password) < 8:
+        return 'Password must be at least 8 characters'
+    if not re.search(r'[a-z]', password):
+        return 'Password must contain at least one lowercase letter'
+    if not re.search(r'[A-Z]', password):
+        return 'Password must contain at least one uppercase letter'
+    if not _PASSWORD_SPECIAL_RE.search(password):
+        return 'Password must contain at least one special character'
+    return None
 
 app = Flask(__name__)
 
@@ -981,7 +996,11 @@ def change_password(current_user):
     
     if not current_user.check_password(data['old_password']):
         return jsonify({'error': 'Old password is incorrect'}), 401
-    
+
+    pwd_error = validate_password_strength(data['new_password'])
+    if pwd_error:
+        return jsonify({'error': pwd_error}), 400
+
     current_user.set_password(data['new_password'])
     db.session.commit()
     
@@ -1020,8 +1039,9 @@ def create_employee(current_user):
 
     email = (data['email'] or '').lower().strip()
     password = data.get('password') or ''
-    if len(password) < 6:
-        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    pwd_error = validate_password_strength(password)
+    if pwd_error:
+        return jsonify({'error': pwd_error}), 400
     
     existing_employee = Employee.query.filter_by(email=email).first()
     if existing_employee:
@@ -1260,7 +1280,7 @@ def edit_work(current_user, work_id):
     if 'hours_worked' in data:
         try:
             hours = float(data['hours_worked'])
-            if hours < 0 or hours > 24: # Allow 0 to effectively "clear" an entry? User said "edit".
+            if hours <= 0 or hours > 24:
                 return jsonify({'error': 'Hours worked must be between 0 and 24'}), 400
             work_entry.hours_worked = hours
         except ValueError:
