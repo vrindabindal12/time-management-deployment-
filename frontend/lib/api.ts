@@ -160,6 +160,7 @@ export interface EmployeePayableRow {
   net_payable: number;
   task_performed: string;
   is_paid?: boolean;
+  is_non_billable?: boolean;
 }
 
 export interface EmployeePayableTotal {
@@ -468,6 +469,15 @@ export const employeeApi = {
     const response = await api.put('/payables/mark-paid', {
       work_ids: workIds,
       is_paid: isPaid
+    });
+    return response.data;
+  },
+
+  setNonBillableRate: async (startDate: string, endDate: string, rate: number): Promise<{ count: number; message: string }> => {
+    const response = await api.post('/payables/set-nonbillable-rate', {
+      start_date: startDate,
+      end_date: endDate,
+      rate,
     });
     return response.data;
   },

@@ -108,6 +108,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('onboarding');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [totalProjectsCount, setTotalProjectsCount] = useState(0);
   const router = useRouter();
 
@@ -177,6 +178,12 @@ export default function AdminDashboard() {
   const [payablesPageSize, setPayablesPageSize] = useState(10);
   const [selectedPayableIds, setSelectedPayableIds] = useState<Set<number>>(new Set());
   const [payableMarkPaidModal, setPayableMarkPaidModal] = useState<{ open: boolean; isPaid: boolean } | null>(null);
+  const [nonBillableRateInput, setNonBillableRateInput] = useState('');
+  const [nonBillableRateApplying, setNonBillableRateApplying] = useState(false);
+  const [payablesStatusFilter, setPayablesStatusFilter] = useState<'ALL' | 'paid' | 'unpaid'>('ALL');
+  const [payablesTypeFilter, setPayablesTypeFilter] = useState<'ALL' | 'non-billable' | 'billable'>('ALL');
+  const [inlineRateEdits, setInlineRateEdits] = useState<Record<number, string>>({});
+  const [savingRateId, setSavingRateId] = useState<number | null>(null);
   const [employeeCardsPage, setEmployeeCardsPage] = useState(1);
   const EMPLOYEE_CARDS_PAGE_SIZE = 9;
 
@@ -292,6 +299,8 @@ export default function AdminDashboard() {
   }, []);
 
   const clearError = () => setTimeout(() => setError(null), 5000);
+  const clearSuccess = () => setTimeout(() => setSuccessMsg(null), 4000);
+  const setSuccess = (msg: string) => { setSuccessMsg(msg); clearSuccess(); };
 
   const loadEmployees = async () => {
     try {
@@ -994,13 +1003,73 @@ export default function AdminDashboard() {
       );
       setPayablesReport(data);
       setPayablesProjectFilter('ALL');
+      setPayablesStatusFilter('ALL');
+      setPayablesTypeFilter('ALL');
       setPayablesPage(1);
       setSelectedPayableIds(new Set());
+      setInlineRateEdits({});
+      setNonBillableRateInput('');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load payables report');
       clearError();
     } finally {
       setPayablesLoading(false);
+    }
+  };
+
+  const handleApplyNonBillableRate = async () => {
+    if (!payablesReport || !nonBillableRateInput) return;
+    const rateNum = parseFloat(nonBillableRateInput);
+    if (isNaN(rateNum) || rateNum < 0) {
+      setError('Please enter a valid non-negative rate');
+      clearError();
+      return;
+    }
+    setNonBillableRateApplying(true);
+    try {
+      await employeeApi.setNonBillableRate(payablesReport.start_date, payablesReport.end_date, rateNum);
+      // Refresh the report so net_payable values update
+      const data = await employeeApi.getEmployeePayablesReport(
+        payableStartDate,
+        payableEndDate,
+        payableEmployeeId || undefined
+      );
+      setPayablesReport(data);
+      setPayablesPage(1);
+      setSuccess('Non-billable rate applied successfully');
+      clearSuccess();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to apply non-billable rate');
+      clearError();
+    } finally {
+      setNonBillableRateApplying(false);
+    }
+  };
+
+  const handleSaveInlineRate = async (workId: number) => {
+    const rateStr = inlineRateEdits[workId];
+    const rate = parseFloat(rateStr);
+    if (isNaN(rate) || rate < 0) return;
+    setSavingRateId(workId);
+    try {
+      await employeeApi.updateWorkPayableValues(workId, { payable_rate: rate });
+      setPayablesReport((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          rows: prev.rows.map((r) =>
+            r.work_id === workId
+              ? { ...r, rate, net_payable: parseFloat((rate * r.hours).toFixed(2)) }
+              : r
+          ),
+        };
+      });
+      setInlineRateEdits((prev) => { const n = { ...prev }; delete n[workId]; return n; });
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to save rate');
+      clearError();
+    } finally {
+      setSavingRateId(null);
     }
   };
 
@@ -1080,7 +1149,14 @@ export default function AdminDashboard() {
     ? Array.from(new Set(payablesReport.rows.map((row) => row.project_code || '-'))).sort()
     : [];
   const filteredPayablesRows = payablesReport
-    ? payablesReport.rows.filter((row) => payablesProjectFilter === 'ALL' || (row.project_code || '-') === payablesProjectFilter)
+    ? payablesReport.rows.filter((row) => {
+        if (payablesProjectFilter !== 'ALL' && (row.project_code || '-') !== payablesProjectFilter) return false;
+        if (payablesStatusFilter === 'paid' && !row.is_paid) return false;
+        if (payablesStatusFilter === 'unpaid' && row.is_paid) return false;
+        if (payablesTypeFilter === 'non-billable' && !row.is_non_billable) return false;
+        if (payablesTypeFilter === 'billable' && row.is_non_billable) return false;
+        return true;
+      })
     : [];
 
   const invoiceTotalRecords = filteredInvoiceRows.length;
@@ -1242,6 +1318,11 @@ export default function AdminDashboard() {
         {error && (
           <div className="glass-panel bg-red-50/80 border border-red-200 text-red-700 px-4 py-3 rounded-2xl mb-4">
             {error}
+          </div>
+        )}
+        {successMsg && (
+          <div className="glass-panel bg-emerald-50/80 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl mb-4">
+            {successMsg}
           </div>
         )}
 
@@ -2709,20 +2790,46 @@ export default function AdminDashboard() {
                     </svg>
                     <span className="text-sm font-semibold">Download CSV</span>
                   </button>
-                  <div className="mt-3 max-w-xs">
-                    <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Project Filter</label>
-                    <select
-                      value={payablesProjectFilter}
-                      onChange={(e) => { setPayablesProjectFilter(e.target.value); setPayablesPage(1); }}
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
-                    >
-                      <option value="ALL">All</option>
-                      {payablesProjectOptions.map((projectCode) => (
-                        <option key={projectCode} value={projectCode}>
-                          {projectCode}
-                        </option>
-                      ))}
-                    </select>
+
+                  {/* Filters row */}
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Project</label>
+                      <select
+                        value={payablesProjectFilter}
+                        onChange={(e) => { setPayablesProjectFilter(e.target.value); setPayablesPage(1); }}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
+                      >
+                        <option value="ALL">All Projects</option>
+                        {payablesProjectOptions.map((projectCode) => (
+                          <option key={projectCode} value={projectCode}>{projectCode}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Status</label>
+                      <select
+                        value={payablesStatusFilter}
+                        onChange={(e) => { setPayablesStatusFilter(e.target.value as 'ALL' | 'paid' | 'unpaid'); setPayablesPage(1); }}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
+                      >
+                        <option value="ALL">All</option>
+                        <option value="paid">Paid</option>
+                        <option value="unpaid">Unpaid</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.16em] font-bold text-slate-600 mb-1">Type</label>
+                      <select
+                        value={payablesTypeFilter}
+                        onChange={(e) => { setPayablesTypeFilter(e.target.value as 'ALL' | 'non-billable' | 'billable'); setPayablesPage(1); }}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white/90 text-sm"
+                      >
+                        <option value="ALL">All</option>
+                        <option value="non-billable">Non-Billable</option>
+                        <option value="billable">Billable</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -2817,14 +2924,55 @@ export default function AdminDashboard() {
                                 className="rounded border-slate-300"
                               />
                             </td>
-                            <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code || '-'}</td>
+                            <td className="px-4 py-3 text-slate-800 font-semibold">
+                              <div className="flex items-center gap-1.5">
+                                {row.project_code || '-'}
+                                {row.is_non_billable && (
+                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">Non-Billable</span>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
                             <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
-                            <td className="px-4 py-3 text-slate-700">{row.rate.toFixed(2)}</td>
+                            <td className="px-4 py-3">
+                              {row.is_non_billable ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={inlineRateEdits[row.work_id] ?? row.rate.toFixed(2)}
+                                    onChange={(e) => setInlineRateEdits((prev) => ({ ...prev, [row.work_id]: e.target.value }))}
+                                    className="w-20 border border-amber-300 rounded-lg px-2 py-1 text-xs bg-white/90 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                  />
+                                  {inlineRateEdits[row.work_id] !== undefined && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveInlineRate(row.work_id)}
+                                      disabled={savingRateId === row.work_id}
+                                      className="p-1 rounded-md bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition"
+                                      title="Save rate"
+                                    >
+                                      {savingRateId === row.work_id ? (
+                                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="10" className="opacity-25"/><path d="M12 2a10 10 0 0 1 10 10" className="opacity-75"/></svg>
+                                      ) : (
+                                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-700">{row.rate.toFixed(2)}</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-slate-700">{row.hours.toFixed(2)}</td>
-                            <td className="px-4 py-3 font-bold text-slate-900">{row.net_payable.toFixed(2)}</td>
+                            <td className="px-4 py-3 font-bold text-slate-900">
+                              {row.is_non_billable && inlineRateEdits[row.work_id] !== undefined
+                                ? (parseFloat(inlineRateEdits[row.work_id] || '0') * row.hours).toFixed(2)
+                                : row.net_payable.toFixed(2)}
+                            </td>
                             <td className="px-4 py-3">
                               {row.is_paid ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Paid</span>

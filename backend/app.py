@@ -37,6 +37,11 @@ def validate_password_strength(password: str):
         return 'Password must contain at least one special character'
     return None
 
+# Project code that identifies non-billable / internal work.
+# Entries logged against this project bypass employee compensation rates;
+# payables rates must be set manually by an admin.
+NON_BILLABLE_PROJECT_CODE = 'BKP-003'
+
 app = Flask(__name__)
 
 # Load environment variables
@@ -1220,10 +1225,15 @@ def add_work(current_user):
         updated_by_admin=False
     )
     
-    # Auto-populate payable values based on date-aware compensation rules
-    resolved_rate, resolved_designation = get_employee_compensation_for_date(current_user, work_date)
-    work_entry.payable_rate = resolved_rate
-    work_entry.payable_designation = resolved_designation
+    # Auto-populate payable values based on date-aware compensation rules.
+    # Non-billable (BKP-003) entries always start at rate=0; admin sets the rate later.
+    if (project_code or '').upper() == NON_BILLABLE_PROJECT_CODE:
+        work_entry.payable_rate = 0.0
+        work_entry.payable_designation = 'Non-Billable'
+    else:
+        resolved_rate, resolved_designation = get_employee_compensation_for_date(current_user, work_date)
+        work_entry.payable_rate = resolved_rate
+        work_entry.payable_designation = resolved_designation
     
     db.session.add(work_entry)
     db.session.commit()
@@ -1314,12 +1324,17 @@ def edit_work(current_user, work_id):
                         return jsonify({'error': 'Target work date must be within the last 7 days'}), 400
                 
                 work_entry.work_date = new_date
-                # Re-calculate default payable values for new date
-                employee = Employee.query.get(work_entry.employee_id)
-                if employee:
-                    res_rate, res_des = get_employee_compensation_for_date(employee, new_date)
-                    work_entry.payable_rate = res_rate
-                    work_entry.payable_designation = res_des
+                # Re-calculate default payable values for new date.
+                # Non-billable entries keep rate=0; admin sets it via the payables UI.
+                if (work_entry.project_code or '').upper() == NON_BILLABLE_PROJECT_CODE:
+                    work_entry.payable_rate = 0.0
+                    work_entry.payable_designation = 'Non-Billable'
+                else:
+                    employee = Employee.query.get(work_entry.employee_id)
+                    if employee:
+                        res_rate, res_des = get_employee_compensation_for_date(employee, new_date)
+                        work_entry.payable_rate = res_rate
+                        work_entry.payable_designation = res_des
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
@@ -1933,6 +1948,60 @@ def get_client_invoice_pdf(current_user):
 
 
 
+@app.route('/api/payables/set-nonbillable-rate', methods=['POST'])
+@token_required
+@admin_required
+def set_nonbillable_rate(current_user):
+    """Bulk-set the payable rate for all BKP-003 (non-billable) punches
+    within a date range. Net payable = rate * hours.
+    """
+    data = request.json or {}
+    start_date_str = data.get('start_date')
+    end_date_str = data.get('end_date')
+    rate_val = data.get('rate')
+
+    if not start_date_str or not end_date_str or rate_val is None:
+        return jsonify({'error': 'start_date, end_date and rate are required'}), 400
+
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    try:
+        rate_float = float(rate_val)
+        if rate_float < 0:
+            return jsonify({'error': 'Rate must be non-negative'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'error': 'rate must be a number'}), 400
+
+    # Match punches by stored project_code OR by linked project's code
+    nb_project = Project.query.filter(
+        db.func.upper(Project.code) == NON_BILLABLE_PROJECT_CODE
+    ).first()
+
+    q = Punch.query.filter(
+        Punch.work_date >= start_date,
+        Punch.work_date <= end_date
+    )
+    conds = [db.func.upper(Punch.project_code) == NON_BILLABLE_PROJECT_CODE]
+    if nb_project:
+        conds.append(Punch.project_id == nb_project.id)
+    q = q.filter(db.or_(*conds))
+    punches = q.all()
+
+    for punch in punches:
+        punch.payable_rate = rate_float
+        punch.payable_designation = 'Non-Billable'
+    db.session.commit()
+
+    return jsonify({
+        'message': f'Rate updated for {len(punches)} non-billable entries.',
+        'count': len(punches),
+    }), 200
+
+
 @app.route('/api/payables/mark-paid', methods=['PUT'])
 @token_required
 @admin_required
@@ -2001,9 +2070,10 @@ def get_employee_payables_report(current_user):
     employees = Employee.query.filter(Employee.id.in_(employee_ids)).all()
     employee_by_id = {employee.id: employee for employee in employees}
 
-    # Non-admin payroll report by default unless explicitly querying an admin employee_id.
+    # Exclude pure-admin accounts (role='admin') from the payroll report by default.
+    # Users with role='both' have an employee profile and should be included.
     if not employee_id:
-        punches = [p for p in punches if p.employee_id in employee_by_id and not employee_by_id[p.employee_id].is_admin]
+        punches = [p for p in punches if p.employee_id in employee_by_id and (employee_by_id[p.employee_id].role or 'employee') != 'admin']
 
     project_ids = list({p.project_id for p in punches if p.project_id})
     projects = Project.query.filter(Project.id.in_(project_ids)).all() if project_ids else []
@@ -2066,7 +2136,8 @@ def get_employee_payables_report(current_user):
             'hours': hours,
             'net_payable': net_payable,
             'task_performed': punch.description or '',
-            'is_paid': punch.is_paid
+            'is_paid': punch.is_paid,
+            'is_non_billable': project_code.upper() == NON_BILLABLE_PROJECT_CODE,
         })
 
     employee_totals = list(employee_totals_map.values())

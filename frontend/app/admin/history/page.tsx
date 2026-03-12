@@ -61,7 +61,8 @@ export default function AdminHistory() {
   const loadEmployees = async () => {
     try {
       const data = await employeeApi.getEmployees();
-      setEmployees(data.filter((e) => !e.is_admin));
+      // Include 'both' role users (admin+employee) — exclude pure 'admin'-only accounts
+      setEmployees(data.filter((e: any) => (e.role ?? (e.is_admin ? 'admin' : 'employee')) !== 'admin'));
       setSelectedEmployee('ALL');
     } catch (err) {
       setError('Failed to load employees');
