@@ -316,7 +316,7 @@ export default function AdminHistory() {
 
   return (
     <div className="min-h-screen py-8 px-4">
-      <div className="max-w-6xl mx-auto space-y-5">
+      <div className="max-w-[1400px] mx-auto space-y-5">
 
         {/* Toast messages */}
         {error && (
@@ -430,21 +430,21 @@ export default function AdminHistory() {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div>
+              <table className="w-full text-xs table-fixed">
                 <thead>
                   <tr className="bg-slate-50/90 border-b border-slate-100">
-                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Date</th>
+                    <th className="w-[8%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Date</th>
                     {selectedEmployee === 'ALL' && (
-                      <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Employee</th>
+                      <th className="w-[10%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Employee</th>
                     )}
-                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Project</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Code</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Client</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Hours</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Description</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Status</th>
-                    <th className="px-5 py-3.5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.12em]">Actions</th>
+                    <th className="w-[9%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Project</th>
+                    <th className="w-[10%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Code</th>
+                    <th className="w-[8%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Client</th>
+                    <th className="w-[7%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Hours</th>
+                    <th className="w-[28%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Description</th>
+                    <th className="w-[13%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Status</th>
+                    <th className="w-[7%] px-2 py-2.5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -479,68 +479,68 @@ export default function AdminHistory() {
                             isEdited ? 'bg-amber-50/30' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
                           } hover:bg-sky-50/60`}
                         >
-                          <td className="px-5 py-3.5 whitespace-nowrap">
-                            <span className="text-xs font-semibold text-slate-500 bg-slate-100/80 px-2.5 py-1 rounded-lg">
+                          <td className="px-2 py-2">
+                            <span className="text-[11px] font-semibold text-slate-500 bg-slate-100/80 px-2 py-0.5 rounded-md whitespace-nowrap inline-block">
                               {formatDate(entry.work_date)}
                             </span>
                           </td>
                           {selectedEmployee === 'ALL' && (
-                            <td className="px-5 py-3.5">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${avatarColor}`}>
+                            <td className="px-2 py-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center shrink-0 ${avatarColor}`}>
                                   {initials}
                                 </span>
-                                <span className="text-sm font-medium text-slate-800 truncate max-w-[90px]" title={entry.employee_name}>
+                                <span className="text-xs font-medium text-slate-800 break-words" title={entry.employee_name}>
                                   {entry.employee_name || '—'}
                                 </span>
                               </div>
                             </td>
                           )}
-                          <td className="px-5 py-3.5">
-                            <span className="text-sm font-semibold text-slate-800 truncate max-w-[110px] block" title={entry.project_name}>
+                          <td className="px-2 py-2">
+                            <span className="text-xs font-semibold text-slate-800 break-words" title={entry.project_name}>
                               {entry.project_name}
                             </span>
                           </td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-xs font-mono font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md whitespace-nowrap">
+                          <td className="px-2 py-2">
+                            <span className="text-[10px] font-mono font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md break-all inline-block">
                               {entry.project_code || '—'}
                             </span>
                           </td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-sm text-slate-600 truncate max-w-[80px] block" title={entry.client_name || '—'}>
+                          <td className="px-2 py-2">
+                            <span className="text-xs text-slate-600 break-words" title={entry.client_name || '—'}>
                               {entry.client_name || '—'}
                             </span>
                           </td>
-                          <td className="px-5 py-3.5 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm">
+                          <td className="px-2 py-2">
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm whitespace-nowrap">
                               {entry.hours_worked.toFixed(2)} hrs
                             </span>
                           </td>
-                          <td className="px-5 py-3.5 max-w-[220px]">
-                            <p className="text-sm text-slate-600 line-clamp-2" title={entry.description || '—'}>
+                          <td className="px-2 py-2">
+                            <p className="text-xs text-slate-600 whitespace-pre-line break-words" title={entry.description || '—'}>
                               {entry.description || <span className="text-slate-300">—</span>}
                             </p>
                           </td>
-                          <td className="px-5 py-3.5 whitespace-nowrap">
+                          <td className="px-2 py-2">
                             {isEdited ? (
                               <div>
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+                                  <svg className="w-2.5 h-2.5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                                   Admin Edited
                                 </span>
                                 {entry.updated_at && (
-                                  <p className="text-[10px] text-slate-400 mt-0.5 ml-0.5">{formatDate(entry.updated_at)}</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(entry.updated_at)}</p>
                                 )}
                               </div>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 5.3l-11 11-4.6-4.6-1.4 1.4 6 6L21.7 6.7z"/></svg>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 5.3l-11 11-4.6-4.6-1.4 1.4 6 6L21.7 6.7z"/></svg>
                                 Original
                               </span>
                             )}
                           </td>
-                          <td className="px-5 py-3.5 whitespace-nowrap text-right">
-                            <div className="inline-flex items-center gap-1">
+                          <td className="px-2 py-2 text-right">
+                            <div className="inline-flex items-center gap-0.5">
                               <button
                                 onClick={() => handleEdit(entry)}
                                 title="Edit"

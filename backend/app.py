@@ -159,7 +159,8 @@ class Employee(db.Model):
             'promotion_5_date': self.promotion_5_date.isoformat() if self.promotion_5_date else None,
             'promotion_5_rate': self.promotion_5_rate,
             'promotion_5_designation': self.promotion_5_designation,
-            'profile_photo': self.profile_photo
+            'profile_photo': self.profile_photo,
+            'has_set_password': self.password_reset_token is None
         }
 
 class Punch(db.Model):
