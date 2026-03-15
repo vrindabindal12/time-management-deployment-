@@ -1,7 +1,7 @@
 import os
 import secrets
 import unittest
-from datetime import date
+from datetime import date, timedelta
 import csv
 import io
 from openpyxl import load_workbook
@@ -216,6 +216,125 @@ class AddWorkValidationTests(unittest.TestCase):
         rows = list(csv.DictReader(io.StringIO(export_response.data.decode('utf-8'))))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['Project Name'], 'Beta')
+
+
+class PromotionRatePayablesTests(unittest.TestCase):
+    def setUp(self):
+        self.app = backend_app.app
+        self.client = self.app.test_client()
+
+        with self.app.app_context():
+            backend_app.db.drop_all()
+            backend_app.db.create_all()
+
+            admin = backend_app.Employee(
+                name='Admin',
+                email=backend_app.ADMIN_EMAIL,
+                is_admin=True,
+                role='admin'
+            )
+            admin.set_password(backend_app.ADMIN_PASSWORD)
+            backend_app.db.session.add(admin)
+            backend_app.db.session.commit()
+
+        self.admin_headers = self._login(backend_app.ADMIN_EMAIL, backend_app.ADMIN_PASSWORD)
+
+    def _login(self, email, password):
+        login_response = self.client.post('/api/login', json={'email': email, 'password': password})
+        token = login_response.get_json()['token']
+        return {'Authorization': f'Bearer {token}'}
+
+    def _create_employee_and_login(self, suffix, profile_data):
+        email = f"promo_{suffix}@test.local"
+        payload = {
+            'name': f'Promo User {suffix}',
+            'email': email,
+            'password': 'Password123!',
+            'reporting_manager': 'Admin',
+            **profile_data,
+        }
+        create_resp = self.client.post('/api/employees', json=payload, headers=self.admin_headers)
+        self.assertEqual(create_resp.status_code, 201)
+        employee = create_resp.get_json()
+        return employee, self._login(email, 'Password123!')
+
+    def _add_work(self, headers, work_date, hours=8.0):
+        response = self.client.post(
+            '/api/add-work',
+            json={
+                'project_name': 'Alpha',
+                'work_date': work_date.isoformat(),
+                'hours_worked': hours,
+                'description': 'Promotion regression test'
+            },
+            headers=headers
+        )
+        self.assertEqual(response.status_code, 201)
+        return response.get_json()
+
+    def _get_payables_rows(self):
+        start_date = (date.today() - timedelta(days=7)).isoformat()
+        end_date = date.today().isoformat()
+        response = self.client.get(
+            f'/api/payables/employees?start_date={start_date}&end_date={end_date}',
+            headers=self.admin_headers
+        )
+        self.assertEqual(response.status_code, 200)
+        return response.get_json()['rows']
+
+    def test_payables_use_promotion_rate_on_and_after_promotion_date(self):
+        promotion_date = date.today() - timedelta(days=2)
+        day_before = promotion_date - timedelta(days=1)
+
+        _, employee_headers = self._create_employee_and_login(
+            suffix='dated',
+            profile_data={
+                'current_hourly_rate': 100,
+                'designation': 'Engineer',
+                'promotion_1_date': promotion_date.isoformat(),
+                'promotion_1_rate': 150,
+                'promotion_1_designation': 'Senior Engineer',
+            }
+        )
+
+        self._add_work(employee_headers, day_before, hours=2)
+        self._add_work(employee_headers, promotion_date, hours=2)
+
+        rows = self._get_payables_rows()
+        rate_by_date = {row['work_date']: row['rate'] for row in rows}
+
+        self.assertEqual(rate_by_date[day_before.isoformat()], 100.0)
+        self.assertEqual(rate_by_date[promotion_date.isoformat()], 150.0)
+
+    def test_profile_promotion_update_reflects_in_regular_payables_rows(self):
+        promotion_date = date.today() - timedelta(days=2)
+
+        employee, employee_headers = self._create_employee_and_login(
+            suffix='updated',
+            profile_data={
+                'current_hourly_rate': 100,
+                'designation': 'Engineer',
+            }
+        )
+
+        self._add_work(employee_headers, promotion_date, hours=2)
+
+        rows_before = self._get_payables_rows()
+        self.assertEqual(rows_before[0]['rate'], 100.0)
+
+        update_resp = self.client.put(
+            f"/api/employees/{employee['id']}/profile",
+            json={
+                'promotion_1_date': promotion_date.isoformat(),
+                'promotion_1_rate': 150,
+                'promotion_1_designation': 'Senior Engineer',
+            },
+            headers=self.admin_headers
+        )
+        self.assertEqual(update_resp.status_code, 200)
+
+        rows_after = self._get_payables_rows()
+        self.assertEqual(rows_after[0]['rate'], 150.0)
 
 
 if __name__ == '__main__':

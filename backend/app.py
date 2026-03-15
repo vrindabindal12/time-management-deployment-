@@ -785,6 +785,17 @@ def get_employee_compensation_for_date(employee, work_date):
     return float(effective_rate or 0.0), effective_designation
 
 
+def is_non_billable_punch(punch, project_by_id=None):
+    """Return True if a punch belongs to the non-billable project."""
+    if (punch.project_code or '').upper() == NON_BILLABLE_PROJECT_CODE:
+        return True
+    if project_by_id and punch.project_id:
+        project = project_by_id.get(punch.project_id)
+        if project and (project.code or '').upper() == NON_BILLABLE_PROJECT_CODE:
+            return True
+    return False
+
+
 def _employee_lookup_keys(employee):
     keys = set()
     if employee.name:
@@ -2092,21 +2103,27 @@ def get_employee_payables_report(current_user):
             continue
 
         hours = round(float(punch.hours_worked), 2)
-        
-        # Prefer stored payable rate if available
-        if punch.payable_rate is not None:
+
+        project = project_by_id.get(punch.project_id) if punch.project_id else None
+        project_code = project.code if project else (punch.project_code or '')
+        project_name = project.name if project else punch.project_name
+        non_billable = is_non_billable_punch(punch, project_by_id)
+
+        # Recompute payables by work_date for regular employee-entered rows so
+        # promotion updates apply correctly. Preserve explicit admin overrides
+        # and non-billable custom rates from stored payable values.
+        if non_billable:
+            rate = punch.payable_rate if punch.payable_rate is not None else 0.0
+            resolved_designation = punch.payable_designation or 'Non-Billable'
+        elif punch.updated_by_admin and punch.payable_rate is not None:
             rate = punch.payable_rate
             resolved_designation = punch.payable_designation or 'Unspecified'
         else:
             resolved_rate, resolved_designation = get_employee_compensation_for_date(employee, punch.work_date)
             rate = resolved_rate
-            
+
         rate = round(rate, 2)
         net_payable = round(hours * rate, 2)
-
-        project = project_by_id.get(punch.project_id) if punch.project_id else None
-        project_code = project.code if project else (punch.project_code or '')
-        project_name = project.name if project else punch.project_name
 
         total_hours += hours
         total_net_payable += net_payable
@@ -2138,7 +2155,7 @@ def get_employee_payables_report(current_user):
             'net_payable': net_payable,
             'task_performed': punch.description or '',
             'is_paid': punch.is_paid,
-            'is_non_billable': project_code.upper() == NON_BILLABLE_PROJECT_CODE,
+            'is_non_billable': non_billable,
         })
 
     employee_totals = list(employee_totals_map.values())
