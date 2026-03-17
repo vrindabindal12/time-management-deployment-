@@ -8,6 +8,15 @@ import LiveClock from '@/components/LiveClock';
 
 const DESIGNATIONS = ['Managing Director', 'Associate Director', 'Senior Consultant'];
 
+type ProjectContractType = 'fixed_fee' | 'time_materials';
+
+const emptyProjectForm = {
+  name: '',
+  code: '',
+  contract_type: 'time_materials' as ProjectContractType,
+  fixed_fee_amount: '',
+};
+
 const emptyOnboardingForm = {
   name: '',
   email: '',
@@ -191,9 +200,9 @@ export default function AdminDashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [showAddProjectForm, setShowAddProjectForm] = useState(false);
-  const [projectForm, setProjectForm] = useState({ name: '', code: '' });
+  const [projectForm, setProjectForm] = useState(emptyProjectForm);
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
-  const [projectEditForm, setProjectEditForm] = useState({ name: '', code: '' });
+  const [projectEditForm, setProjectEditForm] = useState(emptyProjectForm);
 
   // Project Rate states
   const [projectRates, setProjectRates] = useState<ProjectRate[]>([]);
@@ -257,7 +266,7 @@ export default function AdminDashboard() {
     setEditingClientId(null);
     setClientEditForm({ name: '', code: '' });
     setEditingProjectId(null);
-    setProjectEditForm({ name: '', code: '' });
+    setProjectEditForm(emptyProjectForm);
   }, [selectedClient]);
 
   useEffect(() => {
@@ -658,13 +667,23 @@ export default function AdminDashboard() {
       setError('Please select a client first');
       return;
     }
+    if (projectForm.contract_type === 'fixed_fee' && !projectForm.fixed_fee_amount.trim()) {
+      setError('Fixed fee amount is required for fixed fee projects');
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      await projectApi.createProject(selectedClient, projectForm.name, projectForm.code);
-      setProjectForm({ name: '', code: '' });
+      await projectApi.createProject(
+        selectedClient,
+        projectForm.name,
+        projectForm.code,
+        projectForm.contract_type,
+        projectForm.contract_type === 'fixed_fee' ? Number(projectForm.fixed_fee_amount) : undefined
+      );
+      setProjectForm(emptyProjectForm);
       setShowAddProjectForm(false);
       await loadClientProjects(selectedClient);
     } catch (err: any) {
@@ -812,18 +831,27 @@ export default function AdminDashboard() {
 
   const startEditProject = (project: Project) => {
     setEditingProjectId(project.id);
-    setProjectEditForm({ name: project.name, code: project.code });
+    setProjectEditForm({
+      name: project.name,
+      code: project.code,
+      contract_type: project.contract_type,
+      fixed_fee_amount: project.fixed_fee_amount != null ? String(project.fixed_fee_amount) : '',
+    });
     setShowAddProjectForm(false);
   };
 
   const cancelEditProject = () => {
     setEditingProjectId(null);
-    setProjectEditForm({ name: '', code: '' });
+    setProjectEditForm(emptyProjectForm);
   };
 
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProjectId) return;
+    if (projectEditForm.contract_type === 'fixed_fee' && !projectEditForm.fixed_fee_amount.trim()) {
+      setError('Fixed fee amount is required for fixed fee projects');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -832,6 +860,10 @@ export default function AdminDashboard() {
       await projectApi.updateProject(editingProjectId, {
         name: projectEditForm.name,
         code: projectEditForm.code,
+        contract_type: projectEditForm.contract_type,
+        fixed_fee_amount: projectEditForm.contract_type === 'fixed_fee'
+          ? Number(projectEditForm.fixed_fee_amount)
+          : null,
       });
       cancelEditProject();
       if (selectedClient) {
@@ -1228,7 +1260,8 @@ export default function AdminDashboard() {
 
     rows.push([]);
     rows.push(['Total Hours', invoiceReport.total_hours.toFixed(2)]);
-    rows.push(['Total Billable', invoiceReport.total_net_billable.toFixed(2)]);
+    rows.push(['Total Actual Billable', invoiceReport.total_net_billable.toFixed(2)]);
+    rows.push(['Total Invoice Amount', invoiceReport.total_invoice_amount.toFixed(2)]);
 
     downloadCsvFile(
       `client_invoice_${invoiceReport.client.code}_${invoiceReport.start_date}_to_${invoiceReport.end_date}.csv`,
@@ -2124,6 +2157,40 @@ export default function AdminDashboard() {
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
                           />
                         </div>
+                        <div>
+                          <label className="block text-xs font-bold text-blue-700 mb-1">CONTRACT TYPE</label>
+                          <select
+                            value={projectForm.contract_type}
+                            onChange={(e) => {
+                              const nextType = e.target.value as ProjectContractType;
+                              setProjectForm({
+                                ...projectForm,
+                                contract_type: nextType,
+                                fixed_fee_amount: nextType === 'fixed_fee' ? projectForm.fixed_fee_amount : '',
+                              });
+                            }}
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            required
+                          >
+                            <option value="time_materials">Time & Materials</option>
+                            <option value="fixed_fee">Fixed fee</option>
+                          </select>
+                        </div>
+                        {projectForm.contract_type === 'fixed_fee' && (
+                          <div>
+                            <label className="block text-xs font-bold text-blue-700 mb-1">FIXED FEE AMOUNT (CAD$)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="e.g., 25000"
+                              value={projectForm.fixed_fee_amount}
+                              onChange={(e) => setProjectForm({ ...projectForm, fixed_fee_amount: e.target.value })}
+                              required
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        )}
                       </div>
                       <button
                         type="submit"
@@ -2159,6 +2226,39 @@ export default function AdminDashboard() {
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                           />
                         </div>
+                        <div>
+                          <label className="block text-xs font-bold text-cyan-700 mb-1">CONTRACT TYPE</label>
+                          <select
+                            value={projectEditForm.contract_type}
+                            onChange={(e) => {
+                              const nextType = e.target.value as ProjectContractType;
+                              setProjectEditForm({
+                                ...projectEditForm,
+                                contract_type: nextType,
+                                fixed_fee_amount: nextType === 'fixed_fee' ? projectEditForm.fixed_fee_amount : '',
+                              });
+                            }}
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                            required
+                          >
+                            <option value="time_materials">Time & Materials</option>
+                            <option value="fixed_fee">Fixed fee</option>
+                          </select>
+                        </div>
+                        {projectEditForm.contract_type === 'fixed_fee' && (
+                          <div>
+                            <label className="block text-xs font-bold text-cyan-700 mb-1">FIXED FEE AMOUNT (CAD$)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={projectEditForm.fixed_fee_amount}
+                              onChange={(e) => setProjectEditForm({ ...projectEditForm, fixed_fee_amount: e.target.value })}
+                              required
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                            />
+                          </div>
+                        )}
                       </div>
                       <div className="mt-3 flex gap-2">
                         <button
@@ -2202,6 +2302,20 @@ export default function AdminDashboard() {
                             <span className="inline-block mt-0.5 text-[10px] font-bold font-mono text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-md">
                               {selectedClientData.code}-{project.code}
                             </span>
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${
+                                project.contract_type === 'fixed_fee'
+                                  ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                  : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                              }`}>
+                                {project.contract_type === 'fixed_fee' ? 'Fixed fee' : 'Time & Materials'}
+                              </span>
+                              {project.contract_type === 'fixed_fee' && project.fixed_fee_amount != null && (
+                                <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border text-amber-700 bg-amber-50 border-amber-200">
+                                  CAD$ {project.fixed_fee_amount.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           {pIsSelected && (
                             <span className="text-[10px] font-bold text-cyan-600 bg-cyan-100 px-2 py-0.5 rounded-full shrink-0">Active</span>
@@ -2445,10 +2559,26 @@ export default function AdminDashboard() {
                       <p className="text-lg font-black text-slate-900">CAD$</p>
                     </div>
                     <div className="rounded-xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/80 to-blue-50/80 px-4 py-2 text-right">
-                      <p className="text-xs uppercase tracking-[0.16em] text-indigo-700 font-bold">Total Billable</p>
-                      <p className="text-2xl font-black text-slate-900">{invoiceReport.total_net_billable.toFixed(2)}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-indigo-700 font-bold">Total Invoice Amount</p>
+                      <p className="text-2xl font-black text-slate-900">{invoiceReport.total_invoice_amount.toFixed(2)}</p>
                     </div>
                   </div>
+                  {invoiceReport.fixed_fee_warnings.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-amber-300/80 bg-amber-50/80 p-3">
+                      <p className="text-xs uppercase tracking-[0.14em] font-bold text-amber-800 mb-2">Fixed Fee Variance Warnings</p>
+                      <div className="space-y-1.5 text-sm text-amber-900">
+                        {invoiceReport.fixed_fee_warnings.map((warning) => (
+                          <p key={warning.project_id}>
+                            <span className="font-semibold">{warning.project_code}</span>
+                            {' - '}
+                            {warning.status === 'overage' ? 'Overage' : 'Nearing threshold'}
+                            {': '}Actual CAD$ {warning.actual_hours_amount.toFixed(2)} vs Fixed CAD$ {warning.fixed_fee_amount.toFixed(2)}
+                            {warning.utilization_ratio != null && ` (${(warning.utilization_ratio * 100).toFixed(1)}%)`}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={downloadInvoiceCsv}

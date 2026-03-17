@@ -134,8 +134,22 @@ export interface ClientInvoiceProjectTotal {
   project_id: number;
   project_code: string;
   project_name: string;
+  contract_type: 'fixed_fee' | 'time_materials';
+  fixed_fee_amount?: number | null;
   total_hours: number;
   total_net_billable: number;
+}
+
+export interface FixedFeeProjectSummary {
+  project_id: number;
+  project_code: string;
+  project_name: string;
+  actual_hours_amount: number;
+  fixed_fee_amount: number;
+  variance_amount: number;
+  variance_type: 'none' | 'overage' | 'credit';
+  utilization_ratio: number | null;
+  status: 'ok' | 'near_limit' | 'overage';
 }
 
 export interface ClientInvoiceReport {
@@ -146,6 +160,16 @@ export interface ClientInvoiceReport {
   project_totals: ClientInvoiceProjectTotal[];
   total_hours: number;
   total_net_billable: number;
+  total_invoice_amount: number;
+  fixed_fee_projects: FixedFeeProjectSummary[];
+  tm_projects: Array<{
+    project_id: number;
+    project_code: string;
+    project_name: string;
+    total_hours: number;
+    total_amount: number;
+  }>;
+  fixed_fee_warnings: FixedFeeProjectSummary[];
 }
 
 export interface EmployeePayableRow {
@@ -213,6 +237,8 @@ export interface Project {
   client_id: number;
   name: string;
   code: string;
+  contract_type: 'fixed_fee' | 'time_materials';
+  fixed_fee_amount?: number | null;
   created_at: string;
   updated_at: string;
   rates: ProjectRate[];
@@ -551,8 +577,16 @@ export const projectApi = {
     return response.data;
   },
 
-  createProject: async (clientId: number, name: string, code: string): Promise<Project> => {
-    const response = await api.post(`/clients/${clientId}/projects`, { name, code });
+  createProject: async (
+    clientId: number,
+    name: string,
+    code: string,
+    contractType: 'fixed_fee' | 'time_materials',
+    fixedFeeAmount?: number
+  ): Promise<Project> => {
+    const payload: any = { name, code, contract_type: contractType };
+    if (fixedFeeAmount != null) payload.fixed_fee_amount = fixedFeeAmount;
+    const response = await api.post(`/clients/${clientId}/projects`, payload);
     return response.data;
   },
 
@@ -561,8 +595,13 @@ export const projectApi = {
     return response.data;
   },
 
-  updateProject: async (projectId: number, data: Partial<Pick<Project, 'name' | 'code'>>): Promise<Project> => {
-    const response = await api.put(`/projects/${projectId}`, data);
+  updateProject: async (
+    projectId: number,
+    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount'>>
+  ): Promise<Project> => {
+    const payload: any = { ...data };
+    if ('contract_type' in payload) payload.contract_type = payload.contract_type;
+    const response = await api.put(`/projects/${projectId}`, payload);
     return response.data;
   },
 

@@ -4,7 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import os
@@ -41,12 +41,15 @@ def validate_password_strength(password: str):
 # Entries logged against this project bypass employee compensation rates;
 # payables rates must be set manually by an admin.
 NON_BILLABLE_PROJECT_CODE = 'BKP-003'
+CONTRACT_TYPE_FIXED_FEE = 'fixed_fee'
+CONTRACT_TYPE_TIME_MATERIALS = 'time_materials'
 
 app = Flask(__name__)
 
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
+FIXED_FEE_WARNING_THRESHOLD = float(os.environ.get('FIXED_FEE_WARNING_THRESHOLD', '0.8'))
 
 # Configuration – all secrets from env; no defaults that contain real secrets
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -229,6 +232,8 @@ class Project(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     name = db.Column(db.String(200), nullable=False)
     code = db.Column(db.String(50), nullable=False)
+    contract_type = db.Column(db.String(30), nullable=False, server_default=CONTRACT_TYPE_TIME_MATERIALS)
+    fixed_fee_amount = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     rates = db.relationship('ProjectRate', backref='project', lazy=True, cascade='all, delete-orphan')
@@ -241,10 +246,24 @@ class Project(db.Model):
             'client_id': self.client_id,
             'name': self.name,
             'code': self.code,
+            'contract_type': self.contract_type,
+            'fixed_fee_amount': self.fixed_fee_amount,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'rates': [rate.to_dict() for rate in self.rates]
         }
+
+
+class FixedFeeAlertLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    alert_date = db.Column(db.Date, nullable=False)
+    alert_type = db.Column(db.String(20), nullable=False)  # near_limit | overage
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('project_id', 'alert_date', 'alert_type', name='uq_fixed_fee_alert_day_type'),
+    )
 
 class ProjectRate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -678,6 +697,59 @@ def ensure_client_rate_schema():
     db.create_all()
 
 
+def ensure_project_contract_schema():
+    """Add project contract fields for existing sqlite databases."""
+    if not DATABASE_URL.startswith('sqlite'):
+        return
+
+    required_columns = {
+        'contract_type': f"TEXT NOT NULL DEFAULT '{CONTRACT_TYPE_TIME_MATERIALS}'",
+        'fixed_fee_amount': 'FLOAT',
+    }
+
+    existing = {
+        row[1]
+        for row in db.session.execute(text("PRAGMA table_info(project)")).fetchall()
+    }
+
+    for column_name, column_type in required_columns.items():
+        if column_name not in existing:
+            db.session.execute(text(f"ALTER TABLE project ADD COLUMN {column_name} {column_type}"))
+
+    db.session.execute(
+        text(
+            "UPDATE project "
+            "SET contract_type = :default_ct "
+            "WHERE contract_type IS NULL OR TRIM(contract_type) = ''"
+        ),
+        {'default_ct': CONTRACT_TYPE_TIME_MATERIALS}
+    )
+    db.session.commit()
+
+
+def _normalize_contract_type(raw_contract_type):
+    normalized = (raw_contract_type or '').strip().lower()
+    if normalized in ('fixed fee', 'fixed_fee', 'fixedfee', 'fixed'):
+        return CONTRACT_TYPE_FIXED_FEE
+    if normalized in ('time & materials', 'time and materials', 'time_materials', 't&m', 'tm', 't and m'):
+        return CONTRACT_TYPE_TIME_MATERIALS
+    return None
+
+
+def _parse_fixed_fee_amount(value, required):
+    if value is None or value == '':
+        if required:
+            raise ValueError('Fixed fee amount is required for fixed fee projects')
+        return None
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        raise ValueError('Fixed fee amount must be a valid number')
+    if amount < 0:
+        raise ValueError('Fixed fee amount must be non-negative')
+    return amount
+
+
 def parse_optional_date(value, field_name):
     if value is None or value == '':
         return None
@@ -865,6 +937,7 @@ with app.app_context():
     ensure_punch_invoice_schema()
     ensure_project_rate_schema()
     ensure_client_rate_schema()
+    ensure_project_contract_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
     if legacy_null_descriptions:
@@ -1587,7 +1660,11 @@ def _build_client_invoice_data(client, start_date, end_date):
             'rows': [],
             'project_totals': [],
             'total_hours': 0.0,
-            'total_net_billable': 0.0
+            'total_net_billable': 0.0,
+            'total_invoice_amount': 0.0,
+            'fixed_fee_projects': [],
+            'tm_projects': [],
+            'fixed_fee_warnings': []
         }
 
     base_query = Punch.query.filter(
@@ -1661,7 +1738,11 @@ def _build_client_invoice_data(client, start_date, end_date):
 
         pt = project_totals_map.setdefault(project.id, {
             'project_id': project.id, 'project_code': project.code,
-            'project_name': project.name, 'total_hours': 0.0, 'total_net_billable': 0.0
+            'project_name': project.name,
+            'contract_type': project.contract_type or CONTRACT_TYPE_TIME_MATERIALS,
+            'fixed_fee_amount': project.fixed_fee_amount,
+            'total_hours': 0.0,
+            'total_net_billable': 0.0
         })
         pt['total_hours'] += hours
         pt['total_net_billable'] += net_billable
@@ -1684,9 +1765,62 @@ def _build_client_invoice_data(client, start_date, end_date):
 
     rows.sort(key=lambda r: (r['work_date'], r['project_code'], r['employee_name']))
     project_totals = sorted(project_totals_map.values(), key=lambda t: t['project_code'])
+    fixed_fee_projects = []
+    tm_projects = []
+    fixed_fee_warnings = []
+    total_invoice_amount = 0.0
+
     for t in project_totals:
         t['total_hours'] = round(t['total_hours'], 2)
         t['total_net_billable'] = round(t['total_net_billable'], 2)
+        contract_type = t.get('contract_type') or CONTRACT_TYPE_TIME_MATERIALS
+        t['contract_type'] = contract_type
+
+        if contract_type == CONTRACT_TYPE_FIXED_FEE:
+            fixed_fee_amount = float(t.get('fixed_fee_amount') or 0.0)
+            actual_amount = float(t.get('total_net_billable') or 0.0)
+            variance = round(actual_amount - fixed_fee_amount, 2)
+            variance_type = 'none'
+            if variance > 0:
+                variance_type = 'overage'
+            elif variance < 0:
+                variance_type = 'credit'
+
+            utilization_ratio = (actual_amount / fixed_fee_amount) if fixed_fee_amount > 0 else None
+            status = 'ok'
+            if utilization_ratio is not None and utilization_ratio > 1:
+                status = 'overage'
+            elif utilization_ratio is not None and utilization_ratio >= FIXED_FEE_WARNING_THRESHOLD:
+                status = 'near_limit'
+
+            fixed_data = {
+                'project_id': t['project_id'],
+                'project_code': t['project_code'],
+                'project_name': t['project_name'],
+                'actual_hours_amount': round(actual_amount, 2),
+                'fixed_fee_amount': round(fixed_fee_amount, 2),
+                'variance_amount': abs(variance),
+                'variance_type': variance_type,
+                'utilization_ratio': round(utilization_ratio, 4) if utilization_ratio is not None else None,
+                'status': status,
+            }
+            fixed_fee_projects.append(fixed_data)
+
+            if status in ('near_limit', 'overage'):
+                fixed_fee_warnings.append(fixed_data)
+
+            total_invoice_amount += fixed_fee_amount
+        else:
+            tm_projects.append({
+                'project_id': t['project_id'],
+                'project_code': t['project_code'],
+                'project_name': t['project_name'],
+                'total_hours': t['total_hours'],
+                'total_amount': t['total_net_billable'],
+            })
+            total_invoice_amount += float(t['total_net_billable'] or 0.0)
+
+    _send_fixed_fee_variance_alerts(client, fixed_fee_warnings)
 
     return {
         'client': client.to_dict(),
@@ -1695,8 +1829,83 @@ def _build_client_invoice_data(client, start_date, end_date):
         'rows': rows,
         'project_totals': project_totals,
         'total_hours': round(total_hours, 2),
-        'total_net_billable': round(total_net_billable, 2)
+        'total_net_billable': round(total_net_billable, 2),
+        'total_invoice_amount': round(total_invoice_amount, 2),
+        'fixed_fee_projects': fixed_fee_projects,
+        'tm_projects': tm_projects,
+        'fixed_fee_warnings': fixed_fee_warnings,
     }
+
+
+def _send_fixed_fee_variance_alerts(client, fixed_fee_warnings):
+    recipients = [
+        (employee.email or '').strip().lower()
+        for employee in Employee.query.filter(Employee.role.in_(['admin', 'both'])).all()
+        if employee.email
+    ]
+    recipients = sorted(set([r for r in recipients if r]))
+    if not recipients or not fixed_fee_warnings:
+        return
+
+    today = date.today()
+    alerts_to_send = []
+    for warning in fixed_fee_warnings:
+        alert_type = 'overage' if warning.get('status') == 'overage' else 'near_limit'
+        if alert_type == 'overage':
+            existing = FixedFeeAlertLog.query.filter_by(
+                project_id=warning['project_id'],
+                alert_date=today,
+                alert_type=alert_type,
+            ).first()
+            if existing:
+                continue
+        else:
+            existing = FixedFeeAlertLog.query.filter_by(
+                project_id=warning['project_id'],
+                alert_type=alert_type,
+            ).first()
+            if existing:
+                continue
+        alerts_to_send.append((warning, alert_type))
+
+    if not alerts_to_send:
+        return
+
+    lines = []
+    for warning, _alert_type in alerts_to_send:
+        utilization = warning.get('utilization_ratio')
+        utilization_pct = f"{utilization * 100:.1f}%" if utilization is not None else 'n/a'
+        lines.append(
+            f"- {warning['project_code']} ({warning['project_name']}): "
+            f"actual CAD$ {warning['actual_hours_amount']:,.2f}, "
+            f"fixed CAD$ {warning['fixed_fee_amount']:,.2f}, "
+            f"utilization {utilization_pct}, status {warning['status']}"
+        )
+
+    msg = Message(
+        subject=f"[Time Tracking] Fixed Fee Variance Alert - {client.code}",
+        recipients=recipients,
+        body=(
+            f"Client: {client.name} ({client.code})\n"
+            f"Date: {today.isoformat()}\n\n"
+            "Fixed fee project variance warnings:\n"
+            + "\n".join(lines)
+            + "\n\nThis is an automated internal alert."
+        ),
+    )
+
+    try:
+        mail.send(msg)
+    except Exception:
+        return
+
+    for warning, alert_type in alerts_to_send:
+        db.session.add(FixedFeeAlertLog(
+            project_id=warning['project_id'],
+            alert_date=today,
+            alert_type=alert_type,
+        ))
+    db.session.commit()
 
 
 def _generate_invoice_pdf(data, project_filter=None):
@@ -1732,9 +1941,13 @@ def _generate_invoice_pdf(data, project_filter=None):
     rows          = [r for r in data['rows']
                      if not project_filter or project_filter == 'ALL'
                      or r['project_code'] == project_filter]
-    project_totals     = data['project_totals']
+    project_totals     = [
+        pt for pt in data['project_totals']
+        if not project_filter or project_filter == 'ALL' or pt['project_code'] == project_filter
+    ]
     total_hours        = data['total_hours']
     total_net_billable = data['total_net_billable']
+    total_invoice_amount = data.get('total_invoice_amount', total_net_billable)
 
     def fmt(d):
         try:
@@ -1796,7 +2009,7 @@ def _generate_invoice_pdf(data, project_filter=None):
     elements.append(Spacer(1, 0.2 * cm))
     sum_cols = [PAGE_W * 0.18, PAGE_W * 0.44, PAGE_W * 0.18, PAGE_W * 0.20]
     sum_data = [[Paragraph(h, ps(8, C_WHITE, bold=True))
-                 for h in ['Project Code', 'Project Name', 'Total Hours', 'Net Billable (CAD$)']]]
+                 for h in ['Project Code', 'Project Name', 'Contract', 'Amount (CAD$)']]]
     sum_style = [
         ('BACKGROUND', (0, 0), (-1, 0), C_SKY),
         ('BOX',  (0, 0), (-1, -1), 0.75, C_BORDER),
@@ -1805,7 +2018,7 @@ def _generate_invoice_pdf(data, project_filter=None):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ('LEFTPADDING',   (0, 0), (-1, -1), 8),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
-        ('ALIGN',  (2, 0), (3, -1), 'RIGHT'),
+        ('ALIGN',  (3, 0), (3, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]
     for i, t in enumerate(project_totals):
@@ -1814,8 +2027,11 @@ def _generate_invoice_pdf(data, project_filter=None):
         sum_data.append([
             Paragraph(t['project_code'],               ps(8.5, C_NAVY, bold=True)),
             Paragraph(t['project_name'],               ps(8.5)),
-            Paragraph(f"{t['total_hours']:.2f}",       ps(8.5, align=TA_RIGHT)),
-            Paragraph(f"{t['total_net_billable']:,.2f}", ps(8.5, bold=True, align=TA_RIGHT)),
+            Paragraph('Fixed fee' if t.get('contract_type') == CONTRACT_TYPE_FIXED_FEE else 'Time & Materials', ps(8.5)),
+            Paragraph(
+                f"{((t.get('fixed_fee_amount') or 0.0) if t.get('contract_type') == CONTRACT_TYPE_FIXED_FEE else t['total_net_billable']):,.2f}",
+                ps(8.5, bold=True, align=TA_RIGHT)
+            ),
         ])
     sum_table = Table(sum_data, colWidths=sum_cols)
     sum_table.setStyle(TableStyle(sum_style))
@@ -1823,15 +2039,21 @@ def _generate_invoice_pdf(data, project_filter=None):
     elements.append(Spacer(1, 0.5 * cm))
 
     # ── DETAILED BILLING ───────────────────────────────────────────────
-    if rows:
+    tm_rows = [
+        row for row in rows
+        if any(
+            pt['project_code'] == row['project_code']
+            and pt.get('contract_type') != CONTRACT_TYPE_FIXED_FEE
+            for pt in project_totals
+        )
+    ]
+    fixed_fee_projects = [pt for pt in project_totals if pt.get('contract_type') == CONTRACT_TYPE_FIXED_FEE]
+
+    if tm_rows:
         elements.append(Paragraph('DETAILED BILLING', ps(7, C_MUTED, bold=True)))
         elements.append(Spacer(1, 0.2 * cm))
-        d_cols = [
-            PAGE_W * 0.088, PAGE_W * 0.090, PAGE_W * 0.140, PAGE_W * 0.135,
-            PAGE_W * 0.060, PAGE_W * 0.100, PAGE_W * 0.062, PAGE_W * 0.100, PAGE_W * 0.125
-        ]
-        d_hdrs = ['Date', 'Project', 'Employee', 'Level',
-                  'Hrs', 'Gross Rate', 'Disc%', 'Net Rate', 'Net Billable']
+        d_cols = [PAGE_W * 0.12, PAGE_W * 0.12, PAGE_W * 0.20, PAGE_W * 0.18, PAGE_W * 0.12, PAGE_W * 0.13, PAGE_W * 0.13]
+        d_hdrs = ['Date', 'Project', 'Employee', 'Description', 'Hours', 'Rate', 'Amount']
         d_data = [[Paragraph(h, ps(7, C_WHITE, bold=True)) for h in d_hdrs]]
         d_style = [
             ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
@@ -1843,17 +2065,15 @@ def _generate_invoice_pdf(data, project_filter=None):
             ('RIGHTPADDING',  (0, 0), (-1, -1), 5),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]
-        for i, row in enumerate(rows):
+        for i, row in enumerate(tm_rows):
             bg = C_WHITE if i % 2 == 0 else C_LIGHT
             d_style.append(('BACKGROUND', (0, i + 1), (-1, i + 1), bg))
             d_data.append([
                 Paragraph(row['work_date'],              ps(7.5)),
                 Paragraph(row['project_code'],           ps(7.5, C_NAVY, bold=True)),
                 Paragraph(row['employee_name'],          ps(7.5)),
-                Paragraph(row['employee_designation'],   ps(7.5, C_MUTED)),
+                Paragraph((row.get('task_performed') or '-')[:90],   ps(7.5, C_MUTED)),
                 Paragraph(f"{row['hours']:.2f}",         ps(7.5, align=TA_RIGHT)),
-                Paragraph(f"{row['gross_rate']:,.2f}",   ps(7.5, align=TA_RIGHT)),
-                Paragraph(f"{row['discount']:.1f}%",     ps(7.5, C_MUTED, align=TA_RIGHT)),
                 Paragraph(f"{row['net_rate']:,.2f}",     ps(7.5, align=TA_RIGHT)),
                 Paragraph(f"{row['net_billable']:,.2f}", ps(7.5, C_NAVY, bold=True, align=TA_RIGHT)),
             ])
@@ -1862,11 +2082,61 @@ def _generate_invoice_pdf(data, project_filter=None):
         elements.append(d_table)
         elements.append(Spacer(1, 0.5 * cm))
 
+    if fixed_fee_projects:
+        elements.append(Paragraph('FIXED FEE RECONCILIATION', ps(7, C_MUTED, bold=True)))
+        elements.append(Spacer(1, 0.2 * cm))
+        ff_cols = [PAGE_W * 0.16, PAGE_W * 0.26, PAGE_W * 0.32, PAGE_W * 0.26]
+        ff_data = [[Paragraph(h, ps(7.5, C_WHITE, bold=True)) for h in ['Project', 'Project Name', 'Line Item', 'Amount (CAD$)']]]
+        ff_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
+            ('BOX', (0, 0), (-1, -1), 0.75, C_BORDER),
+            ('GRID', (0, 0), (-1, -1), 0.3, C_BORDER),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
+        ]
+        row_idx = 1
+        for project_total in fixed_fee_projects:
+            actual_amount = float(project_total.get('total_net_billable') or 0.0)
+            fixed_amount = float(project_total.get('fixed_fee_amount') or 0.0)
+            variance = round(actual_amount - fixed_amount, 2)
+            variance_label = 'Overage' if variance > 0 else ('Credit' if variance < 0 else 'Difference')
+            variance_amount = abs(variance)
+
+            lines = [
+                ('Actual billable hours value (Actual_hours_amount x Rate by consultant)', actual_amount),
+                ('Fixed fee amount', fixed_amount),
+                (variance_label, variance_amount),
+            ]
+            for line_label, line_amount in lines:
+                ff_data.append([
+                    Paragraph(project_total['project_code'], ps(7.2, C_NAVY, bold=True)),
+                    Paragraph(project_total['project_name'], ps(7.2)),
+                    Paragraph(line_label, ps(7.2)),
+                    Paragraph(f"{line_amount:,.2f}", ps(7.2, bold=True, align=TA_RIGHT)),
+                ])
+                bg = C_WHITE if row_idx % 2 == 1 else C_LIGHT
+                ff_style.append(('BACKGROUND', (0, row_idx), (-1, row_idx), bg))
+                row_idx += 1
+
+        ff_table = Table(ff_data, colWidths=ff_cols, repeatRows=1)
+        ff_table.setStyle(TableStyle(ff_style))
+        elements.append(ff_table)
+        elements.append(Spacer(1, 0.15 * cm))
+        elements.append(Paragraph(
+            'For information only; client is charged fixed fee.',
+            ps(7.5, C_MUTED)
+        ))
+        elements.append(Spacer(1, 0.5 * cm))
+
     # ── TOTAL BAND ─────────────────────────────────────────────────────
     tot = Table([[
         Paragraph(f'TOTAL HOURS: {total_hours:.2f}',
                   ps(10, C_WHITE, bold=True, align=TA_RIGHT)),
-        Paragraph(f'TOTAL BILLABLE:  CAD$ {total_net_billable:,.2f}',
+        Paragraph(f'TOTAL INVOICE:  CAD$ {total_invoice_amount:,.2f}',
                   ps(14, C_WHITE, bold=True, align=TA_RIGHT)),
     ]], colWidths=[PAGE_W * 0.40, PAGE_W * 0.60])
     tot.setStyle(TableStyle([
@@ -1957,6 +2227,30 @@ def get_client_invoice_pdf(current_user):
         download_name=filename,
         mimetype='application/pdf'
     )
+
+
+@app.route('/api/fixed-fee/alerts/daily', methods=['POST'])
+@token_required
+@admin_required
+def run_fixed_fee_alerts(current_user):
+    """Run fixed-fee warning checks for all clients for the current month.
+    Intended to be called by a daily scheduler.
+    """
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+    clients = Client.query.all()
+    checked_clients = 0
+
+    for client in clients:
+        _build_client_invoice_data(client, month_start, today)
+        checked_clients += 1
+
+    return jsonify({
+        'message': 'Fixed-fee alert check completed',
+        'checked_clients': checked_clients,
+        'from_date': month_start.isoformat(),
+        'to_date': today.isoformat(),
+    })
 
 
 
@@ -2301,6 +2595,18 @@ def create_project(current_user, client_id):
     
     if not data.get('name') or not data.get('code'):
         return jsonify({'error': 'Project name and code are required'}), 400
+
+    contract_type = _normalize_contract_type(data.get('contract_type'))
+    if not contract_type:
+        return jsonify({'error': 'Contract type is required and must be Fixed fee or Time & Materials'}), 400
+
+    try:
+        fixed_fee_amount = _parse_fixed_fee_amount(
+            data.get('fixed_fee_amount'),
+            required=contract_type == CONTRACT_TYPE_FIXED_FEE,
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     
     # Check if project code already exists for this client
     existing = Project.query.filter_by(client_id=client_id, code=data['code']).first()
@@ -2310,7 +2616,9 @@ def create_project(current_user, client_id):
     project = Project(
         client_id=client_id,
         name=data['name'].strip(),
-        code=data['code'].strip().upper()
+        code=data['code'].strip().upper(),
+        contract_type=contract_type,
+        fixed_fee_amount=fixed_fee_amount,
     )
     
     db.session.add(project)
@@ -2370,6 +2678,25 @@ def update_project(current_user, project_id):
             return jsonify({'error': 'Project with this code already exists for this client'}), 400
         
         project.code = new_code
+
+    if 'contract_type' in data:
+        contract_type = _normalize_contract_type(data.get('contract_type'))
+        if not contract_type:
+            return jsonify({'error': 'Contract type must be Fixed fee or Time & Materials'}), 400
+        project.contract_type = contract_type
+
+    resolved_contract_type = project.contract_type or CONTRACT_TYPE_TIME_MATERIALS
+    if 'fixed_fee_amount' in data or 'contract_type' in data:
+        try:
+            project.fixed_fee_amount = _parse_fixed_fee_amount(
+                data.get('fixed_fee_amount', project.fixed_fee_amount),
+                required=resolved_contract_type == CONTRACT_TYPE_FIXED_FEE,
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+
+    if resolved_contract_type == CONTRACT_TYPE_TIME_MATERIALS:
+        project.fixed_fee_amount = None
     
     project.updated_at = datetime.utcnow()
     db.session.commit()
