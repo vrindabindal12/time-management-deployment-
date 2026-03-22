@@ -82,7 +82,7 @@ heroku addons:create heroku-postgresql:mini
 
 # Set environment variables
 heroku config:set SECRET_KEY="your-super-secret-key-here"
-heroku config:set ADMIN_EMAIL="mananbedi.tech@gmail.com"
+heroku config:set ADMIN_EMAIL="admin@example.com"
 
 # Deploy
 git init
@@ -288,7 +288,7 @@ Create `.env` file in backend (for production):
 ```env
 # Security
 SECRET_KEY=your-super-secret-random-key-change-this
-ADMIN_EMAIL=mananbedi.tech@gmail.com
+ADMIN_EMAIL=admin@example.com
 
 # Database
 DATABASE_URL=postgresql://user:password@host:5432/database
@@ -380,7 +380,7 @@ NEXT_PUBLIC_API_URL=https://your-backend-api.herokuapp.com/api
    - Click "Variables"
    - Add:
      - `SECRET_KEY`: Generate random string
-     - `ADMIN_EMAIL`: mananbedi.tech@gmail.com
+     - `ADMIN_EMAIL`: admin@example.com
    - Click "Settings"
    - Add start command: `gunicorn app:app`
 

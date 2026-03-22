@@ -293,7 +293,7 @@ employee.check_password("password123")  # Verifies hash
 ### Admin Identification
 ```python
 # Admin identified by email
-ADMIN_EMAIL = 'mananbedi.tech@gmail.com'
+ADMIN_EMAIL = 'admin@example.com'
 # is_admin flag in database
 employee.is_admin = True/False
 ```
@@ -334,7 +334,7 @@ If you forget the admin password:
 # In Python console with app context
 from app import app, db, Employee
 with app.app_context():
-    admin = Employee.query.filter_by(email='mananbedi.tech@gmail.com').first()
+    admin = Employee.query.filter_by(email='admin@example.com').first()
     admin.set_password('newpassword')
     db.session.commit()
 ```

@@ -28,7 +28,7 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
       DATABASE_URL: postgresql://timetracking:${DB_PASSWORD:-changeme}@db:5432/timetracking
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-mananbedi.tech@gmail.com}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       FLASK_ENV: production
     ports:
