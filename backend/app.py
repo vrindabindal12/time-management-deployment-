@@ -657,6 +657,9 @@ def ensure_punch_invoice_schema():
         'invoice_hours': 'FLOAT',
         'invoice_gross_rate': 'FLOAT',
         'invoice_discount': 'FLOAT',
+        'payable_rate': 'FLOAT',
+        'payable_designation': 'TEXT',
+        'is_paid': 'BOOLEAN DEFAULT 0',
     }
 
     existing = {
