@@ -1,3 +1,4 @@
+import threading
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -324,6 +325,19 @@ class ClientRate(db.Model):
         }
 
 
+def _send_email_async(app_instance, msg, recipient_email, email_type='email'):
+    """Send an email in a background thread so the API responds immediately."""
+    def _send():
+        with app_instance.app_context():
+            try:
+                mail.send(msg)
+                print(f"{email_type} sent to {recipient_email}")
+            except Exception as e:
+                print(f"Failed to send {email_type} to {recipient_email}: {str(e)}")
+    thread = threading.Thread(target=_send, daemon=True)
+    thread.start()
+
+
 def send_welcome_email(employee, reset_token):
     set_password_url = f"{FRONTEND_URL}/reset-password?token={reset_token}&mode=welcome"
 
@@ -367,11 +381,7 @@ Time Tracking System Team
 '''
     )
 
-    try:
-        mail.send(msg)
-        print(f"Welcome email sent to {employee.email}")
-    except Exception as e:
-        print(f"Failed to send welcome email to {employee.email}: {str(e)}")
+    _send_email_async(app, msg, employee.email, 'Welcome email')
 
 
 def send_password_reset_email(employee, reset_token):
@@ -417,11 +427,7 @@ Time Tracking System Team
 '''
     )
 
-    try:
-        mail.send(msg)
-        print(f"Password reset email sent to {employee.email}")
-    except Exception as e:
-        print(f"Failed to send password reset email to {employee.email}: {str(e)}")
+    _send_email_async(app, msg, employee.email, 'Password reset email')
 
 
 def get_filtered_work_entries(employee_id):
