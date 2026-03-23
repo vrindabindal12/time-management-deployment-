@@ -70,6 +70,15 @@ if DATABASE_URL.startswith('postgres://'):
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Production database engine options (connection pooling & SSL)
+if not DATABASE_URL.startswith('sqlite'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': 5,
+        'pool_recycle': 300,
+        'pool_pre_ping': True,
+        'max_overflow': 10,
+    }
+
 # CORS configuration
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 CORS(app, origins=[FRONTEND_URL, 'http://localhost:3000'], supports_credentials=True)
@@ -568,48 +577,51 @@ def ensure_role_schema():
 
 
 def ensure_employee_schema():
-    """Add onboarding/profile columns for existing sqlite databases."""
-    if not DATABASE_URL.startswith('sqlite'):
-        return
-
+    """Add onboarding/profile columns for existing databases."""
     required_columns = {
-        'employee_code': 'TEXT',
-        'designation': 'TEXT',
-        'reporting_manager': 'TEXT',
+        'employee_code': 'VARCHAR(50)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
+        'designation': 'VARCHAR(120)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
+        'reporting_manager': 'VARCHAR(120)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
         'start_date': 'DATE',
         'current_hourly_rate': 'FLOAT',
         'promotion_1_date': 'DATE',
         'promotion_1_rate': 'FLOAT',
-        'promotion_1_designation': 'TEXT',
+        'promotion_1_designation': 'VARCHAR(120)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
         'promotion_2_date': 'DATE',
         'promotion_2_rate': 'FLOAT',
-        'promotion_2_designation': 'TEXT',
+        'promotion_2_designation': 'VARCHAR(120)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
         'promotion_3_date': 'DATE',
         'promotion_3_rate': 'FLOAT',
-        'promotion_3_designation': 'TEXT',
+        'promotion_3_designation': 'VARCHAR(120)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
         'promotion_4_date': 'DATE',
         'promotion_4_rate': 'FLOAT',
-        'promotion_4_designation': 'TEXT',
+        'promotion_4_designation': 'VARCHAR(120)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
         'promotion_5_date': 'DATE',
         'promotion_5_rate': 'FLOAT',
-        'promotion_5_designation': 'TEXT',
+        'promotion_5_designation': 'VARCHAR(120)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
         'profile_photo': 'TEXT',
     }
 
-    existing = {
-        row[1]
-        for row in db.session.execute(text("PRAGMA table_info(employee)")).fetchall()
-    }
-
-    for column_name, column_type in required_columns.items():
-        if column_name not in existing:
-            db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {column_name} {column_type}"))
-
-    db.session.execute(text(
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_employee_code "
-        "ON employee(employee_code)"
-    ))
-    db.session.commit()
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(employee)")).fetchall()
+        }
+        for column_name, column_type in required_columns.items():
+            if column_name not in existing:
+                db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {column_name} {column_type}"))
+        db.session.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_employee_code "
+            "ON employee(employee_code)"
+        ))
+        db.session.commit()
+    else:
+        for column_name, column_type in required_columns.items():
+            try:
+                db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {column_name} {column_type}"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
 
 def ensure_password_reset_schema():
@@ -649,11 +661,8 @@ def ensure_employee_codes():
 
 
 def ensure_punch_invoice_schema():
-    """Add invoice override columns for existing sqlite databases."""
-    if not DATABASE_URL.startswith('sqlite'):
-        return
-
-    required_columns = {
+    """Add invoice override columns for existing databases."""
+    required_columns_sqlite = {
         'invoice_hours': 'FLOAT',
         'invoice_gross_rate': 'FLOAT',
         'invoice_discount': 'FLOAT',
@@ -661,63 +670,87 @@ def ensure_punch_invoice_schema():
         'payable_designation': 'TEXT',
         'is_paid': 'BOOLEAN DEFAULT 0',
     }
-
-    existing = {
-        row[1]
-        for row in db.session.execute(text("PRAGMA table_info(punch)")).fetchall()
+    required_columns_pg = {
+        'invoice_hours': 'FLOAT',
+        'invoice_gross_rate': 'FLOAT',
+        'invoice_discount': 'FLOAT',
+        'payable_rate': 'FLOAT',
+        'payable_designation': 'VARCHAR(120)',
+        'is_paid': 'BOOLEAN DEFAULT FALSE',
     }
 
-    for column_name, column_type in required_columns.items():
-        if column_name not in existing:
-            db.session.execute(text(f"ALTER TABLE punch ADD COLUMN {column_name} {column_type}"))
-    db.session.commit()
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(punch)")).fetchall()
+        }
+        for column_name, column_type in required_columns_sqlite.items():
+            if column_name not in existing:
+                db.session.execute(text(f"ALTER TABLE punch ADD COLUMN {column_name} {column_type}"))
+        db.session.commit()
+    else:
+        for column_name, column_type in required_columns_pg.items():
+            try:
+                db.session.execute(text(f"ALTER TABLE punch ADD COLUMN {column_name} {column_type}"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
 
 def ensure_project_rate_schema():
-    """Add project rate columns for existing sqlite databases."""
-    if not DATABASE_URL.startswith('sqlite'):
-        return
-
+    """Add project rate columns for existing databases."""
     required_columns = {
-        'employee_name': 'TEXT',
+        'employee_name': 'VARCHAR(120)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
     }
 
-    existing = {
-        row[1]
-        for row in db.session.execute(text("PRAGMA table_info(project_rate)")).fetchall()
-    }
-
-    for column_name, column_type in required_columns.items():
-        if column_name not in existing:
-            db.session.execute(text(f"ALTER TABLE project_rate ADD COLUMN {column_name} {column_type}"))
-    db.session.commit()
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(project_rate)")).fetchall()
+        }
+        for column_name, column_type in required_columns.items():
+            if column_name not in existing:
+                db.session.execute(text(f"ALTER TABLE project_rate ADD COLUMN {column_name} {column_type}"))
+        db.session.commit()
+    else:
+        for column_name, column_type in required_columns.items():
+            try:
+                db.session.execute(text(f"ALTER TABLE project_rate ADD COLUMN {column_name} {column_type}"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
 
 def ensure_client_rate_schema():
-    """Create client_rate table for existing sqlite databases."""
-    if not DATABASE_URL.startswith('sqlite'):
-        return
+    """Create client_rate table for existing databases."""
     db.create_all()
 
 
 def ensure_project_contract_schema():
-    """Add project contract fields for existing sqlite databases."""
-    if not DATABASE_URL.startswith('sqlite'):
-        return
-
-    required_columns = {
-        'contract_type': f"TEXT NOT NULL DEFAULT '{CONTRACT_TYPE_TIME_MATERIALS}'",
-        'fixed_fee_amount': 'FLOAT',
-    }
-
-    existing = {
-        row[1]
-        for row in db.session.execute(text("PRAGMA table_info(project)")).fetchall()
-    }
-
-    for column_name, column_type in required_columns.items():
-        if column_name not in existing:
-            db.session.execute(text(f"ALTER TABLE project ADD COLUMN {column_name} {column_type}"))
+    """Add project contract fields for existing databases."""
+    if DATABASE_URL.startswith('sqlite'):
+        required_columns = {
+            'contract_type': f"TEXT NOT NULL DEFAULT '{CONTRACT_TYPE_TIME_MATERIALS}'",
+            'fixed_fee_amount': 'FLOAT',
+        }
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(project)")).fetchall()
+        }
+        for column_name, column_type in required_columns.items():
+            if column_name not in existing:
+                db.session.execute(text(f"ALTER TABLE project ADD COLUMN {column_name} {column_type}"))
+    else:
+        pg_columns = {
+            'contract_type': f"VARCHAR(30) NOT NULL DEFAULT '{CONTRACT_TYPE_TIME_MATERIALS}'",
+            'fixed_fee_amount': 'FLOAT',
+        }
+        for column_name, column_type in pg_columns.items():
+            try:
+                db.session.execute(text(f"ALTER TABLE project ADD COLUMN {column_name} {column_type}"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
     db.session.execute(
         text(
