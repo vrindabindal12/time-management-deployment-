@@ -194,6 +194,7 @@ export default function AdminDashboard() {
   const [inlineRateEdits, setInlineRateEdits] = useState<Record<number, string>>({});
   const [savingRateId, setSavingRateId] = useState<number | null>(null);
   const [employeeCardsPage, setEmployeeCardsPage] = useState(1);
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
   const EMPLOYEE_CARDS_PAGE_SIZE = 9;
 
   // Project states
@@ -247,7 +248,7 @@ export default function AdminDashboard() {
     loadEmployees();
     loadClients();
 
-    return () => {};
+    return () => { };
   }, [router]);
 
   useEffect(() => {
@@ -1167,9 +1168,20 @@ export default function AdminDashboard() {
       .filter((employee): employee is Employee => Boolean(employee)),
     ...nonAdminEmployees.filter((employee) => !employeeCardOrder.includes(employee.id)),
   ];
-  const empCardsTotalPages = Math.max(1, Math.ceil(orderedEmployeeCards.length / EMPLOYEE_CARDS_PAGE_SIZE));
+  const searchFilteredEmployeeCards = employeeSearchQuery.trim()
+    ? orderedEmployeeCards.filter((emp) => {
+      const q = employeeSearchQuery.trim().toLowerCase();
+      return (
+        emp.name.toLowerCase().includes(q) ||
+        emp.email.toLowerCase().includes(q) ||
+        (emp.designation || '').toLowerCase().includes(q) ||
+        (emp.employee_code || '').toLowerCase().includes(q)
+      );
+    })
+    : orderedEmployeeCards;
+  const empCardsTotalPages = Math.max(1, Math.ceil(searchFilteredEmployeeCards.length / EMPLOYEE_CARDS_PAGE_SIZE));
   const empCardsStartIndex = (employeeCardsPage - 1) * EMPLOYEE_CARDS_PAGE_SIZE;
-  const pagedEmployeeCards = orderedEmployeeCards.slice(empCardsStartIndex, empCardsStartIndex + EMPLOYEE_CARDS_PAGE_SIZE);
+  const pagedEmployeeCards = searchFilteredEmployeeCards.slice(empCardsStartIndex, empCardsStartIndex + EMPLOYEE_CARDS_PAGE_SIZE);
   const selectedClientData = clients.find((client) => client.id === selectedClient) || null;
   const invoiceProjectOptions = invoiceReport
     ? Array.from(new Set(invoiceReport.rows.map((row) => row.project_code))).sort()
@@ -1182,13 +1194,13 @@ export default function AdminDashboard() {
     : [];
   const filteredPayablesRows = payablesReport
     ? payablesReport.rows.filter((row) => {
-        if (payablesProjectFilter !== 'ALL' && (row.project_code || '-') !== payablesProjectFilter) return false;
-        if (payablesStatusFilter === 'paid' && !row.is_paid) return false;
-        if (payablesStatusFilter === 'unpaid' && row.is_paid) return false;
-        if (payablesTypeFilter === 'non-billable' && !row.is_non_billable) return false;
-        if (payablesTypeFilter === 'billable' && row.is_non_billable) return false;
-        return true;
-      })
+      if (payablesProjectFilter !== 'ALL' && (row.project_code || '-') !== payablesProjectFilter) return false;
+      if (payablesStatusFilter === 'paid' && !row.is_paid) return false;
+      if (payablesStatusFilter === 'unpaid' && row.is_paid) return false;
+      if (payablesTypeFilter === 'non-billable' && !row.is_non_billable) return false;
+      if (payablesTypeFilter === 'billable' && row.is_non_billable) return false;
+      return true;
+    })
     : [];
 
   const invoiceTotalRecords = filteredInvoiceRows.length;
@@ -1364,41 +1376,37 @@ export default function AdminDashboard() {
           <div className="flex">
             <button
               onClick={() => setActiveTab('onboarding')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'onboarding'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'onboarding'
+                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+                }`}
             >
               Employee Management
             </button>
             <button
               onClick={() => setActiveTab('clients')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'clients'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'clients'
+                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+                }`}
             >
               Clients & Projects
             </button>
             <button
               onClick={() => setActiveTab('invoicing')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'invoicing'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'invoicing'
+                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+                }`}
             >
               Invoicing
             </button>
             <button
               onClick={() => setActiveTab('payables')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${
-                activeTab === 'payables'
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
-                  : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
-              }`}
+              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'payables'
+                ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
+                : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
+                }`}
             >
               Payables
             </button>
@@ -1473,11 +1481,10 @@ export default function AdminDashboard() {
                   <div
                     key={employee.id}
                     onClick={() => setSelectedEmployee(employee.id)}
-                    className={`text-left p-4 rounded-lg border-2 transition cursor-pointer ${
-                      selectedEmployee === employee.id
-                        ? 'border-blue-500 bg-blue-50/70'
-                        : 'border-white/60 bg-white/45 hover:border-blue-300'
-                    }`}
+                    className={`text-left p-4 rounded-lg border-2 transition cursor-pointer ${selectedEmployee === employee.id
+                      ? 'border-blue-500 bg-blue-50/70'
+                      : 'border-white/60 bg-white/45 hover:border-blue-300'
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1511,14 +1518,12 @@ export default function AdminDashboard() {
                   {employeeStatus.employee.name}'s Status
                 </h2>
                 <div className="mb-4">
-                  <div className={`inline-flex items-center px-4 py-2 rounded-full ${
-                    employeeStatus.today_hours > 0
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    <div className={`w-3 h-3 rounded-full mr-2 ${
-                      employeeStatus.today_hours > 0 ? 'bg-green-500' : 'bg-gray-400'
-                    }`}></div>
+                  <div className={`inline-flex items-center px-4 py-2 rounded-full ${employeeStatus.today_hours > 0
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-100 text-gray-800'
+                    }`}>
+                    <div className={`w-3 h-3 rounded-full mr-2 ${employeeStatus.today_hours > 0 ? 'bg-green-500' : 'bg-gray-400'
+                      }`}></div>
                     Today's Hours: {employeeStatus.today_hours.toFixed(2)}h
                   </div>
                 </div>
@@ -1556,6 +1561,32 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* Employee Search Bar */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
+                <svg className="w-5 h-5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search employees by name, email, designation, or employee code..."
+                value={employeeSearchQuery}
+                onChange={(e) => { setEmployeeSearchQuery(e.target.value); setEmployeeCardsPage(1); }}
+                className="w-full pl-12 pr-10 py-3 rounded-2xl border border-white/70 bg-white/60 backdrop-blur-sm text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-300 shadow-sm transition"
+              />
+              {employeeSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => { setEmployeeSearchQuery(''); setEmployeeCardsPage(1); }}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                </button>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {pagedEmployeeCards.map((employee: Employee) => (
                 <div
@@ -1573,17 +1604,15 @@ export default function AdminDashboard() {
                     }
                   }}
                   onDrop={handleEmployeeCardDrop}
-                  className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${
-                    draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
-                  } ${
-                    dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
-                  }`}
+                  className={`transition-transform duration-300 hover:-translate-y-1 hover:scale-[1.01] ${draggingEmployeeId === employee.id ? 'opacity-60 scale-[0.98]' : ''
+                    } ${dragOverEmployeeId === employee.id ? 'ring-2 ring-cyan-400/70 rounded-2xl ring-offset-2 ring-offset-transparent' : ''
+                    }`}
                 >
                   <div
                     draggable
                     onDragStart={(e) => handleEmployeeCardDragStart(employee.id, e)}
                     onDragEnd={handleEmployeeCardDragEnd}
-                    className="relative h-[34rem] w-full transition-transform duration-700"
+                    className="relative h-[28rem] w-full transition-transform duration-700"
                     style={{
                       transformStyle: 'preserve-3d',
                       transform: flippedCards[employee.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
@@ -1690,17 +1719,17 @@ export default function AdminDashboard() {
                       <div className="absolute -top-14 -left-10 w-36 h-36 bg-indigo-300/30 rounded-full blur-2xl" />
                       <div className="absolute -bottom-14 -right-10 w-36 h-36 bg-blue-300/30 rounded-full blur-2xl" />
                       <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-700 font-bold">Employee Details</p>
-                      <h4 className="text-xl font-black text-slate-900 mt-2">Core Information</h4>
-                      <div className="mt-4 grid grid-cols-1 gap-2.5 text-sm" onClick={(e) => e.stopPropagation()}>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Emp ID:</span> {employee.employee_code || '-'}</p>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Designation:</span> {employee.designation || '-'}</p>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
-                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-2 text-slate-700"><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
+                      <h4 className="text-lg font-black text-slate-900 mt-1">Core Information</h4>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-sm" onClick={(e) => e.stopPropagation()}>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-1.5 text-slate-700"><span className="font-semibold">Emp ID:</span> {employee.employee_code || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-1.5 text-slate-700"><span className="font-semibold">Designation:</span> {employee.designation || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-1.5 text-slate-700"><span className="font-semibold">Start Date:</span> {employee.start_date || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-1.5 text-slate-700"><span className="font-semibold"> Reporting Manager:</span> {employee.reporting_manager || '-'}</p>
+                        <p className="rounded-xl bg-white/70 border border-white/70 px-3 py-1.5 text-slate-700 col-span-2"><span className="font-semibold">Current Rate:</span> {employee.current_hourly_rate ?? '-'}</p>
                       </div>
 
                       {/* Role management */}
-                      <div className="mt-4 rounded-xl border border-indigo-200/70 bg-indigo-50/60 px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="mt-2 rounded-xl border border-indigo-200/70 bg-indigo-50/60 px-3 py-2" onClick={(e) => e.stopPropagation()}>
                         <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-indigo-700 mb-2">Access Role</p>
                         <div className="flex items-center gap-2">
                           <select
@@ -1726,14 +1755,13 @@ export default function AdminDashboard() {
                           </button>
                         </div>
                         <p className="mt-1.5 text-[10px] text-slate-500">
-                          Current: <span className={`font-semibold ${
-                            (employee.role || 'employee') === 'both' ? 'text-amber-600' :
+                          Current: <span className={`font-semibold ${(employee.role || 'employee') === 'both' ? 'text-amber-600' :
                             (employee.role || 'employee') === 'admin' ? 'text-violet-600' : 'text-emerald-600'
-                          }`}>{(employee.role || 'employee').charAt(0).toUpperCase() + (employee.role || 'employee').slice(1)}</span>
+                            }`}>{(employee.role || 'employee').charAt(0).toUpperCase() + (employee.role || 'employee').slice(1)}</span>
                         </p>
                       </div>
 
-                      <div className="mt-auto pt-4 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="mt-auto pt-2 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1745,18 +1773,17 @@ export default function AdminDashboard() {
                           Edit Full Details
                         </button>
                         {!employee.has_set_password && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleResendWelcome(employee.id); }}
-                          disabled={resendingWelcomeId === employee.id}
-                          className={`px-3 py-2 text-sm font-semibold rounded-lg transition disabled:opacity-40 ${
-                            resendWelcomeSuccessId === employee.id
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleResendWelcome(employee.id); }}
+                            disabled={resendingWelcomeId === employee.id}
+                            className={`px-3 py-2 text-sm font-semibold rounded-lg transition disabled:opacity-40 ${resendWelcomeSuccessId === employee.id
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                               : 'bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200'
-                          }`}
-                        >
-                          {resendingWelcomeId === employee.id ? 'Sending...' : resendWelcomeSuccessId === employee.id ? '\u2713 Sent!' : 'Resend Welcome'}
-                        </button>
+                              }`}
+                          >
+                            {resendingWelcomeId === employee.id ? 'Sending...' : resendWelcomeSuccessId === employee.id ? '\u2713 Sent!' : 'Resend Welcome'}
+                          </button>
                         )}
                         <button
                           type="button"
@@ -1785,10 +1812,10 @@ export default function AdminDashboard() {
               ))}
             </div>
 
-            {orderedEmployeeCards.length > EMPLOYEE_CARDS_PAGE_SIZE && (
+            {searchFilteredEmployeeCards.length > EMPLOYEE_CARDS_PAGE_SIZE && (
               <div className="flex flex-wrap items-center justify-between gap-4 mt-2 pt-4 border-t border-white/40">
                 <span className="text-sm text-slate-600">
-                  Showing {empCardsStartIndex + 1}–{Math.min(empCardsStartIndex + EMPLOYEE_CARDS_PAGE_SIZE, orderedEmployeeCards.length)} of {orderedEmployeeCards.length} employees
+                  Showing {empCardsStartIndex + 1}–{Math.min(empCardsStartIndex + EMPLOYEE_CARDS_PAGE_SIZE, searchFilteredEmployeeCards.length)} of {searchFilteredEmployeeCards.length} employees
                 </span>
                 <div className="flex items-center gap-2">
                   <button
@@ -1819,286 +1846,285 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* LEFT: Clients + Client Default Rates */}
             <div className="space-y-6">
-            <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/75 to-blue-100/60">
-              <div className="flex justify-between items-center mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-cyan-100/80">
-                    <svg className="w-4 h-4 text-cyan-600" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black text-slate-900 leading-tight">Clients</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">{clients.length} client{clients.length !== 1 ? 's' : ''}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowAddClientForm(!showAddClientForm)}
-                  className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm font-semibold transition"
-                >
-                  {showAddClientForm ? 'Cancel' : '+ Add Client'}
-                </button>
-              </div>
-
-              {showAddClientForm && (
-                <form onSubmit={handleAddClient} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-bold text-cyan-700 mb-1">CLIENT NAME</label>
-                      <input
-                        type="text"
-                        placeholder="e.g., Lekadir"
-                        value={clientForm.name}
-                        onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
-                        required
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                      />
+              <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/75 to-blue-100/60">
+                <div className="flex justify-between items-center mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-cyan-100/80">
+                      <svg className="w-4 h-4 text-cyan-600" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" /></svg>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-cyan-700 mb-1">CLIENT CODE</label>
-                      <input
-                        type="text"
-                        placeholder="e.g., LD"
-                        value={clientForm.code}
-                        onChange={(e) => setClientForm({ ...clientForm, code: e.target.value.toUpperCase() })}
-                        required
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                      />
+                      <h2 className="text-xl font-black text-slate-900 leading-tight">Clients</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">{clients.length} client{clients.length !== 1 ? 's' : ''}</p>
                     </div>
                   </div>
                   <button
-                    type="submit"
-                    disabled={loading}
-                    className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                    onClick={() => setShowAddClientForm(!showAddClientForm)}
+                    className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm font-semibold transition"
                   >
-                    {loading ? 'Adding...' : 'Add Client'}
-                  </button>
-                </form>
-              )}
-
-              {editingClientId !== null && (
-                <form onSubmit={handleUpdateClient} className="mb-4 p-3 rounded-2xl border border-cyan-200/70 bg-cyan-50/70">
-                  <p className="text-xs uppercase tracking-[0.18em] font-bold text-cyan-700 mb-3">Edit Client</p>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      value={clientEditForm.name}
-                      onChange={(e) => setClientEditForm({ ...clientEditForm, name: e.target.value })}
-                      required
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                    <input
-                      type="text"
-                      value={clientEditForm.code}
-                      onChange={(e) => setClientEditForm({ ...clientEditForm, code: e.target.value.toUpperCase() })}
-                      required
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm transition disabled:opacity-50"
-                    >
-                      {loading ? 'Saving...' : 'Save Client'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelEditClient}
-                      className="px-4 py-2 rounded-xl text-sm border border-slate-300 bg-white/70 text-slate-700"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                {clients.map((client) => {
-                  const cInitials = client.name.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
-                  const cPalette = ['bg-cyan-500', 'bg-blue-500', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500'];
-                  const cBg = cPalette[(client.name.charCodeAt(0) || 0) % cPalette.length];
-                  const isSelected = selectedClient === client.id;
-                  return (
-                    <div
-                      key={client.id}
-                      onClick={() => setSelectedClient(client.id)}
-                      className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all duration-200 ${
-                        isSelected
-                          ? 'border-cyan-300/80 bg-gradient-to-r from-cyan-50 to-blue-50/60 shadow-md ring-1 ring-cyan-200/50'
-                          : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
-                      }`}
-                    >
-                      <div className={`w-9 h-9 rounded-xl ${cBg} flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm`}>
-                        {cInitials}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-900 truncate text-sm leading-tight">{client.name}</p>
-                        <p className="text-[11px] font-mono text-slate-400 mt-0.5 uppercase tracking-wider">{client.code}</p>
-                      </div>
-                      {isSelected && (
-                        <span className="text-[10px] font-bold text-cyan-600 bg-cyan-100 px-2 py-0.5 rounded-full shrink-0">Active</span>
-                      )}
-                      <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => startEditClient(client)}
-                          disabled={loading}
-                          title="Edit client"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
-                        >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                        </button>
-                        <button
-                          onClick={() => openDeleteEntityModal('client', client.id, client.name)}
-                          disabled={loading}
-                          title="Delete client"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
-                        >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {clients.length === 0 && !showAddClientForm && (
-                <p className="text-slate-500 text-center py-4">No clients found.</p>
-              )}
-            </div>
-            {/* End clients panel */}
-
-            {/* Client Default Rates Section */}
-            {selectedClient && selectedClientData && (
-              <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-violet-50/70 via-white/75 to-purple-100/60">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.2em] font-bold text-violet-700">Default Rates</p>
-                    <h3 className="text-xl font-black text-slate-900 mt-1">{selectedClientData.name}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Auto-applied to all new projects · edit per project</p>
-                  </div>
-                  <button
-                    onClick={() => { setShowAddClientRateForm(!showAddClientRateForm); cancelEditClientRate(); }}
-                    className="px-4 py-2 text-sm font-semibold rounded-xl bg-violet-600 hover:bg-violet-700 text-white transition shrink-0"
-                  >
-                    {showAddClientRateForm ? 'Cancel' : '+ Add Rate'}
+                    {showAddClientForm ? 'Cancel' : '+ Add Client'}
                   </button>
                 </div>
 
-                {showAddClientRateForm && (
-                  <form onSubmit={handleAddClientRate} className="mb-4 p-4 bg-violet-50/80 border border-violet-200/70 rounded-2xl">
-                    <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-700 mb-3">New Default Rate</p>
+                {showAddClientForm && (
+                  <form onSubmit={handleAddClient} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs font-bold text-violet-700 mb-1">EMPLOYEE NAME <span className="font-normal text-slate-400">(optional)</span></label>
+                        <label className="block text-xs font-bold text-cyan-700 mb-1">CLIENT NAME</label>
                         <input
                           type="text"
-                          placeholder="e.g., Shashank Jain"
-                          value={clientRateForm.employeeName}
-                          onChange={(e) => setClientRateForm({ ...clientRateForm, employeeName: e.target.value })}
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          placeholder="e.g., Lekadir"
+                          value={clientForm.name}
+                          onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+                          required
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-violet-700 mb-1">DESIGNATION</label>
-                        <select
-                          value={clientRateForm.designation}
-                          onChange={(e) => setClientRateForm({ ...clientRateForm, designation: e.target.value })}
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                        >
-                          {DESIGNATIONS.map((d) => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs font-bold text-violet-700 mb-1">GROSS RATE ($/hr)</label>
-                          <input
-                            type="number"
-                            placeholder="300"
-                            value={clientRateForm.grossRate}
-                            onChange={(e) => setClientRateForm({ ...clientRateForm, grossRate: e.target.value })}
-                            required
-                            step="0.01"
-                            min="0"
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-violet-700 mb-1">DISCOUNT %</label>
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={clientRateForm.discount}
-                            onChange={(e) => setClientRateForm({ ...clientRateForm, discount: e.target.value })}
-                            step="0.1"
-                            min="0"
-                            max="100"
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                          />
-                        </div>
+                        <label className="block text-xs font-bold text-cyan-700 mb-1">CLIENT CODE</label>
+                        <input
+                          type="text"
+                          placeholder="e.g., LD"
+                          value={clientForm.code}
+                          onChange={(e) => setClientForm({ ...clientForm, code: e.target.value.toUpperCase() })}
+                          required
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        />
                       </div>
                     </div>
                     <button
                       type="submit"
                       disabled={loading}
-                      className="mt-3 w-full bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                      className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
                     >
-                      {loading ? 'Adding...' : 'Add Default Rate'}
+                      {loading ? 'Adding...' : 'Add Client'}
                     </button>
                   </form>
                 )}
 
-                <div className="space-y-2">
-                  {clientRates.length > 0 ? (
-                    clientRates.map((rate) => (
-                      <div key={rate.id} className="flex items-center gap-3 p-3.5 rounded-2xl border border-violet-100/70 bg-white/55 hover:bg-white/80 transition">
+                {editingClientId !== null && (
+                  <form onSubmit={handleUpdateClient} className="mb-4 p-3 rounded-2xl border border-cyan-200/70 bg-cyan-50/70">
+                    <p className="text-xs uppercase tracking-[0.18em] font-bold text-cyan-700 mb-3">Edit Client</p>
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={clientEditForm.name}
+                        onChange={(e) => setClientEditForm({ ...clientEditForm, name: e.target.value })}
+                        required
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                      <input
+                        type="text"
+                        value={clientEditForm.code}
+                        onChange={(e) => setClientEditForm({ ...clientEditForm, code: e.target.value.toUpperCase() })}
+                        required
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                      >
+                        {loading ? 'Saving...' : 'Save Client'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEditClient}
+                        className="px-4 py-2 rounded-xl text-sm border border-slate-300 bg-white/70 text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {clients.map((client) => {
+                    const cInitials = client.name.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+                    const cPalette = ['bg-cyan-500', 'bg-blue-500', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500'];
+                    const cBg = cPalette[(client.name.charCodeAt(0) || 0) % cPalette.length];
+                    const isSelected = selectedClient === client.id;
+                    return (
+                      <div
+                        key={client.id}
+                        onClick={() => setSelectedClient(client.id)}
+                        className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all duration-200 ${isSelected
+                          ? 'border-cyan-300/80 bg-gradient-to-r from-cyan-50 to-blue-50/60 shadow-md ring-1 ring-cyan-200/50'
+                          : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
+                          }`}
+                      >
+                        <div className={`w-9 h-9 rounded-xl ${cBg} flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm`}>
+                          {cInitials}
+                        </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-800 text-sm truncate leading-tight">{rate.employee_name || <span className="text-slate-400 italic text-xs">Any employee</span>}</p>
-                          <span className="inline-block mt-1 text-[10px] font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full uppercase tracking-wide">{rate.designation}</span>
+                          <p className="font-bold text-slate-900 truncate text-sm leading-tight">{client.name}</p>
+                          <p className="text-[11px] font-mono text-slate-400 mt-0.5 uppercase tracking-wider">{client.code}</p>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="text-right">
-                            <p className="text-xs font-bold text-slate-700">${rate.gross_rate}<span className="text-slate-400 font-normal">/hr</span></p>
-                            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Gross</p>
-                          </div>
-                          <div className="w-px h-6 bg-slate-200" />
-                          <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">{rate.discount}% off</span>
-                          <div className="w-px h-6 bg-slate-200" />
-                          <div className="text-right">
-                            <p className="text-xs font-bold text-emerald-600">${rate.net_rate.toFixed(2)}<span className="text-emerald-400 font-normal">/hr</span></p>
-                            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Net</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-1 shrink-0">
+                        {isSelected && (
+                          <span className="text-[10px] font-bold text-cyan-600 bg-cyan-100 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                        )}
+                        <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => startEditClientRate(rate)}
+                            onClick={() => startEditClient(client)}
                             disabled={loading}
-                            title="Edit rate"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-violet-700 hover:bg-violet-50 transition disabled:opacity-50"
+                            title="Edit client"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
                           >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                           </button>
                           <button
-                            onClick={() => openDeleteEntityModal('client-rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
+                            onClick={() => openDeleteEntityModal('client', client.id, client.name)}
                             disabled={loading}
-                            title="Delete rate"
+                            title="Delete client"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
                           >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
                           </button>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-6">
-                      <p className="text-slate-500 font-medium">No default rates yet.</p>
-                      <p className="text-xs text-slate-400 mt-1">Rates added here will be automatically applied to all new projects.</p>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
+
+                {clients.length === 0 && !showAddClientForm && (
+                  <p className="text-slate-500 text-center py-4">No clients found.</p>
+                )}
               </div>
-            )}
+              {/* End clients panel */}
+
+              {/* Client Default Rates Section */}
+              {selectedClient && selectedClientData && (
+                <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-violet-50/70 via-white/75 to-purple-100/60">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] font-bold text-violet-700">Default Rates</p>
+                      <h3 className="text-xl font-black text-slate-900 mt-1">{selectedClientData.name}</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Auto-applied to all new projects · edit per project</p>
+                    </div>
+                    <button
+                      onClick={() => { setShowAddClientRateForm(!showAddClientRateForm); cancelEditClientRate(); }}
+                      className="px-4 py-2 text-sm font-semibold rounded-xl bg-violet-600 hover:bg-violet-700 text-white transition shrink-0"
+                    >
+                      {showAddClientRateForm ? 'Cancel' : '+ Add Rate'}
+                    </button>
+                  </div>
+
+                  {showAddClientRateForm && (
+                    <form onSubmit={handleAddClientRate} className="mb-4 p-4 bg-violet-50/80 border border-violet-200/70 rounded-2xl">
+                      <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-700 mb-3">New Default Rate</p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-violet-700 mb-1">EMPLOYEE NAME <span className="font-normal text-slate-400">(optional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Shashank Jain"
+                            value={clientRateForm.employeeName}
+                            onChange={(e) => setClientRateForm({ ...clientRateForm, employeeName: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-violet-700 mb-1">DESIGNATION</label>
+                          <select
+                            value={clientRateForm.designation}
+                            onChange={(e) => setClientRateForm({ ...clientRateForm, designation: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          >
+                            {DESIGNATIONS.map((d) => (
+                              <option key={d} value={d}>{d}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-bold text-violet-700 mb-1">GROSS RATE ($/hr)</label>
+                            <input
+                              type="number"
+                              placeholder="300"
+                              value={clientRateForm.grossRate}
+                              onChange={(e) => setClientRateForm({ ...clientRateForm, grossRate: e.target.value })}
+                              required
+                              step="0.01"
+                              min="0"
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-violet-700 mb-1">DISCOUNT %</label>
+                            <input
+                              type="number"
+                              placeholder="0"
+                              value={clientRateForm.discount}
+                              onChange={(e) => setClientRateForm({ ...clientRateForm, discount: e.target.value })}
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="mt-3 w-full bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                      >
+                        {loading ? 'Adding...' : 'Add Default Rate'}
+                      </button>
+                    </form>
+                  )}
+
+                  <div className="space-y-2">
+                    {clientRates.length > 0 ? (
+                      clientRates.map((rate) => (
+                        <div key={rate.id} className="flex items-center gap-3 p-3.5 rounded-2xl border border-violet-100/70 bg-white/55 hover:bg-white/80 transition">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-slate-800 text-sm truncate leading-tight">{rate.employee_name || <span className="text-slate-400 italic text-xs">Any employee</span>}</p>
+                            <span className="inline-block mt-1 text-[10px] font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full uppercase tracking-wide">{rate.designation}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right">
+                              <p className="text-xs font-bold text-slate-700">${rate.gross_rate}<span className="text-slate-400 font-normal">/hr</span></p>
+                              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Gross</p>
+                            </div>
+                            <div className="w-px h-6 bg-slate-200" />
+                            <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">{rate.discount}% off</span>
+                            <div className="w-px h-6 bg-slate-200" />
+                            <div className="text-right">
+                              <p className="text-xs font-bold text-emerald-600">${rate.net_rate.toFixed(2)}<span className="text-emerald-400 font-normal">/hr</span></p>
+                              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Net</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => startEditClientRate(rate)}
+                              disabled={loading}
+                              title="Edit rate"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-violet-700 hover:bg-violet-50 transition disabled:opacity-50"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
+                            </button>
+                            <button
+                              onClick={() => openDeleteEntityModal('client-rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
+                              disabled={loading}
+                              title="Delete rate"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-6">
+                        <p className="text-slate-500 font-medium">No default rates yet.</p>
+                        <p className="text-xs text-slate-400 mt-1">Rates added here will be automatically applied to all new projects.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             {/* End left column wrapper */}
 
@@ -2110,7 +2136,7 @@ export default function AdminDashboard() {
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 rounded-2xl bg-cyan-100/80">
-                        <svg className="w-5 h-5 text-cyan-600" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+                        <svg className="w-5 h-5 text-cyan-600" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" /></svg>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -2286,16 +2312,14 @@ export default function AdminDashboard() {
                         <div
                           key={project.id}
                           onClick={() => setSelectedProject(project.id)}
-                          className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all duration-200 ${
-                            pIsSelected
-                              ? 'border-cyan-300/80 bg-gradient-to-r from-cyan-50 to-blue-50/60 shadow-md ring-1 ring-cyan-200/50'
-                              : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
-                          }`}
+                          className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all duration-200 ${pIsSelected
+                            ? 'border-cyan-300/80 bg-gradient-to-r from-cyan-50 to-blue-50/60 shadow-md ring-1 ring-cyan-200/50'
+                            : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
+                            }`}
                         >
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            pIsSelected ? 'bg-cyan-500' : 'bg-slate-100'
-                          }`}>
-                            <svg className={`w-4 h-4 ${pIsSelected ? 'text-white' : 'text-slate-400'}`} viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${pIsSelected ? 'bg-cyan-500' : 'bg-slate-100'
+                            }`}>
+                            <svg className={`w-4 h-4 ${pIsSelected ? 'text-white' : 'text-slate-400'}`} viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" /></svg>
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-slate-900 truncate text-sm leading-tight">{project.name}</p>
@@ -2303,11 +2327,10 @@ export default function AdminDashboard() {
                               {selectedClientData.code}-{project.code}
                             </span>
                             <div className="mt-1 flex flex-wrap gap-1.5">
-                              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${
-                                project.contract_type === 'fixed_fee'
-                                  ? 'text-amber-700 bg-amber-50 border-amber-200'
-                                  : 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                              }`}>
+                              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${project.contract_type === 'fixed_fee'
+                                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                }`}>
                                 {project.contract_type === 'fixed_fee' ? 'Fixed fee' : 'Time & Materials'}
                               </span>
                               {project.contract_type === 'fixed_fee' && project.fixed_fee_amount != null && (
@@ -2327,7 +2350,7 @@ export default function AdminDashboard() {
                               title="Edit project"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
                             >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                             </button>
                             <button
                               onClick={() => openDeleteEntityModal('project', project.id, project.name)}
@@ -2335,7 +2358,7 @@ export default function AdminDashboard() {
                               title="Delete project"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
                             >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
                             </button>
                           </div>
                         </div>
@@ -2468,7 +2491,7 @@ export default function AdminDashboard() {
                               title="Edit rate"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
                             >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                             </button>
                             <button
                               onClick={() => openDeleteEntityModal('rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
@@ -2476,7 +2499,7 @@ export default function AdminDashboard() {
                               title="Delete rate"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
                             >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
                             </button>
                           </div>
                         </div>
@@ -2492,7 +2515,7 @@ export default function AdminDashboard() {
                 <div className="min-h-64 glass-panel rounded-3xl p-8 flex items-center justify-center border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/70 to-blue-100/65">
                   <div className="text-center">
                     <div className="w-14 h-14 rounded-2xl bg-cyan-100/80 flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-7 h-7 text-cyan-400" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+                      <svg className="w-7 h-7 text-cyan-400" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" /></svg>
                     </div>
                     <p className="text-base font-bold text-slate-700">No client selected</p>
                     <p className="text-sm text-slate-400 mt-1">Pick a client on the left to manage its projects and rates</p>
@@ -2966,9 +2989,9 @@ export default function AdminDashboard() {
                                       title="Save rate"
                                     >
                                       {savingRateId === row.work_id ? (
-                                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="10" className="opacity-25"/><path d="M12 2a10 10 0 0 1 10 10" className="opacity-75"/></svg>
+                                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="10" className="opacity-25" /><path d="M12 2a10 10 0 0 1 10 10" className="opacity-75" /></svg>
                                       ) : (
-                                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                                       )}
                                     </button>
                                   )}
@@ -3060,7 +3083,7 @@ export default function AdminDashboard() {
                 onClick={cancelEditRate}
                 className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
               >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </button>
             </div>
             <form onSubmit={handleUpdateRate} className="space-y-4">
@@ -3171,7 +3194,7 @@ export default function AdminDashboard() {
                 onClick={cancelEditClientRate}
                 className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
               >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </button>
             </div>
             <form onSubmit={handleUpdateClientRate} className="space-y-4">
@@ -3288,9 +3311,8 @@ export default function AdminDashboard() {
                 type="button"
                 onClick={() => handleMarkPayablesPaid(payableMarkPaidModal.isPaid)}
                 disabled={loading}
-                className={`flex-1 px-4 py-3 rounded-xl text-white font-bold transition disabled:opacity-50 ${
-                  payableMarkPaidModal.isPaid ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-600 hover:bg-slate-700'
-                }`}
+                className={`flex-1 px-4 py-3 rounded-xl text-white font-bold transition disabled:opacity-50 ${payableMarkPaidModal.isPaid ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-600 hover:bg-slate-700'
+                  }`}
               >
                 {loading ? 'Updating...' : 'Confirm'}
               </button>
@@ -3335,15 +3357,14 @@ export default function AdminDashboard() {
                       key={value}
                       type="button"
                       onClick={() => setOnboardingForm({ ...onboardingForm, role: value })}
-                      className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all duration-200 ${
-                        onboardingForm.role === value
-                          ? value === 'employee'
-                            ? 'border-emerald-400 bg-emerald-50 text-emerald-800 shadow-md'
-                            : value === 'admin'
-                              ? 'border-violet-400 bg-violet-50 text-violet-800 shadow-md'
-                              : 'border-amber-400 bg-amber-50 text-amber-800 shadow-md'
-                          : 'border-white/70 bg-white/60 text-slate-600 hover:border-slate-300'
-                      }`}
+                      className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all duration-200 ${onboardingForm.role === value
+                        ? value === 'employee'
+                          ? 'border-emerald-400 bg-emerald-50 text-emerald-800 shadow-md'
+                          : value === 'admin'
+                            ? 'border-violet-400 bg-violet-50 text-violet-800 shadow-md'
+                            : 'border-amber-400 bg-amber-50 text-amber-800 shadow-md'
+                        : 'border-white/70 bg-white/60 text-slate-600 hover:border-slate-300'
+                        }`}
                     >
                       <span className="text-xl">{icon}</span>
                       <span className="font-bold">{label}</span>
@@ -3370,37 +3391,36 @@ export default function AdminDashboard() {
                   value={onboardingForm.email}
                   onChange={(e) => { setOnboardingForm({ ...onboardingForm, email: e.target.value }); if (onboardingEmailError) setOnboardingEmailError(null); }}
                   autoComplete="off"
-                  className={`border rounded-xl px-3 py-2.5 bg-white/85 focus:outline-none focus:ring-2 ${
-                    onboardingEmailError ? 'border-red-400 focus:ring-red-300' : 'border-slate-300 focus:ring-blue-400'
-                  }`}
+                  className={`border rounded-xl px-3 py-2.5 bg-white/85 focus:outline-none focus:ring-2 ${onboardingEmailError ? 'border-red-400 focus:ring-red-300' : 'border-slate-300 focus:ring-blue-400'
+                    }`}
                   required
                 />
                 <div className="space-y-1">
-                <div className="relative">
-                  <input
-                    type={showOnboardingPassword ? 'text' : 'password'}
-                    placeholder="Password *"
-                    value={onboardingForm.password}
-                    onChange={(e) => { setOnboardingForm({ ...onboardingForm, password: e.target.value }); if (onboardingPasswordError) setOnboardingPasswordError(null); }}
-                    autoComplete="new-password"
-                    className={`w-full border rounded-xl px-3 py-2.5 pr-10 bg-white/85 focus:outline-none focus:ring-2 ${onboardingPasswordError ? 'border-red-400 focus:ring-red-300' : 'border-slate-300 focus:ring-blue-400'}`}
-                    minLength={8}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowOnboardingPassword((v) => !v)}
-                    className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-700 transition"
-                    tabIndex={-1}
-                    title={showOnboardingPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showOnboardingPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    )}
-                  </button>
-                </div>
+                  <div className="relative">
+                    <input
+                      type={showOnboardingPassword ? 'text' : 'password'}
+                      placeholder="Password *"
+                      value={onboardingForm.password}
+                      onChange={(e) => { setOnboardingForm({ ...onboardingForm, password: e.target.value }); if (onboardingPasswordError) setOnboardingPasswordError(null); }}
+                      autoComplete="new-password"
+                      className={`w-full border rounded-xl px-3 py-2.5 pr-10 bg-white/85 focus:outline-none focus:ring-2 ${onboardingPasswordError ? 'border-red-400 focus:ring-red-300' : 'border-slate-300 focus:ring-blue-400'}`}
+                      minLength={8}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOnboardingPassword((v) => !v)}
+                      className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-700 transition"
+                      tabIndex={-1}
+                      title={showOnboardingPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showOnboardingPassword ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                      )}
+                    </button>
+                  </div>
                   <p className="text-xs text-slate-500 px-1">Min 8 chars · uppercase · lowercase · special character (e.g. !@#$%)</p>
                   {onboardingPasswordError && (
                     <p className="text-xs text-red-600 font-medium px-1">{onboardingPasswordError}</p>
@@ -3443,7 +3463,7 @@ export default function AdminDashboard() {
               {/* Duplicate email error */}
               {onboardingEmailError && (
                 <div className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                   {onboardingEmailError}
                 </div>
               )}

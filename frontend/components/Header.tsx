@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState, useEffect, useRef } from 'react';
 import { logout, getCurrentUser, isAdmin, isBothRole, getActiveRole, setActiveRole } from '@/lib/api';
 import { usePathname, useRouter } from 'next/navigation';
@@ -63,33 +64,31 @@ export default function Header() {
 
   const roleBadgeColor = isBoth
     ? (activeRole === 'admin'
-        ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white'
-        : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white')
+      ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white'
+      : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white')
     : (isAdminUser
-        ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white'
-        : 'bg-gradient-to-r from-slate-400 to-slate-500 text-white');
+      ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white'
+      : 'bg-gradient-to-r from-slate-400 to-slate-500 text-white');
 
   return (
     <header className="sticky top-0 z-40 glass-panel border-b border-white/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
           {/* Company Logo/Name */}
-          <div className="flex items-center space-x-3">
-            <div className="glass-pill rounded-xl p-2.5">
-              <svg
-                className="w-8 h-8 text-sky-700"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5zm0 18c-3.86-.77-7-4.63-7-9V8.3l7-3.11 7 3.11V11c0 4.37-3.14 8.23-7 9z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </div>
+          <div className="flex items-center gap-3">
+            <Image
+              src="/assets/bkp-logo.png"
+              alt="BKP - Your Knowledge Partners"
+              width={180}
+              height={60}
+              className="h-12 w-auto object-contain"
+              priority
+            />
             <div>
               <h1 className="text-slate-900 font-bold text-xl md:text-2xl tracking-tight">
                 BKP Cygnus Consulting Inc.
               </h1>
-              <p className="text-slate-600 text-xs md:text-sm">Time Tracking System</p>
+              <p className="text-slate-600 text-xs md:text-sm">Atlas</p>
             </div>
           </div>
 
@@ -100,8 +99,8 @@ export default function Header() {
                 key={item.path}
                 href={item.path}
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${pathname === item.path
-                    ? 'glass-pill text-blue-900 shadow-md'
-                    : 'text-slate-700 hover:bg-white/55 hover:shadow-md'
+                  ? 'glass-pill text-blue-900 shadow-md'
+                  : 'text-slate-700 hover:bg-white/55 hover:shadow-md'
                   }`}
               >
                 {item.name}
@@ -147,11 +146,10 @@ export default function Header() {
                           <div className="p-1.5 space-y-1">
                             <button
                               onClick={() => handleRoleSwitch('admin')}
-                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-                                activeRole === 'admin'
-                                  ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white shadow-md'
-                                  : 'text-slate-700 hover:bg-violet-50'
-                              }`}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeRole === 'admin'
+                                ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white shadow-md'
+                                : 'text-slate-700 hover:bg-violet-50'
+                                }`}
                             >
                               <span className={`flex items-center justify-center w-7 h-7 rounded-lg ${activeRole === 'admin' ? 'bg-white/20' : 'bg-violet-100'}`}>
                                 <svg className={`w-4 h-4 ${activeRole === 'admin' ? 'text-white' : 'text-violet-600'}`} viewBox="0 0 24 24" fill="currentColor">
@@ -170,11 +168,10 @@ export default function Header() {
                             </button>
                             <button
                               onClick={() => handleRoleSwitch('employee')}
-                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-                                activeRole === 'employee'
-                                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
-                                  : 'text-slate-700 hover:bg-emerald-50'
-                              }`}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeRole === 'employee'
+                                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
+                                : 'text-slate-700 hover:bg-emerald-50'
+                                }`}
                             >
                               <span className={`flex items-center justify-center w-7 h-7 rounded-lg ${activeRole === 'employee' ? 'bg-white/20' : 'bg-emerald-100'}`}>
                                 <svg className={`w-4 h-4 ${activeRole === 'employee' ? 'text-white' : 'text-emerald-600'}`} viewBox="0 0 24 24" fill="currentColor">
