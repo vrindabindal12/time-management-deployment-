@@ -1694,7 +1694,7 @@ def _build_client_invoice_data(client, start_date, end_date):
     """Build the client invoice data dict shared by JSON and PDF endpoints."""
     projects = Project.query.filter_by(client_id=client.id).all()
     project_by_id = {project.id: project for project in projects}
-    project_by_code = {project.code: project for project in projects if project.code}
+    project_by_code = {project.code.upper(): project for project in projects if project.code}
     project_by_name = {project.name: project for project in projects if project.name}
     project_ids = list(project_by_id.keys())
 
@@ -1755,10 +1755,11 @@ def _build_client_invoice_data(client, start_date, end_date):
     for punch in punches:
         project = (
             project_by_id.get(punch.project_id)
-            or (project_by_code.get(punch.project_code) if punch.project_code else None)
-            or (project_by_name.get(punch.project_name) if punch.project_name else None)
+            or (project_by_code.get((punch.project_code or '').upper()))
+            or (project_by_name.get(punch.project_name))
         )
         if not project:
+            print(f"Skipping punch {punch.id} - project not found")
             continue
 
         employee = employee_by_id.get(punch.employee_id)
@@ -1766,16 +1767,20 @@ def _build_client_invoice_data(client, start_date, end_date):
         ek = _norm(employee.name) if employee else ''
         dk = _norm(designation)
 
-        sel = (rate_by_ped.get((project.id, ek, dk))
-               or rate_by_pe.get((project.id, ek)))
-        if not sel and project.id in employee_scoped_projects:
-            continue
-        sel = sel or rate_by_pd.get((project.id, dk)) or first_rate_by_project.get(project.id)
+        sel = (
+            rate_by_ped.get((project.id, ek, dk))
+            or rate_by_pe.get((project.id, ek))
+            or rate_by_pd.get((project.id, dk))
+            or first_rate_by_project.get(project.id)
+        )
+        
         if not sel:
-            continue
-
-        gross_rate = float(sel.gross_rate) if sel.gross_rate is not None else 0.0
-        discount = float(sel.discount) if sel.discount is not None else 0.0
+            # fallback instead of skipping
+            gross_rate = 0.0
+            discount = 0.0
+        else:
+            gross_rate = float(sel.gross_rate) if sel.gross_rate is not None else 0.0
+            discount = float(sel.discount) if sel.discount is not None else 0.0
         hours = float(punch.hours_worked) if punch.hours_worked is not None else 0.0
         net_rate = round(gross_rate * (1 - discount / 100.0), 2)
         net_billable = round(net_rate * hours, 2)
