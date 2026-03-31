@@ -2204,7 +2204,7 @@ export default function AdminDashboard() {
                         </div>
                         {projectForm.contract_type === 'fixed_fee' && (
                           <div>
-                            <label className="block text-xs font-bold text-blue-700 mb-1">FIXED FEE AMOUNT (CAD$)</label>
+                            <label className="block text-xs font-bold text-blue-700 mb-1">FIXED FEE AMOUNT ($)</label>
                             <input
                               type="number"
                               min="0"
@@ -2273,7 +2273,7 @@ export default function AdminDashboard() {
                         </div>
                         {projectEditForm.contract_type === 'fixed_fee' && (
                           <div>
-                            <label className="block text-xs font-bold text-cyan-700 mb-1">FIXED FEE AMOUNT (CAD$)</label>
+                            <label className="block text-xs font-bold text-cyan-700 mb-1">FIXED FEE AMOUNT ($)</label>
                             <input
                               type="number"
                               min="0"
@@ -2335,7 +2335,7 @@ export default function AdminDashboard() {
                               </span>
                               {project.contract_type === 'fixed_fee' && project.fixed_fee_amount != null && (
                                 <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border text-amber-700 bg-amber-50 border-amber-200">
-                                  CAD$ {project.fixed_fee_amount.toFixed(2)}
+                                  $ {project.fixed_fee_amount.toFixed(2)}
                                 </span>
                               )}
                             </div>
@@ -2579,7 +2579,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="rounded-xl border border-cyan-200/80 bg-gradient-to-br from-cyan-50/80 to-blue-50/80 px-4 py-2 text-right">
                       <p className="text-xs uppercase tracking-[0.16em] text-cyan-700 font-bold">Currency</p>
-                      <p className="text-lg font-black text-slate-900">CAD$</p>
+                      <p className="text-lg font-black text-slate-900">$</p>
                     </div>
                     <div className="rounded-xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/80 to-blue-50/80 px-4 py-2 text-right">
                       <p className="text-xs uppercase tracking-[0.16em] text-indigo-700 font-bold">Total Invoice Amount</p>
@@ -2595,7 +2595,7 @@ export default function AdminDashboard() {
                             <span className="font-semibold">{warning.project_code}</span>
                             {' - '}
                             {warning.status === 'overage' ? 'Overage' : 'Nearing threshold'}
-                            {': '}Actual CAD$ {warning.actual_hours_amount.toFixed(2)} vs Fixed CAD$ {warning.fixed_fee_amount.toFixed(2)}
+                            {': '}Actual $ {warning.actual_hours_amount.toFixed(2)} vs Fixed $ {warning.fixed_fee_amount.toFixed(2)}
                             {warning.utilization_ratio != null && ` (${(warning.utilization_ratio * 100).toFixed(1)}%)`}
                           </p>
                         ))}

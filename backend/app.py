@@ -1770,10 +1770,10 @@ def _build_client_invoice_data(client, start_date, end_date):
         if not sel:
             continue
 
-        gross_rate = sel.gross_rate
-        discount = sel.discount
-        hours = punch.hours_worked
-        net_rate = round(gross_rate * (1 - discount / 100), 2)
+        gross_rate = float(sel.gross_rate)
+        discount = float(sel.discount)
+        hours = float(punch.hours_worked) if punch.hours_worked is not None else 0.0
+        net_rate = round(gross_rate * (1 - discount / 100.0), 2)
         net_billable = round(net_rate * hours, 2)
         total_hours += hours
         total_net_billable += net_billable
@@ -1805,8 +1805,8 @@ def _build_client_invoice_data(client, start_date, end_date):
             'is_invoice_override': False
         })
 
-    rows.sort(key=lambda r: (r['work_date'], r['project_code'], r['employee_name']))
-    project_totals = sorted(project_totals_map.values(), key=lambda t: t['project_code'])
+    rows.sort(key=lambda r: (r['work_date'] or '', r['project_code'] or '', r['employee_name'] or ''))
+    project_totals = sorted(project_totals_map.values(), key=lambda t: t['project_code'] or '')
     fixed_fee_projects = []
     tm_projects = []
     fixed_fee_warnings = []
@@ -2458,7 +2458,7 @@ def get_employee_payables_report(current_user):
             resolved_rate, resolved_designation = get_employee_compensation_for_date(employee, punch.work_date)
             rate = resolved_rate
 
-        rate = round(rate, 2)
+        rate = round(float(rate), 2)
         net_payable = round(hours * rate, 2)
 
         total_hours += hours
@@ -2498,7 +2498,7 @@ def get_employee_payables_report(current_user):
     for summary in employee_totals:
         summary['total_hours'] = round(summary['total_hours'], 2)
         summary['total_net_payable'] = round(summary['total_net_payable'], 2)
-    employee_totals.sort(key=lambda item: item['employee_name'])
+    employee_totals.sort(key=lambda item: item['employee_name'] or '')
 
     return jsonify({
         'start_date': start_date.isoformat(),
