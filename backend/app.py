@@ -669,6 +669,8 @@ def ensure_employee_codes():
 def ensure_punch_invoice_schema():
     """Add invoice override columns for existing databases."""
     required_columns_sqlite = {
+        'project_code': 'TEXT',
+        'project_id': 'INTEGER',
         'invoice_hours': 'FLOAT',
         'invoice_gross_rate': 'FLOAT',
         'invoice_discount': 'FLOAT',
@@ -677,6 +679,8 @@ def ensure_punch_invoice_schema():
         'is_paid': 'BOOLEAN DEFAULT 0',
     }
     required_columns_pg = {
+        'project_code': 'VARCHAR(50)',
+        'project_id': 'INTEGER',
         'invoice_hours': 'FLOAT',
         'invoice_gross_rate': 'FLOAT',
         'invoice_discount': 'FLOAT',
@@ -1770,8 +1774,8 @@ def _build_client_invoice_data(client, start_date, end_date):
         if not sel:
             continue
 
-        gross_rate = float(sel.gross_rate)
-        discount = float(sel.discount)
+        gross_rate = float(sel.gross_rate) if sel.gross_rate is not None else 0.0
+        discount = float(sel.discount) if sel.discount is not None else 0.0
         hours = float(punch.hours_worked) if punch.hours_worked is not None else 0.0
         net_rate = round(gross_rate * (1 - discount / 100.0), 2)
         net_billable = round(net_rate * hours, 2)
