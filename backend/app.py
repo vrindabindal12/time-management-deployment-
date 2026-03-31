@@ -205,11 +205,11 @@ class Punch(db.Model):
             'project_id': self.project_id,
             'client_name': self.project.client.name if self.project else None,
             'work_date': self.work_date.isoformat() if self.work_date else None,
-            'hours_worked': self.hours_worked,
-            'invoice_hours': self.invoice_hours,
-            'invoice_gross_rate': self.invoice_gross_rate,
-            'invoice_discount': self.invoice_discount,
-            'payable_rate': self.payable_rate,
+            'hours_worked': float(self.hours_worked) if self.hours_worked is not None else None,
+            'invoice_hours': float(self.invoice_hours) if self.invoice_hours is not None else None,
+            'invoice_gross_rate': float(self.invoice_gross_rate) if self.invoice_gross_rate is not None else None,
+            'invoice_discount': float(self.invoice_discount) if self.invoice_discount is not None else None,
+            'payable_rate': float(self.payable_rate) if self.payable_rate is not None else None,
             'payable_designation': self.payable_designation,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -257,7 +257,7 @@ class Project(db.Model):
             'name': self.name,
             'code': self.code,
             'contract_type': self.contract_type,
-            'fixed_fee_amount': self.fixed_fee_amount,
+            'fixed_fee_amount': float(self.fixed_fee_amount) if self.fixed_fee_amount is not None else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'rates': [rate.to_dict() for rate in self.rates]
@@ -292,9 +292,9 @@ class ProjectRate(db.Model):
             'project_id': self.project_id,
             'employee_name': self.employee_name,
             'designation': self.designation,
-            'gross_rate': self.gross_rate,
-            'discount': self.discount,
-            'net_rate': self.net_rate,
+            'gross_rate': float(self.gross_rate) if self.gross_rate is not None else None,
+            'discount': float(self.discount) if self.discount is not None else None,
+            'net_rate': float(self.net_rate) if self.net_rate is not None else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -317,9 +317,9 @@ class ClientRate(db.Model):
             'client_id': self.client_id,
             'employee_name': self.employee_name,
             'designation': self.designation,
-            'gross_rate': self.gross_rate,
-            'discount': self.discount,
-            'net_rate': self.net_rate,
+            'gross_rate': float(self.gross_rate) if self.gross_rate is not None else None,
+            'discount': float(self.discount) if self.discount is not None else None,
+            'net_rate': float(self.net_rate) if self.net_rate is not None else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -1786,7 +1786,7 @@ def _build_client_invoice_data(client, start_date, end_date):
             'project_id': project.id, 'project_code': project.code,
             'project_name': project.name,
             'contract_type': project.contract_type or CONTRACT_TYPE_TIME_MATERIALS,
-            'fixed_fee_amount': project.fixed_fee_amount,
+            'fixed_fee_amount': float(project.fixed_fee_amount) if project.fixed_fee_amount is not None else None,
             'total_hours': 0.0,
             'total_net_billable': 0.0
         })
