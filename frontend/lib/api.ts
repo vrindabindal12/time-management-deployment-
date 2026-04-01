@@ -134,7 +134,7 @@ export interface ClientInvoiceProjectTotal {
   project_id: number;
   project_code: string;
   project_name: string;
-  contract_type: 'fixed_fee' | 'time_materials';
+  contract_type: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin';
   fixed_fee_amount?: number | null;
   total_hours: number;
   total_net_billable: number;
@@ -237,8 +237,11 @@ export interface Project {
   client_id: number;
   name: string;
   code: string;
-  contract_type: 'fixed_fee' | 'time_materials';
+  contract_type: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin';
+  standard_rate?: number | null;
   fixed_fee_amount?: number | null;
+  expected_hours?: number | null;
+  discount?: number | null;
   created_at: string;
   updated_at: string;
   rates: ProjectRate[];
@@ -524,6 +527,11 @@ export const employeeApi = {
     return response.data;
   },
 
+  hideProject: async (projectId: number): Promise<{ message: string }> => {
+    const response = await api.post('/my-hidden-projects', { project_id: projectId });
+    return response.data;
+  },
+
   // Backward compatibility
   getMyPunches: async (): Promise<EmployeePunches> => {
     const data = await employeeApi.getMyWork();
@@ -581,11 +589,17 @@ export const projectApi = {
     clientId: number,
     name: string,
     code: string,
-    contractType: 'fixed_fee' | 'time_materials',
-    fixedFeeAmount?: number
+    contractType: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin',
+    fixedFeeAmount?: number,
+    expectedHours?: number,
+    discount?: number,
+    standardRate?: number
   ): Promise<Project> => {
     const payload: any = { name, code, contract_type: contractType };
     if (fixedFeeAmount != null) payload.fixed_fee_amount = fixedFeeAmount;
+    if (expectedHours != null) payload.expected_hours = expectedHours;
+    if (discount != null) payload.discount = discount;
+    if (standardRate != null) payload.standard_rate = standardRate;
     const response = await api.post(`/clients/${clientId}/projects`, payload);
     return response.data;
   },
@@ -597,7 +611,7 @@ export const projectApi = {
 
   updateProject: async (
     projectId: number,
-    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount'>>
+    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount' | 'expected_hours' | 'discount' | 'standard_rate'>>
   ): Promise<Project> => {
     const payload: any = { ...data };
     if ('contract_type' in payload) payload.contract_type = payload.contract_type;

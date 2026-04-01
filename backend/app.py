@@ -44,6 +44,8 @@ def validate_password_strength(password: str):
 NON_BILLABLE_PROJECT_CODE = 'BKP-003'
 CONTRACT_TYPE_FIXED_FEE = 'fixed_fee'
 CONTRACT_TYPE_TIME_MATERIALS = 'time_materials'
+CONTRACT_TYPE_RETAINER = 'retainer'
+CONTRACT_TYPE_ADMIN = 'admin'
 
 app = Flask(__name__)
 
@@ -244,6 +246,9 @@ class Project(db.Model):
     code = db.Column(db.String(50), nullable=False)
     contract_type = db.Column(db.String(30), nullable=False, server_default=CONTRACT_TYPE_TIME_MATERIALS)
     fixed_fee_amount = db.Column(db.Float, nullable=True)
+    expected_hours = db.Column(db.Float, nullable=True)
+    discount = db.Column(db.Float, nullable=True)
+    standard_rate = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     rates = db.relationship('ProjectRate', backref='project', lazy=True, cascade='all, delete-orphan')
@@ -258,10 +263,20 @@ class Project(db.Model):
             'code': self.code,
             'contract_type': self.contract_type,
             'fixed_fee_amount': float(self.fixed_fee_amount) if self.fixed_fee_amount is not None else None,
+            'expected_hours': float(self.expected_hours) if self.expected_hours is not None else None,
+            'discount': float(self.discount) if self.discount is not None else None,
+            'standard_rate': float(self.standard_rate) if self.standard_rate is not None else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'rates': [rate.to_dict() for rate in self.rates]
         }
+
+class EmployeeHiddenProject(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+
+    __table_args__ = (db.UniqueConstraint('employee_id', 'project_id', name='uq_employee_hidden_project'),)
 
 
 class FixedFeeAlertLog(db.Model):
@@ -735,6 +750,10 @@ def ensure_client_rate_schema():
     """Create client_rate table for existing databases."""
     db.create_all()
 
+def ensure_hidden_projects_schema():
+    """Create hidden_project table for existing databases."""
+    db.create_all()
+
 
 def ensure_project_contract_schema():
     """Add project contract fields for existing databases."""
@@ -742,6 +761,9 @@ def ensure_project_contract_schema():
         required_columns = {
             'contract_type': f"TEXT NOT NULL DEFAULT '{CONTRACT_TYPE_TIME_MATERIALS}'",
             'fixed_fee_amount': 'FLOAT',
+            'expected_hours': 'FLOAT',
+            'discount': 'FLOAT',
+            'standard_rate': 'FLOAT',
         }
         existing = {
             row[1]
@@ -754,6 +776,9 @@ def ensure_project_contract_schema():
         pg_columns = {
             'contract_type': f"VARCHAR(30) NOT NULL DEFAULT '{CONTRACT_TYPE_TIME_MATERIALS}'",
             'fixed_fee_amount': 'FLOAT',
+            'expected_hours': 'FLOAT',
+            'discount': 'FLOAT',
+            'standard_rate': 'FLOAT',
         }
         for column_name, column_type in pg_columns.items():
             try:
@@ -779,6 +804,10 @@ def _normalize_contract_type(raw_contract_type):
         return CONTRACT_TYPE_FIXED_FEE
     if normalized in ('time & materials', 'time and materials', 'time_materials', 't&m', 'tm', 't and m'):
         return CONTRACT_TYPE_TIME_MATERIALS
+    if normalized in ('retainer', 'retainers', 'recurring'):
+        return CONTRACT_TYPE_RETAINER
+    if normalized in ('admin', 'administrative'):
+        return CONTRACT_TYPE_ADMIN
     return None
 
 
@@ -984,6 +1013,7 @@ with app.app_context():
     ensure_project_rate_schema()
     ensure_client_rate_schema()
     ensure_project_contract_schema()
+    ensure_hidden_projects_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
     if legacy_null_descriptions:
@@ -2649,13 +2679,30 @@ def create_project(current_user, client_id):
 
     contract_type = _normalize_contract_type(data.get('contract_type'))
     if not contract_type:
-        return jsonify({'error': 'Contract type is required and must be Fixed fee or Time & Materials'}), 400
+        return jsonify({'error': 'Contract type is required and must be Fixed fee, Time & Materials, Retainer, or Admin'}), 400
 
     try:
         fixed_fee_amount = _parse_fixed_fee_amount(
             data.get('fixed_fee_amount'),
-            required=contract_type == CONTRACT_TYPE_FIXED_FEE,
+            required=contract_type in (CONTRACT_TYPE_FIXED_FEE, CONTRACT_TYPE_RETAINER),
         )
+        
+        expected_hours = None
+        discount = None
+        standard_rate = None
+        def _parse_opt(val, name):
+            if val in (None, ''): return None
+            try: return float(val)
+            except (TypeError, ValueError): raise ValueError(f'{name} must be a valid number')
+
+        if contract_type in (CONTRACT_TYPE_FIXED_FEE, CONTRACT_TYPE_RETAINER):
+            expected_hours = _parse_opt(data.get('expected_hours'), 'Expected hours')
+            discount = _parse_opt(data.get('discount'), 'Discount')
+        elif contract_type == CONTRACT_TYPE_ADMIN:
+            standard_rate = _parse_opt(data.get('standard_rate'), 'Standard Rate per Hour')
+            if standard_rate is None:
+                raise ValueError('Standard Rate per Hour is required for admin projects')
+
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
     
@@ -2670,6 +2717,9 @@ def create_project(current_user, client_id):
         code=data['code'].strip().upper(),
         contract_type=contract_type,
         fixed_fee_amount=fixed_fee_amount,
+        expected_hours=expected_hours,
+        discount=discount,
+        standard_rate=standard_rate,
     )
     
     db.session.add(project)
@@ -2733,7 +2783,7 @@ def update_project(current_user, project_id):
     if 'contract_type' in data:
         contract_type = _normalize_contract_type(data.get('contract_type'))
         if not contract_type:
-            return jsonify({'error': 'Contract type must be Fixed fee or Time & Materials'}), 400
+            return jsonify({'error': 'Contract type must be Fixed fee, Time & Materials, Retainer, or Admin'}), 400
         project.contract_type = contract_type
 
     resolved_contract_type = project.contract_type or CONTRACT_TYPE_TIME_MATERIALS
@@ -2741,13 +2791,51 @@ def update_project(current_user, project_id):
         try:
             project.fixed_fee_amount = _parse_fixed_fee_amount(
                 data.get('fixed_fee_amount', project.fixed_fee_amount),
-                required=resolved_contract_type == CONTRACT_TYPE_FIXED_FEE,
+                required=resolved_contract_type in (CONTRACT_TYPE_FIXED_FEE, CONTRACT_TYPE_RETAINER),
             )
         except ValueError as exc:
             return jsonify({'error': str(exc)}), 400
 
+    def _parse_opt(val, default, name):
+        if val in (None, ''): return None
+        try: return float(val)
+        except (TypeError, ValueError): raise ValueError(f'{name} must be a valid number')
+
     if resolved_contract_type == CONTRACT_TYPE_TIME_MATERIALS:
         project.fixed_fee_amount = None
+        project.expected_hours = None
+        project.discount = None
+        project.standard_rate = None
+    elif resolved_contract_type in (CONTRACT_TYPE_FIXED_FEE, CONTRACT_TYPE_RETAINER):
+        project.standard_rate = None
+        def _parse_opt(val, default, name):
+            if val in (None, ''): return None
+            try: return float(val)
+            except (TypeError, ValueError): raise ValueError(f'{name} must be a valid number')
+        
+        if 'expected_hours' in data:
+            try:
+                project.expected_hours = _parse_opt(data.get('expected_hours'), project.expected_hours, 'Expected hours')
+            except ValueError as exc:
+                return jsonify({'error': str(exc)}), 400
+        
+        if 'discount' in data:
+            try:
+                project.discount = _parse_opt(data.get('discount'), project.discount, 'Discount')
+            except ValueError as exc:
+                return jsonify({'error': str(exc)}), 400
+
+    elif resolved_contract_type == CONTRACT_TYPE_ADMIN:
+        project.fixed_fee_amount = None
+        project.expected_hours = None
+        project.discount = None
+        if 'standard_rate' in data:
+            try:
+                project.standard_rate = _parse_opt(data.get('standard_rate'), project.standard_rate, 'Standard Rate per Hour')
+            except ValueError as exc:
+                return jsonify({'error': str(exc)}), 400
+        if project.standard_rate is None:
+            return jsonify({'error': 'Standard Rate per Hour is required for admin projects'}), 400
     
     project.updated_at = datetime.utcnow()
     db.session.commit()
@@ -3008,8 +3096,10 @@ def get_project_by_code(current_user, code):
 @app.route('/api/projects/all', methods=['GET'])
 @token_required
 def get_all_projects(current_user):
-    """Get all projects (for dropdown lists)"""
-    projects = Project.query.all()
+    """Get all projects (for dropdown lists), excluding hidden projects for current user"""
+    hidden_ids = [hp.project_id for hp in EmployeeHiddenProject.query.filter_by(employee_id=current_user.id).all()]
+    
+    projects = Project.query.filter(~Project.id.in_(hidden_ids)).all() if hidden_ids else Project.query.all()
     result = []
     for project in projects:
         client = Client.query.get(project.client_id)
@@ -3021,6 +3111,35 @@ def get_all_projects(current_user):
             'client_name': client.name if client else None,
         })
     return jsonify(result)
+
+@app.route('/api/my-hidden-projects', methods=['POST'])
+@token_required
+def hide_project(current_user):
+    data = request.json or {}
+    project_id = data.get('project_id')
+    if not project_id:
+        return jsonify({'error': 'project_id is required'}), 400
+    
+    project = Project.query.get(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+        
+    existing = EmployeeHiddenProject.query.filter_by(employee_id=current_user.id, project_id=project_id).first()
+    if not existing:
+        hp = EmployeeHiddenProject(employee_id=current_user.id, project_id=project_id)
+        db.session.add(hp)
+        db.session.commit()
+    
+    return jsonify({'message': 'Project hidden successfully'}), 200
+
+@app.route('/api/my-hidden-projects/<int:project_id>', methods=['DELETE'])
+@token_required
+def unhide_project(current_user, project_id):
+    hp = EmployeeHiddenProject.query.filter_by(employee_id=current_user.id, project_id=project_id).first()
+    if hp:
+        db.session.delete(hp)
+        db.session.commit()
+    return jsonify({'message': 'Project restored to dropdown'}), 200
 
 @app.route('/api/employees/<int:employee_id>/resend-welcome', methods=['POST'])
 @token_required

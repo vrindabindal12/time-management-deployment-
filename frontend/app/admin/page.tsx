@@ -8,13 +8,16 @@ import LiveClock from '@/components/LiveClock';
 
 const DESIGNATIONS = ['Managing Director', 'Associate Director', 'Senior Consultant'];
 
-type ProjectContractType = 'fixed_fee' | 'time_materials';
+type ProjectContractType = 'fixed_fee' | 'time_materials' | 'retainer' | 'admin';
 
 const emptyProjectForm = {
   name: '',
   code: '',
   contract_type: 'time_materials' as ProjectContractType,
   fixed_fee_amount: '',
+  expected_hours: '',
+  discount: '',
+  standard_rate: '',
 };
 
 const emptyOnboardingForm = {
@@ -668,8 +671,12 @@ export default function AdminDashboard() {
       setError('Please select a client first');
       return;
     }
-    if (projectForm.contract_type === 'fixed_fee' && !projectForm.fixed_fee_amount.trim()) {
-      setError('Fixed fee amount is required for fixed fee projects');
+    if (['fixed_fee', 'retainer'].includes(projectForm.contract_type) && !projectForm.fixed_fee_amount.trim()) {
+      setError('Fixed fee amount is required for fixed fee and retainer projects');
+      return;
+    }
+    if (projectForm.contract_type === 'admin' && !projectForm.standard_rate.trim()) {
+      setError('Standard Rate per Hour is required for admin projects');
       return;
     }
 
@@ -682,7 +689,10 @@ export default function AdminDashboard() {
         projectForm.name,
         projectForm.code,
         projectForm.contract_type,
-        projectForm.contract_type === 'fixed_fee' ? Number(projectForm.fixed_fee_amount) : undefined
+        ['fixed_fee', 'retainer'].includes(projectForm.contract_type) ? Number(projectForm.fixed_fee_amount) : undefined,
+        ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.expected_hours ? Number(projectForm.expected_hours) : undefined,
+        ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.discount ? Number(projectForm.discount) : undefined,
+        projectForm.contract_type === 'admin' && projectForm.standard_rate ? Number(projectForm.standard_rate) : undefined
       );
       setProjectForm(emptyProjectForm);
       setShowAddProjectForm(false);
@@ -837,6 +847,9 @@ export default function AdminDashboard() {
       code: project.code,
       contract_type: project.contract_type,
       fixed_fee_amount: project.fixed_fee_amount != null ? String(project.fixed_fee_amount) : '',
+      expected_hours: project.expected_hours != null ? String(project.expected_hours) : '',
+      discount: project.discount != null ? String(project.discount) : '',
+      standard_rate: project.standard_rate != null ? String(project.standard_rate) : '',
     });
     setShowAddProjectForm(false);
   };
@@ -849,8 +862,12 @@ export default function AdminDashboard() {
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProjectId) return;
-    if (projectEditForm.contract_type === 'fixed_fee' && !projectEditForm.fixed_fee_amount.trim()) {
-      setError('Fixed fee amount is required for fixed fee projects');
+    if (['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && !projectEditForm.fixed_fee_amount.trim()) {
+      setError('Fixed fee amount is required for fixed fee and retainer projects');
+      return;
+    }
+    if (projectEditForm.contract_type === 'admin' && !projectEditForm.standard_rate.trim()) {
+      setError('Standard Rate per Hour is required for admin projects');
       return;
     }
 
@@ -862,8 +879,17 @@ export default function AdminDashboard() {
         name: projectEditForm.name,
         code: projectEditForm.code,
         contract_type: projectEditForm.contract_type,
-        fixed_fee_amount: projectEditForm.contract_type === 'fixed_fee'
+        fixed_fee_amount: ['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && projectEditForm.fixed_fee_amount
           ? Number(projectEditForm.fixed_fee_amount)
+          : null,
+        expected_hours: ['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && projectEditForm.expected_hours
+          ? Number(projectEditForm.expected_hours)
+          : null,
+        discount: ['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && projectEditForm.discount
+          ? Number(projectEditForm.discount)
+          : null,
+        standard_rate: projectEditForm.contract_type === 'admin' && projectEditForm.standard_rate
+          ? Number(projectEditForm.standard_rate)
           : null,
       });
       cancelEditProject();
@@ -2192,7 +2218,10 @@ export default function AdminDashboard() {
                               setProjectForm({
                                 ...projectForm,
                                 contract_type: nextType,
-                                fixed_fee_amount: nextType === 'fixed_fee' ? projectForm.fixed_fee_amount : '',
+                                fixed_fee_amount: ['fixed_fee', 'retainer'].includes(nextType) ? projectForm.fixed_fee_amount : '',
+                                expected_hours: ['fixed_fee', 'retainer'].includes(nextType) ? projectForm.expected_hours : '',
+                                discount: ['fixed_fee', 'retainer'].includes(nextType) ? projectForm.discount : '',
+                                standard_rate: nextType === 'admin' ? projectForm.standard_rate : '',
                               });
                             }}
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -2200,18 +2229,61 @@ export default function AdminDashboard() {
                           >
                             <option value="time_materials">Time & Materials</option>
                             <option value="fixed_fee">Fixed fee</option>
+                            <option value="retainer">Retainers</option>
+                            <option value="admin">Admin</option>
                           </select>
                         </div>
-                        {projectForm.contract_type === 'fixed_fee' && (
+                        {['fixed_fee', 'retainer'].includes(projectForm.contract_type) && (
+                          <>
+                            <div>
+                              <label className="block text-xs font-bold text-blue-700 mb-1">FIXED FEE AMOUNT ($)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="e.g., 25000"
+                                value={projectForm.fixed_fee_amount}
+                                onChange={(e) => setProjectForm({ ...projectForm, fixed_fee_amount: e.target.value })}
+                                required
+                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-blue-700 mb-1">EXPECTED HOURS</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="e.g., 100"
+                                value={projectForm.expected_hours}
+                                onChange={(e) => setProjectForm({ ...projectForm, expected_hours: e.target.value })}
+                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-blue-700 mb-1">DISCOUNT (%)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="e.g., 10"
+                                value={projectForm.discount}
+                                onChange={(e) => setProjectForm({ ...projectForm, discount: e.target.value })}
+                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                          </>
+                        )}
+                        {projectForm.contract_type === 'admin' && (
                           <div>
-                            <label className="block text-xs font-bold text-blue-700 mb-1">FIXED FEE AMOUNT ($)</label>
+                            <label className="block text-xs font-bold text-blue-700 mb-1">STANDARD RATE PER HOUR ($)</label>
                             <input
                               type="number"
                               min="0"
                               step="0.01"
-                              placeholder="e.g., 25000"
-                              value={projectForm.fixed_fee_amount}
-                              onChange={(e) => setProjectForm({ ...projectForm, fixed_fee_amount: e.target.value })}
+                              placeholder="e.g., 50"
+                              value={projectForm.standard_rate}
+                              onChange={(e) => setProjectForm({ ...projectForm, standard_rate: e.target.value })}
                               required
                               className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
                             />
@@ -2261,7 +2333,10 @@ export default function AdminDashboard() {
                               setProjectEditForm({
                                 ...projectEditForm,
                                 contract_type: nextType,
-                                fixed_fee_amount: nextType === 'fixed_fee' ? projectEditForm.fixed_fee_amount : '',
+                                fixed_fee_amount: ['fixed_fee', 'retainer'].includes(nextType) ? projectEditForm.fixed_fee_amount : '',
+                                expected_hours: ['fixed_fee', 'retainer'].includes(nextType) ? projectEditForm.expected_hours : '',
+                                discount: ['fixed_fee', 'retainer'].includes(nextType) ? projectEditForm.discount : '',
+                                standard_rate: nextType === 'admin' ? projectEditForm.standard_rate : '',
                               });
                             }}
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
@@ -2269,17 +2344,57 @@ export default function AdminDashboard() {
                           >
                             <option value="time_materials">Time & Materials</option>
                             <option value="fixed_fee">Fixed fee</option>
+                            <option value="retainer">Retainers</option>
+                            <option value="admin">Admin</option>
                           </select>
                         </div>
-                        {projectEditForm.contract_type === 'fixed_fee' && (
+                        {['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && (
+                          <>
+                            <div>
+                              <label className="block text-xs font-bold text-cyan-700 mb-1">FIXED FEE AMOUNT ($)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={projectEditForm.fixed_fee_amount}
+                                onChange={(e) => setProjectEditForm({ ...projectEditForm, fixed_fee_amount: e.target.value })}
+                                required
+                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-cyan-700 mb-1">EXPECTED HOURS</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={projectEditForm.expected_hours}
+                                onChange={(e) => setProjectEditForm({ ...projectEditForm, expected_hours: e.target.value })}
+                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-cyan-700 mb-1">DISCOUNT (%)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={projectEditForm.discount}
+                                onChange={(e) => setProjectEditForm({ ...projectEditForm, discount: e.target.value })}
+                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                              />
+                            </div>
+                          </>
+                        )}
+                        {projectEditForm.contract_type === 'admin' && (
                           <div>
-                            <label className="block text-xs font-bold text-cyan-700 mb-1">FIXED FEE AMOUNT ($)</label>
+                            <label className="block text-xs font-bold text-cyan-700 mb-1">STANDARD RATE PER HOUR ($)</label>
                             <input
                               type="number"
                               min="0"
                               step="0.01"
-                              value={projectEditForm.fixed_fee_amount}
-                              onChange={(e) => setProjectEditForm({ ...projectEditForm, fixed_fee_amount: e.target.value })}
+                              value={projectEditForm.standard_rate}
+                              onChange={(e) => setProjectEditForm({ ...projectEditForm, standard_rate: e.target.value })}
                               required
                               className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                             />

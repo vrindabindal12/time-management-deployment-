@@ -60,6 +60,12 @@ export default function Dashboard() {
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
 
+  // Delete Confirmation state
+  const [deleteConfirmRowIdx, setDeleteConfirmRowIdx] = useState<number | null>(null);
+
+  // Hide Project Confirmation state
+  const [hideConfirmProject, setHideConfirmProject] = useState<Project | null>(null);
+
   const router = useRouter();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -104,6 +110,28 @@ export default function Dashboard() {
     }
   };
 
+  const handleHideProject = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    setHideConfirmProject(project);
+  };
+
+  const executeHideProject = async (projectId: number) => {
+    try {
+      setSaving(true);
+      await employeeApi.hideProject(projectId);
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      setFilteredProjects(prev => prev.filter(p => p.id !== projectId));
+      setSuccess('Project hidden from your list');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Failed to hide project:', err);
+      setError('Failed to hide project');
+    } finally {
+      setSaving(false);
+      setHideConfirmProject(null);
+    }
+  };
+
   const loadWeeklyData = async (anchor: Date) => {
     setLoading(true);
     setError(null);
@@ -113,12 +141,19 @@ export default function Dashboard() {
       end.setDate(end.getDate() + 6);
       const endStr = formatLocalDate(end);
 
-      const data = await employeeApi.getMyWork(start, endStr);
+      const [data, prevData] = await Promise.all([
+        employeeApi.getMyWork(start, endStr),
+        // Fetch previous week's data to pre-fill rows
+        employeeApi.getMyWork(
+          formatLocalDate(new Date(anchor.getTime() - 7 * 24 * 60 * 60 * 1000)),
+          formatLocalDate(new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000))
+        )
+      ]);
 
       // Process entries into rows
       const rowsMap = new Map<string, WeeklyRow>();
+      
       const entries = data.work_entries || [];
-
       entries.forEach((entry) => {
         const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.description || ''}`;
         if (!rowsMap.has(key)) {
@@ -136,6 +171,22 @@ export default function Dashboard() {
         row.rowTotal += entry.hours_worked;
       });
 
+      // Pre-fill from previous week
+      const prevEntries = prevData.work_entries || [];
+      prevEntries.forEach((entry) => {
+        const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.description || ''}`;
+        if (!rowsMap.has(key)) {
+          rowsMap.set(key, {
+            projectCode: entry.project_code || '-',
+            projectName: entry.project_name || '-',
+            task: entry.description || '',
+            projectId: entry.project_id,
+            dayEntries: {},
+            rowTotal: 0,
+          });
+        }
+      });
+
       setWeeklyRows(Array.from(rowsMap.values()).sort((a, b) =>
         `${a.projectCode}-${a.projectName}`.localeCompare(`${b.projectCode}-${b.projectName}`)
       ));
@@ -144,6 +195,39 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDeleteRow = async (rowIdx: number) => {
+    const row = weeklyRows[rowIdx];
+    const hasEntries = Object.values(row.dayEntries).some(e => e !== null && e !== undefined);
+    
+    setSaving(true);
+    setError(null);
+    try {
+      if (hasEntries) {
+        for (const entry of Object.values(row.dayEntries)) {
+          if (entry) {
+             await employeeApi.deleteWork(entry.id);
+          }
+        }
+      }
+      
+      const updated = [...weeklyRows];
+      updated.splice(rowIdx, 1);
+      setWeeklyRows(updated);
+      setSuccess('Row deleted successfully');
+      fetchTodaysTotal();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Failed to delete row entries');
+    } finally {
+      setSaving(false);
+      setDeleteConfirmRowIdx(null);
+    }
+  };
+
+  const confirmDelete = (rowIdx: number) => {
+    setDeleteConfirmRowIdx(rowIdx);
   };
 
   const weekDates = Array.from({ length: 7 }, (_, idx) => {
@@ -374,22 +458,23 @@ export default function Dashboard() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50/80">
-                  <th className="px-4 py-3 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[120px]">Project Code</th>
-                  <th className="px-4 py-3 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[150px]">Project Name</th>
-                  <th className="px-4 py-3 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[200px]">Task performed</th>
+                  <th className="px-2 py-2 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[80px]">Project Code</th>
+                  <th className="px-2 py-2 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[120px]">Project Name</th>
+                  <th className="px-2 py-2 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[140px]">Task performed</th>
                   {weekDates.map((date) => (
-                    <th key={date.toISOString()} className="px-2 py-3 text-center font-bold text-slate-600 border-b border-slate-100 min-w-[80px]">
-                      <div className="text-xs uppercase opacity-70">{date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
-                      <div>{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
+                    <th key={date.toISOString()} className="px-1 py-2 text-center font-bold text-slate-600 border-b border-slate-100 min-w-[55px]">
+                      <div className="text-[10px] uppercase opacity-70 leading-none">{date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
+                      <div className="text-xs">{date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-center font-bold text-slate-600 border-b border-slate-100 min-w-[80px]">Total</th>
+                  <th className="px-2 py-2 text-center font-bold text-slate-600 border-b border-slate-100 min-w-[60px]">Total</th>
+                  <th className="px-2 py-2 text-center font-bold text-slate-600 border-b border-slate-100 min-w-[40px]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100/50">
                 {totalRows === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-12 text-center text-slate-400 italic">
+                    <td colSpan={12} className="px-4 py-12 text-center text-slate-400 italic">
                       No rows added for this week. Click "Add Row" to start logging.
                     </td>
                   </tr>
@@ -398,10 +483,10 @@ export default function Dashboard() {
                     const rowIdx = startIndex + pIdx;
                     return (
                       <tr key={`${row.projectCode}-${row.task}-${rowIdx}`} className="hover:bg-slate-50/40 transition">
-                        <td className="px-4 py-3 text-slate-700 font-medium">{row.projectCode}</td>
-                        <td className="px-4 py-3 text-slate-600">{row.projectName}</td>
-                        <td className="px-4 py-3 text-slate-600 group align-top">
-                          <span className="block whitespace-pre-line break-words max-w-[200px]" title={row.task}>{row.task}</span>
+                        <td className="px-2 py-2 text-slate-700 font-medium">{row.projectCode}</td>
+                        <td className="px-2 py-2 text-slate-600 text-xs truncate max-w-[120px]" title={row.projectName}>{row.projectName}</td>
+                        <td className="px-2 py-2 text-slate-600 group align-top">
+                          <span className="block whitespace-pre-line break-words max-w-[140px] text-xs" title={row.task}>{row.task}</span>
                         </td>
                         {weekDates.map((date) => {
                           const dateKey = formatLocalDate(date);
@@ -429,8 +514,23 @@ export default function Dashboard() {
                             </td>
                           );
                         })}
-                        <td className="px-4 py-3 text-center font-bold text-slate-800">
+                        <td className="px-2 py-2 text-center font-bold text-slate-800">
                           {row.rowTotal.toFixed(1)}
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            onClick={() => confirmDelete(rowIdx)}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50 flex items-center justify-center w-7 h-7 rounded-lg hover:bg-red-50"
+                            title="Delete Row"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <polyline points="3 6 5 6 21 6"></polyline>
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                              <line x1="10" y1="11" x2="10" y2="17"></line>
+                              <line x1="14" y1="11" x2="14" y2="17"></line>
+                            </svg>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -440,15 +540,16 @@ export default function Dashboard() {
               {totalRows > 0 && (
                 <tfoot className="bg-slate-50/50">
                   <tr className="font-bold border-t-2 border-slate-200">
-                    <td className="px-4 py-4 text-slate-800" colSpan={3}>Totals</td>
+                    <td className="px-2 py-4 text-slate-800" colSpan={3}>Totals</td>
                     {dailyTotals.map((total, idx) => (
-                      <td key={idx} className="px-2 py-4 text-center text-blue-700">
+                      <td key={idx} className="px-1 py-4 text-center text-blue-700">
                         {total > 0 ? total.toFixed(1) : '-'}
                       </td>
                     ))}
-                    <td className="px-4 py-4 text-center text-blue-900 bg-blue-50/50">
+                    <td className="px-2 py-4 text-center text-blue-900 bg-blue-50/50">
                       {grandTotal.toFixed(1)}
                     </td>
+                    <td className="px-2 py-4"></td>
                   </tr>
                 </tfoot>
               )}
@@ -524,21 +625,33 @@ export default function Dashboard() {
                     type="text"
                     value={projectSearch}
                     onChange={handleProjectSearchChange}
-                    onFocus={() => projectSearch && setShowProjectDropdown(true)}
+                    onFocus={() => projectSearch.trim().length > 0 && setShowProjectDropdown(true)}
                     placeholder="Search by code or name..."
                     className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/50"
                   />
                   {showProjectDropdown && filteredProjects.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-2 glass-panel border border-slate-200 rounded-xl shadow-xl z-10 max-h-60 overflow-y-auto">
                       {filteredProjects.map(p => (
-                        <button
+                        <div
                           key={p.id}
                           onClick={() => selectProject(p)}
-                          className="w-full text-left px-4 py-3 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                          className="w-full text-left px-4 py-3 hover:bg-blue-50 transition border-b border-slate-50 last:border-0 flex justify-between items-center group cursor-pointer"
                         >
-                          <div className="font-bold text-slate-800">{p.code}</div>
-                          <div className="text-xs text-slate-500">{p.name}</div>
-                        </button>
+                          <div>
+                            <div className="font-bold text-slate-800">{p.code}</div>
+                            <div className="text-xs text-slate-500">{p.name}</div>
+                          </div>
+                          <button
+                            onClick={(e) => handleHideProject(e, p)}
+                            className="p-1.5 opacity-40 hover:opacity-100 hover:bg-red-50 hover:text-red-500 rounded-lg text-slate-400 transition ml-2"
+                            title="Hide from my list"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -569,6 +682,76 @@ export default function Dashboard() {
                 >
                   Create Row
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Delete Confirmation Modal */}
+        {deleteConfirmRowIdx !== null && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="glass-panel w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-white/50 animate-in fade-in zoom-in duration-200">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4 text-red-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">Delete Row?</h3>
+                <p className="text-slate-600 mb-6 text-sm">
+                  Are you sure you want to delete this project row?
+                  {weeklyRows[deleteConfirmRowIdx]?.rowTotal > 0 && " This row has logged hours which will also be removed."}
+                </p>
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={() => setDeleteConfirmRowIdx(null)}
+                    className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleDeleteRow(deleteConfirmRowIdx)}
+                    className="flex-1 bg-red-500 text-white px-4 py-3 rounded-xl font-bold hover:bg-red-600 transition shadow-lg shadow-red-200"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Hide Project Confirmation Modal */}
+        {hideConfirmProject !== null && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="glass-panel w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-white/50 animate-in fade-in zoom-in duration-200">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">Hide Project?</h3>
+                <p className="text-slate-600 mb-6 text-sm">
+                  This will remove <strong>{hideConfirmProject.code}</strong> from your future selection dropdown. You can still see past entries for this project.
+                </p>
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={() => setHideConfirmProject(null)}
+                    className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => executeHideProject(hideConfirmProject.id)}
+                    className="flex-1 bg-slate-800 text-white px-4 py-3 rounded-xl font-bold hover:bg-slate-900 transition shadow-lg shadow-slate-200"
+                  >
+                    Hide
+                  </button>
+                </div>
               </div>
             </div>
           </div>
