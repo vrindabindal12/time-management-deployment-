@@ -8,7 +8,7 @@ import LiveClock from '@/components/LiveClock';
 
 const DESIGNATIONS = ['Managing Director', 'Associate Director', 'Senior Consultant'];
 
-type ProjectContractType = 'fixed_fee' | 'time_materials' | 'retainer' | 'admin';
+type ProjectContractType = 'fixed_fee' | 'time_materials' | 'retainer' | 'admin' | 'documentation';
 
 const emptyProjectForm = {
   name: '',
@@ -19,6 +19,7 @@ const emptyProjectForm = {
   discount: '',
   project_discount: '0',
   standard_rate: '',
+  is_billable: true,
 };
 
 const emptyOnboardingForm = {
@@ -678,7 +679,8 @@ export default function AdminDashboard() {
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.expected_hours ? Number(projectForm.expected_hours) : undefined,
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.discount ? Number(projectForm.discount) : undefined,
         projectForm.contract_type === 'admin' && projectForm.standard_rate ? Number(projectForm.standard_rate) : undefined,
-        Number(projectForm.project_discount || 0)
+        Number(projectForm.project_discount || 0),
+        projectForm.is_billable
       );
       setProjectForm(emptyProjectForm);
       setShowAddProjectForm(false);
@@ -832,6 +834,7 @@ export default function AdminDashboard() {
       discount: project.discount != null ? String(project.discount) : '',
       project_discount: project.project_discount != null ? String(project.project_discount) : '0',
       standard_rate: project.standard_rate != null ? String(project.standard_rate) : '',
+      is_billable: !!project.is_billable,
     });
     setShowAddProjectForm(false);
   };
@@ -874,6 +877,7 @@ export default function AdminDashboard() {
           ? Number(projectEditForm.standard_rate)
           : null,
         project_discount: Number(projectEditForm.project_discount || 0),
+        is_billable: projectEditForm.is_billable,
       });
       cancelEditProject();
       if (selectedClient) {
@@ -1993,6 +1997,7 @@ export default function AdminDashboard() {
                                 expected_hours: ['fixed_fee', 'retainer'].includes(nextType) ? projectForm.expected_hours : '',
                                 discount: ['fixed_fee', 'retainer'].includes(nextType) ? projectForm.discount : '',
                                 standard_rate: nextType === 'admin' ? projectForm.standard_rate : '',
+                                is_billable: nextType === 'documentation' ? projectForm.is_billable : true,
                               });
                             }}
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -2001,6 +2006,7 @@ export default function AdminDashboard() {
                             <option value="time_materials">Time & Materials</option>
                             <option value="fixed_fee">Fixed fee</option>
                             <option value="retainer">Retainers</option>
+                            <option value="documentation">Documentation</option>
                             <option value="admin">Admin</option>
                           </select>
                         </div>
@@ -2048,19 +2054,48 @@ export default function AdminDashboard() {
                             />
                           </div>
                         )}
-                        <div>
-                          <label className="block text-xs font-bold text-blue-700 mb-1 font-inter uppercase tracking-wide">Project Discount (%)</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            placeholder="e.g., 10"
-                            value={projectForm.project_discount}
-                            onChange={(e) => setProjectForm({ ...projectForm, project_discount: e.target.value })}
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </div>
+                        {projectForm.contract_type === 'documentation' && (
+                          <div className="rounded-xl border border-blue-200/60 bg-blue-50/40 p-3">
+                            <label className="block text-xs font-bold text-blue-700 mb-2 uppercase tracking-wide">Billing Logic</label>
+                            <div className="flex bg-white/60 p-1 rounded-xl border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => setProjectForm({ ...projectForm, is_billable: true })}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${projectForm.is_billable
+                                  ? 'bg-blue-600 text-white shadow-sm'
+                                  : 'text-slate-500 hover:bg-slate-50'
+                                  }`}
+                              >
+                                Billable
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setProjectForm({ ...projectForm, is_billable: false })}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${!projectForm.is_billable
+                                  ? 'bg-slate-600 text-white shadow-sm'
+                                  : 'text-slate-500 hover:bg-slate-50'
+                                  }`}
+                              >
+                                Non-Billable
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {projectForm.contract_type !== 'documentation' && (
+                          <div>
+                            <label className="block text-xs font-bold text-blue-700 mb-1 font-inter uppercase tracking-wide">Project Discount (%)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              placeholder="e.g., 10"
+                              value={projectForm.project_discount}
+                              onChange={(e) => setProjectForm({ ...projectForm, project_discount: e.target.value })}
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        )}
                       </div>
                       <button
                         type="submit"
@@ -2109,6 +2144,7 @@ export default function AdminDashboard() {
                                 expected_hours: ['fixed_fee', 'retainer'].includes(nextType) ? projectEditForm.expected_hours : '',
                                 discount: ['fixed_fee', 'retainer'].includes(nextType) ? projectEditForm.discount : '',
                                 standard_rate: nextType === 'admin' ? projectEditForm.standard_rate : '',
+                                is_billable: nextType === 'documentation' ? projectEditForm.is_billable : true,
                               });
                             }}
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
@@ -2117,6 +2153,7 @@ export default function AdminDashboard() {
                             <option value="time_materials">Time & Materials</option>
                             <option value="fixed_fee">Fixed fee</option>
                             <option value="retainer">Retainers</option>
+                            <option value="documentation">Documentation</option>
                             <option value="admin">Admin</option>
                           </select>
                         </div>
@@ -2161,18 +2198,47 @@ export default function AdminDashboard() {
                             />
                           </div>
                         )}
-                        <div>
-                          <label className="block text-xs font-bold text-cyan-700 mb-1 font-inter uppercase tracking-wide">Project Discount (%)</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            value={projectEditForm.project_discount}
-                            onChange={(e) => setProjectEditForm({ ...projectEditForm, project_discount: e.target.value })}
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                          />
-                        </div>
+                        {projectEditForm.contract_type === 'documentation' && (
+                          <div className="rounded-xl border border-cyan-300/60 bg-cyan-100/40 p-3">
+                            <label className="block text-xs font-bold text-cyan-700 mb-2 uppercase tracking-wide">Billing Logic</label>
+                            <div className="flex bg-white/80 p-1 rounded-xl border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => setProjectEditForm({ ...projectEditForm, is_billable: true })}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${projectEditForm.is_billable
+                                  ? 'bg-cyan-600 text-white shadow-sm'
+                                  : 'text-slate-500 hover:bg-slate-50'
+                                  }`}
+                              >
+                                Billable
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setProjectEditForm({ ...projectEditForm, is_billable: false })}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${!projectEditForm.is_billable
+                                  ? 'bg-slate-600 text-white shadow-sm'
+                                  : 'text-slate-500 hover:bg-slate-50'
+                                  }`}
+                              >
+                                Non-Billable
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {projectEditForm.contract_type !== 'documentation' && (
+                          <div>
+                            <label className="block text-xs font-bold text-cyan-700 mb-1 font-inter uppercase tracking-wide">Project Discount (%)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={projectEditForm.project_discount}
+                              onChange={(e) => setProjectEditForm({ ...projectEditForm, project_discount: e.target.value })}
+                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                            />
+                          </div>
+                        )}
                       </div>
                       <div className="mt-3 flex gap-2">
                         <button
@@ -2217,10 +2283,17 @@ export default function AdminDashboard() {
                             <div className="mt-1 flex flex-wrap gap-1.5">
                               <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${project.contract_type === 'fixed_fee'
                                 ? 'text-amber-700 bg-amber-50 border-amber-200'
-                                : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                : project.contract_type === 'documentation'
+                                  ? 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                                  : 'text-emerald-700 bg-emerald-50 border-emerald-200'
                                 }`}>
-                                {project.contract_type === 'fixed_fee' ? 'Fixed fee' : 'Time & Materials'}
+                                {project.contract_type === 'fixed_fee' ? 'Fixed fee' : project.contract_type === 'documentation' ? 'Documentation' : 'Time & Materials'}
                               </span>
+                              {project.contract_type === 'documentation' && (
+                                <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${project.is_billable ? 'text-blue-700 bg-blue-50 border-blue-200' : 'text-slate-600 bg-slate-100 border-slate-300'}`}>
+                                  {project.is_billable ? 'Billable' : 'Non-Billable'}
+                                </span>
+                              )}
                               {project.contract_type === 'fixed_fee' && project.fixed_fee_amount != null && (
                                 <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border text-amber-700 bg-amber-50 border-amber-200">
                                   $ {project.fixed_fee_amount.toFixed(2)}
@@ -2260,7 +2333,7 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* Project Rates Section */}
+
 
 
               {!selectedClient && (
@@ -2818,15 +2891,6 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Edit Project Rate Modal */}
-      {editingRateId !== null && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-md flex items-center justify-center px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) cancelEditRate(); }}
-        >
-
-        </div>
-      )}
 
 
 

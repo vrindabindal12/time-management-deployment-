@@ -46,6 +46,7 @@ CONTRACT_TYPE_FIXED_FEE = 'fixed_fee'
 CONTRACT_TYPE_TIME_MATERIALS = 'time_materials'
 CONTRACT_TYPE_RETAINER = 'retainer'
 CONTRACT_TYPE_ADMIN = 'admin'
+CONTRACT_TYPE_DOCUMENTATION = 'documentation'
 
 app = Flask(__name__)
 
@@ -249,6 +250,7 @@ class Project(db.Model):
     discount = db.Column(db.Float, nullable=True)
     project_discount = db.Column(db.Float, default=0.0)
     standard_rate = db.Column(db.Float, nullable=True)
+    is_billable = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     rates = db.relationship('ProjectRate', backref='project', lazy=True, cascade='all, delete-orphan')
@@ -267,6 +269,7 @@ class Project(db.Model):
             'discount': float(self.discount) if self.discount is not None else None,
             'project_discount': float(self.project_discount) if self.project_discount is not None else 0.0,
             'standard_rate': float(self.standard_rate) if self.standard_rate is not None else None,
+            'is_billable': bool(self.is_billable),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'rates': [rate.to_dict() for rate in self.rates]
@@ -738,6 +741,7 @@ def ensure_project_contract_schema():
             'discount': 'FLOAT',
             'project_discount': 'FLOAT DEFAULT 0.0',
             'standard_rate': 'FLOAT',
+            'is_billable': 'BOOLEAN DEFAULT 1',
         }
         existing = {
             row[1]
@@ -754,6 +758,7 @@ def ensure_project_contract_schema():
             'discount': 'FLOAT',
             'project_discount': 'FLOAT DEFAULT 0.0',
             'standard_rate': 'FLOAT',
+            'is_billable': 'BOOLEAN DEFAULT TRUE',
         }
         for column_name, column_type in pg_columns.items():
             try:
@@ -783,6 +788,8 @@ def _normalize_contract_type(raw_contract_type):
         return CONTRACT_TYPE_RETAINER
     if normalized in ('admin', 'administrative'):
         return CONTRACT_TYPE_ADMIN
+    if normalized in ('documentation', 'docs', 'doc'):
+        return CONTRACT_TYPE_DOCUMENTATION
     return None
 
 
@@ -1766,6 +1773,10 @@ def _build_client_invoice_data(client, start_date, end_date):
             print(f"Skipping punch {punch.id} - project not found")
             continue
 
+        # Skip non-billable documentation
+        if project.contract_type == CONTRACT_TYPE_DOCUMENTATION and not project.is_billable:
+            continue
+
         employee = employee_by_id.get(punch.employee_id)
         base_rate, designation = get_employee_compensation_for_date(employee, punch.work_date) if employee else (0.0, 'Unspecified')
         ek = _norm(employee.name) if employee else ''
@@ -2082,7 +2093,11 @@ def _generate_invoice_pdf(data, project_filter=None):
         sum_data.append([
             Paragraph(t['project_code'],               ps(8.5, C_NAVY, bold=True)),
             Paragraph(t['project_name'],               ps(8.5)),
-            Paragraph('Fixed fee' if t.get('contract_type') == CONTRACT_TYPE_FIXED_FEE else 'Time & Materials', ps(8.5)),
+            Paragraph(
+                'Fixed fee' if t.get('contract_type') == CONTRACT_TYPE_FIXED_FEE
+                else 'Documentation' if t.get('contract_type') == CONTRACT_TYPE_DOCUMENTATION
+                else 'Time & Materials', ps(8.5)
+            ),
             Paragraph(
                 f"{((t.get('fixed_fee_amount') or 0.0) if t.get('contract_type') == CONTRACT_TYPE_FIXED_FEE else t['total_net_billable']):,.2f}",
                 ps(8.5, bold=True, align=TA_RIGHT)
@@ -2678,6 +2693,7 @@ def create_project(current_user, client_id):
                 raise ValueError('Standard Rate per Hour is required for admin projects')
 
         project_discount = _parse_opt(data.get('project_discount'), 'Project discount')
+        is_billable = bool(data.get('is_billable', True))
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
     
@@ -2696,6 +2712,7 @@ def create_project(current_user, client_id):
         discount=discount,
         project_discount=project_discount,
         standard_rate=standard_rate,
+        is_billable=is_billable
     )
     
     db.session.add(project)
@@ -2806,6 +2823,9 @@ def update_project(current_user, project_id):
             project.project_discount = _parse_opt(data.get('project_discount'), project.project_discount, 'Project discount')
         except ValueError as exc:
             return jsonify({'error': str(exc)}), 400
+    
+    if 'is_billable' in data:
+        project.is_billable = bool(data['is_billable'])
     
     project.updated_at = datetime.utcnow()
     db.session.commit()

@@ -134,7 +134,7 @@ export interface ClientInvoiceProjectTotal {
   project_id: number;
   project_code: string;
   project_name: string;
-  contract_type: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin';
+  contract_type: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin' | 'documentation';
   fixed_fee_amount?: number | null;
   total_hours: number;
   total_net_billable: number;
@@ -224,12 +224,13 @@ export interface Project {
   client_id: number;
   name: string;
   code: string;
-  contract_type: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin';
+  contract_type: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin' | 'documentation';
   standard_rate?: number | null;
   fixed_fee_amount?: number | null;
   expected_hours?: number | null;
   discount?: number | null;
   project_discount: number;
+  is_billable?: boolean;
   created_at: string;
   updated_at: string;
   rates: ProjectRate[];
@@ -577,14 +578,15 @@ export const projectApi = {
     clientId: number,
     name: string,
     code: string,
-    contractType: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin',
+    contractType: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin' | 'documentation',
     fixedFeeAmount?: number,
     expectedHours?: number,
     discount?: number,
     standardRate?: number,
-    projectDiscount: number = 0
+    projectDiscount: number = 0,
+    isBillable: boolean = true
   ): Promise<Project> => {
-    const payload: any = { name, code, contract_type: contractType, project_discount: projectDiscount };
+    const payload: any = { name, code, contract_type: contractType, project_discount: projectDiscount, is_billable: isBillable };
     if (fixedFeeAmount != null) payload.fixed_fee_amount = fixedFeeAmount;
     if (expectedHours != null) payload.expected_hours = expectedHours;
     if (discount != null) payload.discount = discount;
@@ -600,7 +602,7 @@ export const projectApi = {
 
   updateProject: async (
     projectId: number,
-    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount' | 'expected_hours' | 'discount' | 'standard_rate' | 'project_discount'>>
+    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount' | 'expected_hours' | 'discount' | 'standard_rate' | 'project_discount' | 'is_billable'>>
   ): Promise<Project> => {
     const payload: any = { ...data };
     if ('contract_type' in payload) payload.contract_type = payload.contract_type;
