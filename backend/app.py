@@ -1767,7 +1767,7 @@ def _build_client_invoice_data(client, start_date, end_date):
             continue
 
         employee = employee_by_id.get(punch.employee_id)
-        _, designation = get_employee_compensation_for_date(employee, punch.work_date) if employee else (0.0, 'Unspecified')
+        base_rate, designation = get_employee_compensation_for_date(employee, punch.work_date) if employee else (0.0, 'Unspecified')
         ek = _norm(employee.name) if employee else ''
         dk = _norm(designation)
 
@@ -1779,7 +1779,7 @@ def _build_client_invoice_data(client, start_date, end_date):
         )
         
         if not sel:
-            gross_rate = 0.0
+            gross_rate = base_rate
         else:
             gross_rate = float(sel.gross_rate) if sel.gross_rate is not None else 0.0
             
