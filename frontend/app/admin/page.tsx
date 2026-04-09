@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { employeeApi, clientApi, projectApi, clientRateApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
-import type { Client, ClientInvoiceReport, ClientRate, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
+import { employeeApi, clientApi, projectApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
+import type { Client, ClientInvoiceReport, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import LiveClock from '@/components/LiveClock';
 
@@ -17,6 +17,7 @@ const emptyProjectForm = {
   fixed_fee_amount: '',
   expected_hours: '',
   discount: '',
+  project_discount: '0',
   standard_rate: '',
 };
 
@@ -211,20 +212,15 @@ export default function AdminDashboard() {
   // Project Rate states
   const [projectRates, setProjectRates] = useState<ProjectRate[]>([]);
   const [showAddRateForm, setShowAddRateForm] = useState(false);
-  const [rateForm, setRateForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+  const [rateForm, setRateForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '' });
   const [editingRateId, setEditingRateId] = useState<number | null>(null);
-  const [rateEditForm, setRateEditForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+  const [rateEditForm, setRateEditForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '' });
 
-  // Client Rate states
-  const [clientRates, setClientRates] = useState<ClientRate[]>([]);
-  const [showAddClientRateForm, setShowAddClientRateForm] = useState(false);
-  const [clientRateForm, setClientRateForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
-  const [editingClientRateId, setEditingClientRateId] = useState<number | null>(null);
-  const [clientRateEditForm, setClientRateEditForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+
 
   const [deleteEntityModal, setDeleteEntityModal] = useState<{
     open: boolean;
-    entityType: 'client' | 'project' | 'rate' | 'client-rate' | null;
+    entityType: 'client' | 'project' | 'rate' | null;
     entityId: number | null;
     entityName: string;
   }>({
@@ -263,9 +259,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (selectedClient) {
       loadClientProjects(selectedClient);
-      loadClientRates(selectedClient);
-    } else {
-      setClientRates([]);
     }
     setEditingClientId(null);
     setClientEditForm({ name: '', code: '' });
@@ -382,15 +375,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadClientRates = async (clientId: number) => {
-    try {
-      const data = await clientRateApi.getClientRates(clientId);
-      setClientRates(data);
-    } catch (err: any) {
-      setError('Failed to load client rates');
-      clearError();
-    }
-  };
+
 
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -692,7 +677,8 @@ export default function AdminDashboard() {
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) ? Number(projectForm.fixed_fee_amount) : undefined,
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.expected_hours ? Number(projectForm.expected_hours) : undefined,
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.discount ? Number(projectForm.discount) : undefined,
-        projectForm.contract_type === 'admin' && projectForm.standard_rate ? Number(projectForm.standard_rate) : undefined
+        projectForm.contract_type === 'admin' && projectForm.standard_rate ? Number(projectForm.standard_rate) : undefined,
+        Number(projectForm.project_discount || 0)
       );
       setProjectForm(emptyProjectForm);
       setShowAddProjectForm(false);
@@ -719,10 +705,9 @@ export default function AdminDashboard() {
         selectedProject,
         rateForm.employeeName,
         rateForm.designation,
-        parseFloat(rateForm.grossRate),
-        parseFloat(rateForm.discount)
+        parseFloat(rateForm.grossRate)
       );
-      setRateForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+      setRateForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '' });
       setShowAddRateForm(false);
       await loadProjectRates(selectedProject);
     } catch (err: any) {
@@ -733,7 +718,7 @@ export default function AdminDashboard() {
   };
 
   const openDeleteEntityModal = (
-    entityType: 'client' | 'project' | 'rate' | 'client-rate',
+    entityType: 'client' | 'project' | 'rate',
     entityId: number,
     entityName: string
   ) => {
@@ -791,11 +776,6 @@ export default function AdminDashboard() {
         if (selectedProject) {
           await loadProjectRates(selectedProject);
         }
-      } else if (deleteEntityModal.entityType === 'client-rate') {
-        await clientRateApi.deleteClientRate(deleteEntityModal.entityId);
-        if (selectedClient) {
-          await loadClientRates(selectedClient);
-        }
       }
 
       closeDeleteEntityModal();
@@ -806,6 +786,7 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
+
 
   const startEditClient = (client: Client) => {
     setEditingClientId(client.id);
@@ -849,6 +830,7 @@ export default function AdminDashboard() {
       fixed_fee_amount: project.fixed_fee_amount != null ? String(project.fixed_fee_amount) : '',
       expected_hours: project.expected_hours != null ? String(project.expected_hours) : '',
       discount: project.discount != null ? String(project.discount) : '',
+      project_discount: project.project_discount != null ? String(project.project_discount) : '0',
       standard_rate: project.standard_rate != null ? String(project.standard_rate) : '',
     });
     setShowAddProjectForm(false);
@@ -891,6 +873,7 @@ export default function AdminDashboard() {
         standard_rate: projectEditForm.contract_type === 'admin' && projectEditForm.standard_rate
           ? Number(projectEditForm.standard_rate)
           : null,
+        project_discount: Number(projectEditForm.project_discount || 0),
       });
       cancelEditProject();
       if (selectedClient) {
@@ -910,14 +893,13 @@ export default function AdminDashboard() {
       employeeName: rate.employee_name || '',
       designation: rate.designation || DESIGNATIONS[0],
       grossRate: String(rate.gross_rate ?? ''),
-      discount: String(rate.discount ?? 0),
     });
     setShowAddRateForm(false);
   };
 
   const cancelEditRate = () => {
     setEditingRateId(null);
-    setRateEditForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+    setRateEditForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '' });
   };
 
   const handleUpdateRate = async (e: React.FormEvent) => {
@@ -931,8 +913,7 @@ export default function AdminDashboard() {
       await projectApi.updateProjectRate(editingRateId, {
         employee_name: rateEditForm.employeeName,
         designation: rateEditForm.designation,
-        gross_rate: parseFloat(rateEditForm.grossRate),
-        discount: parseFloat(rateEditForm.discount),
+        gross_rate: parseFloat(rateEditForm.grossRate)
       });
       cancelEditRate();
       if (selectedProject) {
@@ -946,88 +927,9 @@ export default function AdminDashboard() {
     }
   };
 
-  const startEditClientRate = (rate: ClientRate) => {
-    setEditingClientRateId(rate.id);
-    setClientRateEditForm({
-      employeeName: rate.employee_name || '',
-      designation: rate.designation || DESIGNATIONS[0],
-      grossRate: String(rate.gross_rate ?? ''),
-      discount: String(rate.discount ?? 0),
-    });
-    setShowAddClientRateForm(false);
-  };
 
-  const cancelEditClientRate = () => {
-    setEditingClientRateId(null);
-    setClientRateEditForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
-  };
 
-  const handleAddClientRate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedClient) return;
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      await clientRateApi.createClientRate(
-        selectedClient,
-        clientRateForm.employeeName,
-        clientRateForm.designation,
-        parseFloat(clientRateForm.grossRate),
-        parseFloat(clientRateForm.discount)
-      );
-      setClientRateForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
-      setShowAddClientRateForm(false);
-      await loadClientRates(selectedClient);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create client rate');
-      clearError();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdateClientRate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingClientRateId) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      await clientRateApi.updateClientRate(editingClientRateId, {
-        employee_name: clientRateEditForm.employeeName,
-        designation: clientRateEditForm.designation,
-        gross_rate: parseFloat(clientRateEditForm.grossRate),
-        discount: parseFloat(clientRateEditForm.discount),
-      });
-      cancelEditClientRate();
-      if (selectedClient) {
-        await loadClientRates(selectedClient);
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update client rate');
-      clearError();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleApplyClientRatesToProject = async () => {
-    if (!selectedProject) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await projectApi.applyClientRates(selectedProject);
-      setProjectRates(result.rates);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to apply client rates');
-      clearError();
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const runInvoiceReport = async () => {
     if (!invoiceClientId) {
@@ -1273,8 +1175,8 @@ export default function AdminDashboard() {
       'Project Name',
       'Date',
       'Gross Rate',
-      'Discount',
-      'Net Rate',
+      'Project Discount (%)',
+      'Final Rate',
       'Hours',
       'Net Billable',
       'Task Performed',
@@ -2019,138 +1921,7 @@ export default function AdminDashboard() {
               </div>
               {/* End clients panel */}
 
-              {/* Client Default Rates Section */}
-              {selectedClient && selectedClientData && (
-                <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-violet-50/70 via-white/75 to-purple-100/60">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.2em] font-bold text-violet-700">Default Rates</p>
-                      <h3 className="text-xl font-black text-slate-900 mt-1">{selectedClientData.name}</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Auto-applied to all new projects · edit per project</p>
-                    </div>
-                    <button
-                      onClick={() => { setShowAddClientRateForm(!showAddClientRateForm); cancelEditClientRate(); }}
-                      className="px-4 py-2 text-sm font-semibold rounded-xl bg-violet-600 hover:bg-violet-700 text-white transition shrink-0"
-                    >
-                      {showAddClientRateForm ? 'Cancel' : '+ Add Rate'}
-                    </button>
-                  </div>
 
-                  {showAddClientRateForm && (
-                    <form onSubmit={handleAddClientRate} className="mb-4 p-4 bg-violet-50/80 border border-violet-200/70 rounded-2xl">
-                      <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-700 mb-3">New Default Rate</p>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-xs font-bold text-violet-700 mb-1">EMPLOYEE NAME <span className="font-normal text-slate-400">(optional)</span></label>
-                          <input
-                            type="text"
-                            placeholder="e.g., Shashank Jain"
-                            value={clientRateForm.employeeName}
-                            onChange={(e) => setClientRateForm({ ...clientRateForm, employeeName: e.target.value })}
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-violet-700 mb-1">DESIGNATION</label>
-                          <select
-                            value={clientRateForm.designation}
-                            onChange={(e) => setClientRateForm({ ...clientRateForm, designation: e.target.value })}
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                          >
-                            {DESIGNATIONS.map((d) => (
-                              <option key={d} value={d}>{d}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs font-bold text-violet-700 mb-1">GROSS RATE ($/hr)</label>
-                            <input
-                              type="number"
-                              placeholder="300"
-                              value={clientRateForm.grossRate}
-                              onChange={(e) => setClientRateForm({ ...clientRateForm, grossRate: e.target.value })}
-                              required
-                              step="0.01"
-                              min="0"
-                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-violet-700 mb-1">DISCOUNT %</label>
-                            <input
-                              type="number"
-                              placeholder="0"
-                              value={clientRateForm.discount}
-                              onChange={(e) => setClientRateForm({ ...clientRateForm, discount: e.target.value })}
-                              step="0.1"
-                              min="0"
-                              max="100"
-                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="mt-3 w-full bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
-                      >
-                        {loading ? 'Adding...' : 'Add Default Rate'}
-                      </button>
-                    </form>
-                  )}
-
-                  <div className="space-y-2">
-                    {clientRates.length > 0 ? (
-                      clientRates.map((rate) => (
-                        <div key={rate.id} className="flex items-center gap-3 p-3.5 rounded-2xl border border-violet-100/70 bg-white/55 hover:bg-white/80 transition">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-slate-800 text-sm truncate leading-tight">{rate.employee_name || <span className="text-slate-400 italic text-xs">Any employee</span>}</p>
-                            <span className="inline-block mt-1 text-[10px] font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full uppercase tracking-wide">{rate.designation}</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="text-right">
-                              <p className="text-xs font-bold text-slate-700">${rate.gross_rate}<span className="text-slate-400 font-normal">/hr</span></p>
-                              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Gross</p>
-                            </div>
-                            <div className="w-px h-6 bg-slate-200" />
-                            <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">{rate.discount}% off</span>
-                            <div className="w-px h-6 bg-slate-200" />
-                            <div className="text-right">
-                              <p className="text-xs font-bold text-emerald-600">${rate.net_rate.toFixed(2)}<span className="text-emerald-400 font-normal">/hr</span></p>
-                              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Net</p>
-                            </div>
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <button
-                              onClick={() => startEditClientRate(rate)}
-                              disabled={loading}
-                              title="Edit rate"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-violet-700 hover:bg-violet-50 transition disabled:opacity-50"
-                            >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
-                            </button>
-                            <button
-                              onClick={() => openDeleteEntityModal('client-rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
-                              disabled={loading}
-                              title="Delete rate"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
-                            >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-6">
-                        <p className="text-slate-500 font-medium">No default rates yet.</p>
-                        <p className="text-xs text-slate-400 mt-1">Rates added here will be automatically applied to all new projects.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
             {/* End left column wrapper */}
 
@@ -2260,18 +2031,6 @@ export default function AdminDashboard() {
                                 className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
                               />
                             </div>
-                            <div>
-                              <label className="block text-xs font-bold text-blue-700 mb-1">DISCOUNT (%)</label>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="e.g., 10"
-                                value={projectForm.discount}
-                                onChange={(e) => setProjectForm({ ...projectForm, discount: e.target.value })}
-                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
                           </>
                         )}
                         {projectForm.contract_type === 'admin' && (
@@ -2289,6 +2048,19 @@ export default function AdminDashboard() {
                             />
                           </div>
                         )}
+                        <div>
+                          <label className="block text-xs font-bold text-blue-700 mb-1 font-inter uppercase tracking-wide">Project Discount (%)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            placeholder="e.g., 10"
+                            value={projectForm.project_discount}
+                            onChange={(e) => setProjectForm({ ...projectForm, project_discount: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
                       </div>
                       <button
                         type="submit"
@@ -2373,17 +2145,6 @@ export default function AdminDashboard() {
                                 className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                               />
                             </div>
-                            <div>
-                              <label className="block text-xs font-bold text-cyan-700 mb-1">DISCOUNT (%)</label>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={projectEditForm.discount}
-                                onChange={(e) => setProjectEditForm({ ...projectEditForm, discount: e.target.value })}
-                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                              />
-                            </div>
                           </>
                         )}
                         {projectEditForm.contract_type === 'admin' && (
@@ -2400,6 +2161,18 @@ export default function AdminDashboard() {
                             />
                           </div>
                         )}
+                        <div>
+                          <label className="block text-xs font-bold text-cyan-700 mb-1 font-inter uppercase tracking-wide">Project Discount (%)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={projectEditForm.project_discount}
+                            onChange={(e) => setProjectEditForm({ ...projectEditForm, project_discount: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          />
+                        </div>
                       </div>
                       <div className="mt-3 flex gap-2">
                         <button
@@ -2488,143 +2261,7 @@ export default function AdminDashboard() {
               )}
 
               {/* Project Rates Section */}
-              {selectedProject && (
-                <div className="glass-panel rounded-3xl p-6">
-                  <div className="flex flex-col gap-2 mb-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] font-bold text-cyan-700">Project Rates</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Per-project overrides — edit or delete as needed</p>
-                      </div>
-                      <button
-                        onClick={() => { setShowAddRateForm(!showAddRateForm); cancelEditRate(); }}
-                        className="glass-primary-btn hover:brightness-95 text-white px-3 py-1.5 rounded-xl text-sm transition"
-                      >
-                        {showAddRateForm ? 'Cancel' : '+ Add Rate'}
-                      </button>
-                    </div>
-                    {clientRates.length > 0 && (
-                      <button
-                        onClick={handleApplyClientRatesToProject}
-                        disabled={loading}
-                        className="w-full py-2 px-4 rounded-xl text-xs font-semibold border border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 transition disabled:opacity-50"
-                      >
-                        ↓ Apply Default Client Rates (skips existing designations)
-                      </button>
-                    )}
-                  </div>
 
-                  {showAddRateForm && (
-                    <form onSubmit={handleAddRate} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-xs font-bold text-cyan-700 mb-1">EMPLOYEE NAME <span className="font-normal text-slate-400">(optional)</span></label>
-                          <input
-                            type="text"
-                            placeholder="e.g., Shashank Jain"
-                            value={rateForm.employeeName}
-                            onChange={(e) => setRateForm({ ...rateForm, employeeName: e.target.value })}
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-cyan-700 mb-1">DESIGNATION</label>
-                          <select
-                            value={rateForm.designation}
-                            onChange={(e) => setRateForm({ ...rateForm, designation: e.target.value })}
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                          >
-                            {DESIGNATIONS.map((d) => (
-                              <option key={d} value={d}>{d}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs font-bold text-cyan-700 mb-1">GROSS RATE</label>
-                            <input
-                              type="number"
-                              placeholder="300"
-                              value={rateForm.grossRate}
-                              onChange={(e) => setRateForm({ ...rateForm, grossRate: e.target.value })}
-                              required
-                              step="0.01"
-                              min="0"
-                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-cyan-700 mb-1">DISCOUNT %</label>
-                            <input
-                              type="number"
-                              placeholder="0"
-                              value={rateForm.discount}
-                              onChange={(e) => setRateForm({ ...rateForm, discount: e.target.value })}
-                              step="0.1"
-                              min="0"
-                              max="100"
-                              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
-                      >
-                        {loading ? 'Adding...' : 'Add Rate'}
-                      </button>
-                    </form>
-                  )}
-
-                  <div className="space-y-2">
-                    {projectRates.length > 0 ? (
-                      projectRates.map((rate) => (
-                        <div key={rate.id} className="flex items-center gap-3 p-3.5 rounded-2xl border border-slate-100 bg-white/60 hover:bg-white/85 transition">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-slate-800 text-sm truncate leading-tight">{rate.employee_name || <span className="text-slate-400 italic text-xs">Any employee</span>}</p>
-                            <span className="inline-block mt-1 text-[10px] font-bold text-cyan-600 bg-cyan-50 border border-cyan-100 px-2 py-0.5 rounded-full uppercase tracking-wide">{rate.designation}</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="text-right">
-                              <p className="text-xs font-bold text-slate-700">${rate.gross_rate}<span className="text-slate-400 font-normal">/hr</span></p>
-                              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Gross</p>
-                            </div>
-                            <div className="w-px h-6 bg-slate-200" />
-                            <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">{rate.discount}% off</span>
-                            <div className="w-px h-6 bg-slate-200" />
-                            <div className="text-right">
-                              <p className="text-xs font-bold text-emerald-600">${rate.net_rate}<span className="text-emerald-400 font-normal">/hr</span></p>
-                              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Net</p>
-                            </div>
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <button
-                              onClick={() => startEditRate(rate)}
-                              disabled={loading}
-                              title="Edit rate"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
-                            >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
-                            </button>
-                            <button
-                              onClick={() => openDeleteEntityModal('rate', rate.id, `${rate.employee_name || 'Rate'} (${rate.designation})`)}
-                              disabled={loading}
-                              title="Delete rate"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
-                            >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-slate-500 text-center py-4">No rates found.</p>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {!selectedClient && (
                 <div className="min-h-64 glass-panel rounded-3xl p-8 flex items-center justify-center border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/70 to-blue-100/65">
@@ -3187,232 +2824,23 @@ export default function AdminDashboard() {
           className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-md flex items-center justify-center px-4"
           onClick={(e) => { if (e.target === e.currentTarget) cancelEditRate(); }}
         >
-          <div className="w-full max-w-md glass-panel rounded-3xl p-7 shadow-2xl border border-white/50">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] font-bold text-cyan-600 mb-0.5">Project Rates</p>
-                <h3 className="text-xl font-black text-slate-900">Edit Rate</h3>
-              </div>
-              <button
-                type="button"
-                onClick={cancelEditRate}
-                className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <form onSubmit={handleUpdateRate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Employee Name</label>
-                <input
-                  type="text"
-                  value={rateEditForm.employeeName}
-                  onChange={(e) => setRateEditForm({ ...rateEditForm, employeeName: e.target.value })}
-                  required
-                  placeholder="Employee name"
-                  className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Designation</label>
-                <select
-                  value={rateEditForm.designation}
-                  onChange={(e) => setRateEditForm({ ...rateEditForm, designation: e.target.value })}
-                  className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                >
-                  {DESIGNATIONS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Gross Rate / hr</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={rateEditForm.grossRate}
-                    onChange={(e) => setRateEditForm({ ...rateEditForm, grossRate: e.target.value })}
-                    required
-                    placeholder="300"
-                    className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Discount %</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    value={rateEditForm.discount}
-                    onChange={(e) => setRateEditForm({ ...rateEditForm, discount: e.target.value })}
-                    placeholder="0"
-                    className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                  />
-                </div>
-              </div>
-              {rateEditForm.grossRate && (
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-cyan-50/80 border border-cyan-100">
-                  <div className="text-center flex-1">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Gross</p>
-                    <p className="text-sm font-bold text-slate-800">${parseFloat(rateEditForm.grossRate || '0').toFixed(2)}/hr</p>
-                  </div>
-                  <div className="w-px h-8 bg-cyan-200" />
-                  <div className="text-center flex-1">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Discount</p>
-                    <p className="text-sm font-bold text-amber-600">{rateEditForm.discount || 0}% off</p>
-                  </div>
-                  <div className="w-px h-8 bg-cyan-200" />
-                  <div className="text-center flex-1">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Net</p>
-                    <p className="text-sm font-bold text-emerald-600">${(parseFloat(rateEditForm.grossRate || '0') * (1 - parseFloat(rateEditForm.discount || '0') / 100)).toFixed(2)}/hr</p>
-                  </div>
-                </div>
-              )}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={cancelEditRate}
-                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 glass-primary-btn hover:brightness-95 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition disabled:opacity-50"
-                >
-                  {loading ? 'Saving…' : 'Save Rate'}
-                </button>
-              </div>
-            </form>
-          </div>
+
         </div>
       )}
 
-      {/* Edit Client Default Rate Modal */}
-      {editingClientRateId !== null && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-md flex items-center justify-center px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) cancelEditClientRate(); }}
-        >
-          <div className="w-full max-w-md glass-panel rounded-3xl p-7 shadow-2xl border border-white/50">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-600 mb-0.5">Default Rates</p>
-                <h3 className="text-xl font-black text-slate-900">Edit Rate</h3>
-              </div>
-              <button
-                type="button"
-                onClick={cancelEditClientRate}
-                className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <form onSubmit={handleUpdateClientRate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Employee Name</label>
-                <input
-                  type="text"
-                  placeholder="Employee name (optional)"
-                  value={clientRateEditForm.employeeName}
-                  onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, employeeName: e.target.value })}
-                  className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Designation</label>
-                <select
-                  value={clientRateEditForm.designation}
-                  onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, designation: e.target.value })}
-                  className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                >
-                  {DESIGNATIONS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Gross Rate / hr</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="300"
-                    value={clientRateEditForm.grossRate}
-                    onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, grossRate: e.target.value })}
-                    required
-                    className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Discount %</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    placeholder="0"
-                    value={clientRateEditForm.discount}
-                    onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, discount: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white/90 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                  />
-                </div>
-              </div>
-              {clientRateEditForm.grossRate && (
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-violet-50/80 border border-violet-100">
-                  <div className="text-center flex-1">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Gross</p>
-                    <p className="text-sm font-bold text-slate-800">${parseFloat(clientRateEditForm.grossRate || '0').toFixed(2)}/hr</p>
-                  </div>
-                  <div className="w-px h-8 bg-violet-200" />
-                  <div className="text-center flex-1">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Discount</p>
-                    <p className="text-sm font-bold text-amber-600">{clientRateEditForm.discount || 0}% off</p>
-                  </div>
-                  <div className="w-px h-8 bg-violet-200" />
-                  <div className="text-center flex-1">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Net</p>
-                    <p className="text-sm font-bold text-emerald-600">${(parseFloat(clientRateEditForm.grossRate || '0') * (1 - parseFloat(clientRateEditForm.discount || '0') / 100)).toFixed(2)}/hr</p>
-                  </div>
-                </div>
-              )}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={cancelEditClientRate}
-                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition disabled:opacity-50"
-                >
-                  {loading ? 'Saving…' : 'Save Rate'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {payableMarkPaidModal?.open && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-panel w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-white/50">
             <h3 className="text-xl font-bold text-slate-900 mb-2">
-              {payableMarkPaidModal.isPaid ? 'Mark as Paid' : 'Mark as Unpaid'}
+              {payableMarkPaidModal!.isPaid ? 'Mark as Paid' : 'Mark as Unpaid'}
             </h3>
             <p className="text-slate-600 text-sm mb-6">
               This will mark{' '}
               <span className="font-bold text-slate-900">{selectedPayableIds.size}</span>{' '}
               selected {selectedPayableIds.size === 1 ? 'entry' : 'entries'} as{' '}
-              <span className="font-bold">{payableMarkPaidModal.isPaid ? 'paid' : 'unpaid'}</span>. This action can be reversed.
+              <span className="font-bold">{payableMarkPaidModal!.isPaid ? 'paid' : 'unpaid'}</span>. This action can be reversed.
             </p>
             <div className="flex gap-3">
               <button
@@ -3424,9 +2852,9 @@ export default function AdminDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => handleMarkPayablesPaid(payableMarkPaidModal.isPaid)}
+                onClick={() => handleMarkPayablesPaid(payableMarkPaidModal!.isPaid)}
                 disabled={loading}
-                className={`flex-1 px-4 py-3 rounded-xl text-white font-bold transition disabled:opacity-50 ${payableMarkPaidModal.isPaid ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-600 hover:bg-slate-700'
+                className={`flex-1 px-4 py-3 rounded-xl text-white font-bold transition disabled:opacity-50 ${payableMarkPaidModal!.isPaid ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-600 hover:bg-slate-700'
                   }`}
               >
                 {loading ? 'Updating...' : 'Confirm'}

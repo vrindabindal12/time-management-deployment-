@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import '../app/globals.css';
+
 import { useState, useEffect, useRef } from 'react';
 import { logout, getCurrentUser, isAdmin, isBothRole, getActiveRole, setActiveRole } from '@/lib/api';
 import { usePathname, useRouter } from 'next/navigation';

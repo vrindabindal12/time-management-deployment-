@@ -1,0 +1,79 @@
+4: import { employeeApi, clientApi, projectApi, clientRateApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
+5: import type { Client, ClientInvoiceReport, ClientRate, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
+219: const [clientRates, setClientRates] = useState<ClientRate[]>([]);
+220: const [showAddClientRateForm, setShowAddClientRateForm] = useState(false);
+221: const [clientRateForm, setClientRateForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+222: const [editingClientRateId, setEditingClientRateId] = useState<number | null>(null);
+223: const [clientRateEditForm, setClientRateEditForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+266: loadClientRates(selectedClient);
+268: setClientRates([]);
+385: const loadClientRates = async (clientId: number) => {
+387: const data = await clientRateApi.getClientRates(clientId);
+388: setClientRates(data);
+795: await clientRateApi.deleteClientRate(deleteEntityModal.entityId);
+797: await loadClientRates(selectedClient);
+949: const startEditClientRate = (rate: ClientRate) => {
+950: setEditingClientRateId(rate.id);
+951: setClientRateEditForm({
+957: setShowAddClientRateForm(false);
+960: const cancelEditClientRate = () => {
+961: setEditingClientRateId(null);
+962: setClientRateEditForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+965: const handleAddClientRate = async (e: React.FormEvent) => {
+973: await clientRateApi.createClientRate(
+975: clientRateForm.employeeName,
+976: clientRateForm.designation,
+977: parseFloat(clientRateForm.grossRate),
+978: parseFloat(clientRateForm.discount)
+980: setClientRateForm({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '', discount: '0' });
+981: setShowAddClientRateForm(false);
+982: await loadClientRates(selectedClient);
+991: const handleUpdateClientRate = async (e: React.FormEvent) => {
+993: if (!editingClientRateId) return;
+999: await clientRateApi.updateClientRate(editingClientRateId, {
+1000: employee_name: clientRateEditForm.employeeName,
+1001: designation: clientRateEditForm.designation,
+1002: gross_rate: parseFloat(clientRateEditForm.grossRate),
+1003: discount: parseFloat(clientRateEditForm.discount),
+1005: cancelEditClientRate();
+1007: await loadClientRates(selectedClient);
+1017: const handleApplyClientRatesToProject = async () => {
+1022: const result = await projectApi.applyClientRates(selectedProject);
+1873: {/* LEFT: Clients + Client Default Rates */}
+2022: {/* Client Default Rates Section */}
+2027: <p className="text-xs uppercase tracking-[0.2em] font-bold text-violet-700">Default Rates</p>
+2032: onClick={() => { setShowAddClientRateForm(!showAddClientRateForm); cancelEditClientRate(); }}
+2035: {showAddClientRateForm ? 'Cancel' : '+ Add Rate'}
+2039: {showAddClientRateForm && (
+2040: <form onSubmit={handleAddClientRate} className="mb-4 p-4 bg-violet-50/80 border border-violet-200/70 rounded-2xl">
+2048: value={clientRateForm.employeeName}
+2049: onChange={(e) => setClientRateForm({ ...clientRateForm, employeeName: e.target.value })}
+2056: value={clientRateForm.designation}
+2057: onChange={(e) => setClientRateForm({ ...clientRateForm, designation: e.target.value })}
+2071: value={clientRateForm.grossRate}
+2072: onChange={(e) => setClientRateForm({ ...clientRateForm, grossRate: e.target.value })}
+2084: value={clientRateForm.discount}
+2085: onChange={(e) => setClientRateForm({ ...clientRateForm, discount: e.target.value })}
+2105: {clientRates.length > 0 ? (
+2106: clientRates.map((rate) => (
+2127: onClick={() => startEditClientRate(rate)}
+2506: {clientRates.length > 0 && (
+2508: onClick={handleApplyClientRatesToProject}
+3296: {editingClientRateId !== null && (
+3299: onClick={(e) => { if (e.target === e.currentTarget) cancelEditClientRate(); }}
+3304: <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-600 mb-0.5">Default Rates</p>
+3309: onClick={cancelEditClientRate}
+3315: <form onSubmit={handleUpdateClientRate} className="space-y-4">
+3321: value={clientRateEditForm.employeeName}
+3322: onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, employeeName: e.target.value })}
+3329: value={clientRateEditForm.designation}
+3330: onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, designation: e.target.value })}
+3346: value={clientRateEditForm.grossRate}
+3347: onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, grossRate: e.target.value })}
+3360: value={clientRateEditForm.discount}
+3361: onChange={(e) => setClientRateEditForm({ ...clientRateEditForm, discount: e.target.value })}
+3366: {clientRateEditForm.grossRate && (
+3370: <p className="text-sm font-bold text-slate-800">${parseFloat(clientRateEditForm.grossRate || '0').toFixed(2)}/hr</p>
+3375: <p className="text-sm font-bold text-amber-600">{clientRateEditForm.discount || 0}% off</p>
+3380: <p className="text-sm font-bold text-emerald-600">${(parseFloat(clientRateEditForm.grossRate || '0') * (1 - parseFloat(clientRateEditForm.discount || '0') / 100)).toFixed(2)}/hr</p>
+3387: onClick={cancelEditClientRate}

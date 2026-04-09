@@ -215,19 +215,19 @@ class Punch(db.Model):
             'payable_designation': self.payable_designation,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'updated_by_admin': self.updated_by_admin,
-            'is_paid': self.is_paid
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False, unique=True)
-    code = db.Column(db.String(50), nullable=False, unique=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    code = db.Column(db.String(50), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship to projects: one client can have many projects.
+    # When a client is deleted, its projects (and their related data) are also deleted.
     projects = db.relationship('Project', backref='client', lazy=True, cascade='all, delete-orphan')
-    rates = db.relationship('ClientRate', backref='client', lazy=True, cascade='all, delete-orphan')
 
     def to_dict(self):
         return {
@@ -235,8 +235,7 @@ class Client(db.Model):
             'name': self.name,
             'code': self.code,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'rates': [r.to_dict() for r in self.rates]
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 class Project(db.Model):
@@ -248,6 +247,7 @@ class Project(db.Model):
     fixed_fee_amount = db.Column(db.Float, nullable=True)
     expected_hours = db.Column(db.Float, nullable=True)
     discount = db.Column(db.Float, nullable=True)
+    project_discount = db.Column(db.Float, default=0.0)
     standard_rate = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -265,6 +265,7 @@ class Project(db.Model):
             'fixed_fee_amount': float(self.fixed_fee_amount) if self.fixed_fee_amount is not None else None,
             'expected_hours': float(self.expected_hours) if self.expected_hours is not None else None,
             'discount': float(self.discount) if self.discount is not None else None,
+            'project_discount': float(self.project_discount) if self.project_discount is not None else 0.0,
             'standard_rate': float(self.standard_rate) if self.standard_rate is not None else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
@@ -305,31 +306,6 @@ class ProjectRate(db.Model):
         return {
             'id': self.id,
             'project_id': self.project_id,
-            'employee_name': self.employee_name,
-            'designation': self.designation,
-            'gross_rate': float(self.gross_rate) if self.gross_rate is not None else None,
-            'discount': float(self.discount) if self.discount is not None else None,
-            'net_rate': float(self.net_rate) if self.net_rate is not None else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
-
-
-class ClientRate(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
-    employee_name = db.Column(db.String(120), nullable=True)
-    designation = db.Column(db.String(100), nullable=False)
-    gross_rate = db.Column(db.Float, nullable=False)
-    discount = db.Column(db.Float, default=0.0)  # Stored as percentage (0-100)
-    net_rate = db.Column(db.Float, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'client_id': self.client_id,
             'employee_name': self.employee_name,
             'designation': self.designation,
             'gross_rate': float(self.gross_rate) if self.gross_rate is not None else None,
@@ -746,9 +722,6 @@ def ensure_project_rate_schema():
                 db.session.rollback()
 
 
-def ensure_client_rate_schema():
-    """Create client_rate table for existing databases."""
-    db.create_all()
 
 def ensure_hidden_projects_schema():
     """Create hidden_project table for existing databases."""
@@ -763,6 +736,7 @@ def ensure_project_contract_schema():
             'fixed_fee_amount': 'FLOAT',
             'expected_hours': 'FLOAT',
             'discount': 'FLOAT',
+            'project_discount': 'FLOAT DEFAULT 0.0',
             'standard_rate': 'FLOAT',
         }
         existing = {
@@ -778,6 +752,7 @@ def ensure_project_contract_schema():
             'fixed_fee_amount': 'FLOAT',
             'expected_hours': 'FLOAT',
             'discount': 'FLOAT',
+            'project_discount': 'FLOAT DEFAULT 0.0',
             'standard_rate': 'FLOAT',
         }
         for column_name, column_type in pg_columns.items():
@@ -1011,7 +986,6 @@ with app.app_context():
     ensure_employee_codes()
     ensure_punch_invoice_schema()
     ensure_project_rate_schema()
-    ensure_client_rate_schema()
     ensure_project_contract_schema()
     ensure_hidden_projects_schema()
     # Backfill legacy rows where description may be null from older schema versions.
@@ -1050,7 +1024,7 @@ def token_required(f):
             if token.startswith('Bearer '):
                 token = token[7:]
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            current_user = Employee.query.get(data['employee_id'])
+            current_user = db.session.get(Employee, data['employee_id'])
             if not current_user:
                 return jsonify({'error': 'User not found'}), 401
         except jwt.ExpiredSignatureError:
@@ -1805,14 +1779,14 @@ def _build_client_invoice_data(client, start_date, end_date):
         )
         
         if not sel:
-            # fallback instead of skipping
             gross_rate = 0.0
-            discount = 0.0
         else:
             gross_rate = float(sel.gross_rate) if sel.gross_rate is not None else 0.0
-            discount = float(sel.discount) if sel.discount is not None else 0.0
+            
+        # Use simple project-level discount instead of complex role-based overrides
+        project_discount = float(project.project_discount or 0.0)
         hours = float(punch.hours_worked) if punch.hours_worked is not None else 0.0
-        net_rate = round(gross_rate * (1 - discount / 100.0), 2)
+        net_rate = round(gross_rate * (1 - project_discount / 100.0), 2)
         net_billable = round(net_rate * hours, 2)
         total_hours += hours
         total_net_billable += net_billable
@@ -1836,7 +1810,7 @@ def _build_client_invoice_data(client, start_date, end_date):
             'employee_name': employee.name if employee else 'Unknown',
             'employee_designation': designation,
             'gross_rate': gross_rate,
-            'discount': discount,
+            'discount': project_discount,
             'net_rate': net_rate,
             'hours': round(hours, 2),
             'net_billable': net_billable,
@@ -2703,6 +2677,7 @@ def create_project(current_user, client_id):
             if standard_rate is None:
                 raise ValueError('Standard Rate per Hour is required for admin projects')
 
+        project_discount = _parse_opt(data.get('project_discount'), 'Project discount')
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
     
@@ -2719,23 +2694,12 @@ def create_project(current_user, client_id):
         fixed_fee_amount=fixed_fee_amount,
         expected_hours=expected_hours,
         discount=discount,
+        project_discount=project_discount,
         standard_rate=standard_rate,
     )
     
     db.session.add(project)
     db.session.flush()  # get project.id before commit
-
-    # Auto-copy client-level default rates to this new project
-    for cr in client.rates:
-        pr = ProjectRate(
-            project_id=project.id,
-            employee_name=cr.employee_name,
-            designation=cr.designation,
-            gross_rate=cr.gross_rate,
-            discount=cr.discount,
-            net_rate=cr.net_rate,
-        )
-        db.session.add(pr)
 
     db.session.commit()
     
@@ -2836,6 +2800,12 @@ def update_project(current_user, project_id):
                 return jsonify({'error': str(exc)}), 400
         if project.standard_rate is None:
             return jsonify({'error': 'Standard Rate per Hour is required for admin projects'}), 400
+    
+    if 'project_discount' in data:
+        try:
+            project.project_discount = _parse_opt(data.get('project_discount'), project.project_discount, 'Project discount')
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
     
     project.updated_at = datetime.utcnow()
     db.session.commit()
@@ -2967,120 +2937,6 @@ def delete_project_rate(current_user, rate_id):
     return jsonify({'message': 'Rate deleted successfully'}), 200
 
 # ==================== CLIENT RATE ROUTES ====================
-@app.route('/api/clients/<int:client_id>/rates', methods=['GET'])
-@token_required
-@admin_required
-def get_client_rates(current_user, client_id):
-    client = Client.query.get(client_id)
-    if not client:
-        return jsonify({'error': 'Client not found'}), 404
-    return jsonify([r.to_dict() for r in client.rates])
-
-@app.route('/api/clients/<int:client_id>/rates', methods=['POST'])
-@token_required
-@admin_required
-def create_client_rate(current_user, client_id):
-    client = Client.query.get(client_id)
-    if not client:
-        return jsonify({'error': 'Client not found'}), 404
-
-    data = request.json
-    if not data.get('designation') or not data.get('gross_rate'):
-        return jsonify({'error': 'Designation and gross rate are required'}), 400
-
-    try:
-        gross_rate = float(data['gross_rate'])
-        discount = float(data.get('discount', 0))
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Rate values must be numbers'}), 400
-
-    if gross_rate < 0 or not (0 <= discount <= 100):
-        return jsonify({'error': 'Invalid rate or discount value'}), 400
-
-    net_rate = gross_rate * (1 - discount / 100)
-    rate = ClientRate(
-        client_id=client_id,
-        employee_name=data.get('employee_name', '').strip() or None,
-        designation=data['designation'].strip(),
-        gross_rate=gross_rate,
-        discount=discount,
-        net_rate=net_rate,
-    )
-    db.session.add(rate)
-    db.session.commit()
-    return jsonify(rate.to_dict()), 201
-
-@app.route('/api/client-rates/<int:rate_id>', methods=['PUT'])
-@token_required
-@admin_required
-def update_client_rate(current_user, rate_id):
-    rate = ClientRate.query.get(rate_id)
-    if not rate:
-        return jsonify({'error': 'Client rate not found'}), 404
-
-    data = request.json
-    if 'designation' in data:
-        rate.designation = data['designation'].strip()
-    if 'employee_name' in data:
-        rate.employee_name = data['employee_name'].strip() or None
-    if 'gross_rate' in data:
-        try:
-            rate.gross_rate = float(data['gross_rate'])
-        except (ValueError, TypeError):
-            return jsonify({'error': 'gross_rate must be a number'}), 400
-    if 'discount' in data:
-        try:
-            d = float(data['discount'])
-            if not (0 <= d <= 100):
-                return jsonify({'error': 'discount must be between 0 and 100'}), 400
-            rate.discount = d
-        except (ValueError, TypeError):
-            return jsonify({'error': 'discount must be a number'}), 400
-
-    rate.net_rate = rate.gross_rate * (1 - rate.discount / 100)
-    rate.updated_at = datetime.utcnow()
-    db.session.commit()
-    return jsonify(rate.to_dict())
-
-@app.route('/api/client-rates/<int:rate_id>', methods=['DELETE'])
-@token_required
-@admin_required
-def delete_client_rate(current_user, rate_id):
-    rate = ClientRate.query.get(rate_id)
-    if not rate:
-        return jsonify({'error': 'Client rate not found'}), 404
-    db.session.delete(rate)
-    db.session.commit()
-    return jsonify({'message': 'Client rate deleted successfully'}), 200
-
-@app.route('/api/projects/<int:project_id>/apply-client-rates', methods=['POST'])
-@token_required
-@admin_required
-def apply_client_rates_to_project(current_user, project_id):
-    """Copy current client-level default rates to this project (skip existing designations)."""
-    project = Project.query.get(project_id)
-    if not project:
-        return jsonify({'error': 'Project not found'}), 404
-
-    client = project.client
-    existing_designations = {r.designation for r in project.rates}
-    added = 0
-    for cr in client.rates:
-        if cr.designation not in existing_designations:
-            pr = ProjectRate(
-                project_id=project.id,
-                employee_name=cr.employee_name,
-                designation=cr.designation,
-                gross_rate=cr.gross_rate,
-                discount=cr.discount,
-                net_rate=cr.net_rate,
-            )
-            db.session.add(pr)
-            added += 1
-
-    db.session.commit()
-    return jsonify({'message': f'{added} rate(s) applied', 'rates': [r.to_dict() for r in project.rates]}), 200
-
 # ==================== PROJECT CODE LOOKUP ROUTES ====================
 @app.route('/api/projects/by-code/<code>', methods=['GET'])
 @token_required
@@ -3102,7 +2958,7 @@ def get_all_projects(current_user):
     projects = Project.query.filter(~Project.id.in_(hidden_ids)).all() if hidden_ids else Project.query.all()
     result = []
     for project in projects:
-        client = Client.query.get(project.client_id)
+        client = db.session.get(Client, project.client_id)
         result.append({
             'id': project.id,
             'code': project.code,
@@ -3120,7 +2976,7 @@ def hide_project(current_user):
     if not project_id:
         return jsonify({'error': 'project_id is required'}), 400
     
-    project = Project.query.get(project_id)
+    project = db.session.get(Project, project_id)
     if not project:
         return jsonify({'error': 'Project not found'}), 404
         

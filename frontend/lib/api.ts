@@ -214,23 +214,10 @@ export interface ProjectRate {
   employee_name?: string | null;
   designation: string;
   gross_rate: number;
-  discount: number;
-  net_rate: number;
   created_at: string;
   updated_at: string;
 }
 
-export interface ClientRate {
-  id: number;
-  client_id: number;
-  employee_name?: string | null;
-  designation: string;
-  gross_rate: number;
-  discount: number;
-  net_rate: number;
-  created_at: string;
-  updated_at: string;
-}
 
 export interface Project {
   id: number;
@@ -242,6 +229,7 @@ export interface Project {
   fixed_fee_amount?: number | null;
   expected_hours?: number | null;
   discount?: number | null;
+  project_discount: number;
   created_at: string;
   updated_at: string;
   rates: ProjectRate[];
@@ -253,7 +241,7 @@ export interface Client {
   code: string;
   created_at: string;
   updated_at: string;
-  rates?: ClientRate[];
+
   projects?: Project[];
 }
 
@@ -593,9 +581,10 @@ export const projectApi = {
     fixedFeeAmount?: number,
     expectedHours?: number,
     discount?: number,
-    standardRate?: number
+    standardRate?: number,
+    projectDiscount: number = 0
   ): Promise<Project> => {
-    const payload: any = { name, code, contract_type: contractType };
+    const payload: any = { name, code, contract_type: contractType, project_discount: projectDiscount };
     if (fixedFeeAmount != null) payload.fixed_fee_amount = fixedFeeAmount;
     if (expectedHours != null) payload.expected_hours = expectedHours;
     if (discount != null) payload.discount = discount;
@@ -611,7 +600,7 @@ export const projectApi = {
 
   updateProject: async (
     projectId: number,
-    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount' | 'expected_hours' | 'discount' | 'standard_rate'>>
+    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount' | 'expected_hours' | 'discount' | 'standard_rate' | 'project_discount'>>
   ): Promise<Project> => {
     const payload: any = { ...data };
     if ('contract_type' in payload) payload.contract_type = payload.contract_type;
@@ -633,21 +622,19 @@ export const projectApi = {
     projectId: number,
     employeeName: string,
     designation: string,
-    grossRate: number,
-    discount: number = 0
+    grossRate: number
   ): Promise<ProjectRate> => {
     const response = await api.post(`/projects/${projectId}/rates`, {
       employee_name: employeeName,
       designation,
-      gross_rate: grossRate,
-      discount
+      gross_rate: grossRate
     });
     return response.data;
   },
 
   updateProjectRate: async (
     rateId: number,
-    data: Partial<Pick<ProjectRate, 'employee_name' | 'designation' | 'gross_rate' | 'discount'>>
+    data: Partial<Pick<ProjectRate, 'employee_name' | 'designation' | 'gross_rate'>>
   ): Promise<ProjectRate> => {
     const response = await api.put(`/rates/${rateId}`, data);
     return response.data;
@@ -658,47 +645,8 @@ export const projectApi = {
     return response.data;
   },
 
-  applyClientRates: async (projectId: number): Promise<{ message: string; rates: ProjectRate[] }> => {
-    const response = await api.post(`/projects/${projectId}/apply-client-rates`);
-    return response.data;
-  },
 };
 
-export const clientRateApi = {
-  getClientRates: async (clientId: number): Promise<ClientRate[]> => {
-    const response = await api.get(`/clients/${clientId}/rates`);
-    return response.data;
-  },
-
-  createClientRate: async (
-    clientId: number,
-    employeeName: string,
-    designation: string,
-    grossRate: number,
-    discount: number = 0
-  ): Promise<ClientRate> => {
-    const response = await api.post(`/clients/${clientId}/rates`, {
-      employee_name: employeeName,
-      designation,
-      gross_rate: grossRate,
-      discount
-    });
-    return response.data;
-  },
-
-  updateClientRate: async (
-    rateId: number,
-    data: Partial<Pick<ClientRate, 'employee_name' | 'designation' | 'gross_rate' | 'discount'>>
-  ): Promise<ClientRate> => {
-    const response = await api.put(`/client-rates/${rateId}`, data);
-    return response.data;
-  },
-
-  deleteClientRate: async (rateId: number): Promise<{ message: string }> => {
-    const response = await api.delete(`/client-rates/${rateId}`);
-    return response.data;
-  },
-};
 
 export const getCurrentUser = (): Employee | null => {
   if (typeof window === 'undefined') return null;
