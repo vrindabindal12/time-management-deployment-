@@ -1370,9 +1370,9 @@ def add_work(current_user):
         except ValueError:
             return jsonify({'error': 'client_today must be in YYYY-MM-DD format'}), 400
 
-    oldest_allowed = today - timedelta(days=7)
+    oldest_allowed = today - timedelta(days=14)
     if work_date < oldest_allowed or work_date > today:
-        return jsonify({'error': 'Work date must be within the last 7 days (including today)'}), 400
+        return jsonify({'error': 'Work date must be within the last 14 days (including today)'}), 400
     
     # Employee can only add work for themselves
     work_entry = Punch(
@@ -1432,15 +1432,15 @@ def edit_work(current_user, work_id):
     if not current_user.is_admin and work_entry.employee_id != current_user.id:
         return jsonify({'error': 'Permission denied'}), 403
     
-    # Check 7-day restriction for non-admins
+    # Check 14-day restriction for non-admins
     if not current_user.is_admin:
         utc_today = datetime.utcnow().date()
         today = utc_today
         # Allow client-reported today to handle timezone drift (same logic as add_work)
         # Note: We don't have client_today in PUT request usually, so we rely on UTC+1 drift
-        oldest_allowed = today - timedelta(days=7)
+        oldest_allowed = today - timedelta(days=14)
         if work_entry.work_date < oldest_allowed:
-            return jsonify({'error': 'Cannot edit entries older than 7 days'}), 400
+            return jsonify({'error': 'Cannot edit entries older than 14 days'}), 400
         if work_entry.work_date > today + timedelta(days=1): # Allow 1 day future for TZ drift
              return jsonify({'error': 'Cannot edit future entries'}), 400
 
@@ -1480,9 +1480,9 @@ def edit_work(current_user, work_id):
                 # If changing date, check the new date too
                 if not current_user.is_admin:
                     utc_today = datetime.utcnow().date()
-                    oldest_allowed = utc_today - timedelta(days=7)
+                    oldest_allowed = utc_today - timedelta(days=14)
                     if new_date < oldest_allowed or new_date > utc_today + timedelta(days=1):
-                        return jsonify({'error': 'Target work date must be within the last 7 days'}), 400
+                        return jsonify({'error': 'Target work date must be within the last 14 days'}), 400
                 
                 work_entry.work_date = new_date
                 # Re-calculate default payable values for new date.
@@ -1528,12 +1528,12 @@ def delete_work(current_user, work_id):
     if not current_user.is_admin and work_entry.employee_id != current_user.id:
         return jsonify({'error': 'Permission denied'}), 403
     
-    # Check 7-day restriction for non-admins
+    # Check 14-day restriction for non-admins
     if not current_user.is_admin:
         utc_today = datetime.utcnow().date()
-        oldest_allowed = utc_today - timedelta(days=7)
+        oldest_allowed = utc_today - timedelta(days=14)
         if work_entry.work_date < oldest_allowed:
-            return jsonify({'error': 'Cannot delete entries older than 7 days'}), 400
+            return jsonify({'error': 'Cannot delete entries older than 14 days'}), 400
         if work_entry.work_date > utc_today + timedelta(days=1):
             return jsonify({'error': 'Cannot delete future entries'}), 400
 

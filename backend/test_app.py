@@ -57,7 +57,7 @@ class AddWorkValidationTests(unittest.TestCase):
             '/api/add-work',
             json={
                 'project_name': project_name,
-                'work_date': '2026-03-05',
+                'work_date': date.today().isoformat(),
                 'hours_worked': 8.5,
                 'description': description
             },
@@ -70,7 +70,7 @@ class AddWorkValidationTests(unittest.TestCase):
             '/api/add-work',
             json={
                 'project_name': 'Alpha',
-                'work_date': '2026-03-05',
+                'work_date': date.today().isoformat(),
                 'hours_worked': 8
             },
             headers=self.auth_headers
@@ -84,7 +84,7 @@ class AddWorkValidationTests(unittest.TestCase):
             '/api/add-work',
             json={
                 'project_name': 'Alpha',
-                'work_date': '2026-03-05',
+                'work_date': date.today().isoformat(),
                 'hours_worked': 8,
                 'description': '   '
             },
@@ -99,7 +99,7 @@ class AddWorkValidationTests(unittest.TestCase):
             '/api/add-work',
             json={
                 'project_name': '   ',
-                'work_date': '2026-03-05',
+                'work_date': date.today().isoformat(),
                 'hours_worked': 8,
                 'description': 'Worked on billing module'
             },
@@ -114,7 +114,7 @@ class AddWorkValidationTests(unittest.TestCase):
             '/api/add-work',
             json={
                 'project_name': '  Alpha Project  ',
-                'work_date': '2026-03-05',
+                'work_date': date.today().isoformat(),
                 'hours_worked': 8,
                 'description': '  Implemented API validation  '
             },
@@ -138,7 +138,7 @@ class AddWorkValidationTests(unittest.TestCase):
             '/api/add-work',
             json={
                 'project_name': 'Alpha',
-                'work_date': '2026-03-05',
+                'work_date': date.today().isoformat(),
                 'hours_worked': 0,
                 'description': 'Worked on docs'
             },
@@ -273,7 +273,7 @@ class PromotionRatePayablesTests(unittest.TestCase):
         return response.get_json()
 
     def _get_payables_rows(self):
-        start_date = (date.today() - timedelta(days=7)).isoformat()
+        start_date = (date.today() - timedelta(days=14)).isoformat()
         end_date = date.today().isoformat()
         response = self.client.get(
             f'/api/payables/employees?start_date={start_date}&end_date={end_date}',

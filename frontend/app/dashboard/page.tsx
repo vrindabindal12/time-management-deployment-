@@ -70,7 +70,7 @@ export default function Dashboard() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const oldestAllowed = new Date(today);
-  oldestAllowed.setDate(today.getDate() - 7);
+  oldestAllowed.setDate(today.getDate() - 14);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -606,9 +606,9 @@ export default function Dashboard() {
           <div className="mt-6 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-2">
             <div className="flex flex-col gap-1">
               <p className="font-semibold text-slate-700">💡 Tip: Clicking anywhere on the screen after typing will automatically save your entry.</p>
-              <p>* You can only edit entries for the last 7 days.</p>
+              <p>* You can only edit entries for the last 14 days.</p>
             </div>
-            <p className="text-right">Entries older than 7 days or in the future are locked.</p>
+            <p className="text-right">Entries older than 14 days or in the future are locked.</p>
           </div>
         </div>
 
