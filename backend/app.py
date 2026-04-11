@@ -283,6 +283,33 @@ class EmployeeHiddenProject(db.Model):
     __table_args__ = (db.UniqueConstraint('employee_id', 'project_id', name='uq_employee_hidden_project'),)
 
 
+class Expense(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    expense_type = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    week_start_date = db.Column(db.Date, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref='expenses', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'employee_id': self.employee_id,
+            'project_id': self.project_id,
+            'project_name': self.project.name if self.project else None,
+            'project_code': self.project.code if self.project else None,
+            'expense_type': self.expense_type,
+            'date': self.date.isoformat() if self.date else None,
+            'amount': float(self.amount),
+            'week_start_date': self.week_start_date.isoformat() if self.week_start_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
 class FixedFeeAlertLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
@@ -731,6 +758,11 @@ def ensure_hidden_projects_schema():
     db.create_all()
 
 
+def ensure_expenses_schema():
+    """Create expenses table for existing databases."""
+    db.create_all()
+
+
 def ensure_project_contract_schema():
     """Add project contract fields for existing databases."""
     if DATABASE_URL.startswith('sqlite'):
@@ -995,6 +1027,7 @@ with app.app_context():
     ensure_project_rate_schema()
     ensure_project_contract_schema()
     ensure_hidden_projects_schema()
+    ensure_expenses_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
     if legacy_null_descriptions:
@@ -1888,6 +1921,28 @@ def _build_client_invoice_data(client, start_date, end_date):
 
     _send_fixed_fee_variance_alerts(client, fixed_fee_warnings)
 
+    # ── EXPENSES ────────────────────────────────────────────────────────
+    # Expenses are always billable — no discount, not tied to hourly rates.
+    expenses = Expense.query.filter(
+        Expense.project_id.in_(project_ids),
+        Expense.date >= start_date,
+        Expense.date <= end_date
+    ).all() if project_ids else []
+
+    total_expenses_amount = 0.0
+    expense_rows = []
+    for expense in expenses:
+        total_expenses_amount += float(expense.amount)
+        project = project_by_id.get(expense.project_id)
+        expense_rows.append({
+            'project_code': project.code if project else '',
+            'project_name': project.name if project else '',
+            'expense_type': expense.expense_type,
+            'amount': round(float(expense.amount), 2),
+            'date': expense.date.isoformat()
+        })
+    total_invoice_amount += total_expenses_amount
+
     return {
         'client': client.to_dict(),
         'start_date': start_date.isoformat(),
@@ -1900,6 +1955,8 @@ def _build_client_invoice_data(client, start_date, end_date):
         'fixed_fee_projects': fixed_fee_projects,
         'tm_projects': tm_projects,
         'fixed_fee_warnings': fixed_fee_warnings,
+        'expense_rows': expense_rows,
+        'total_expenses_amount': round(total_expenses_amount, 2),
     }
 
 
@@ -2200,6 +2257,67 @@ def _generate_invoice_pdf(data, project_filter=None):
             'For information only; client is charged fixed fee.',
             ps(7.5, C_MUTED)
         ))
+        elements.append(Spacer(1, 0.5 * cm))
+
+    # ── EXPENSES SECTION ────────────────────────────────────────────────
+    expense_rows_pdf = data.get('expense_rows', [])
+    total_expenses_amount_pdf = data.get('total_expenses_amount', 0.0)
+
+    if expense_rows_pdf:
+        C_GREEN_HDR = rl_colors.HexColor('#059669')   # emerald-600
+        C_GREEN_BG  = rl_colors.HexColor('#ecfdf5')   # emerald-50
+        C_GREEN_TXT = rl_colors.HexColor('#065f46')   # emerald-900
+
+        elements.append(Paragraph('Expenses', ps(12, C_GREEN_HDR, bold=True)))
+        elements.append(Spacer(1, 0.25 * cm))
+        elements.append(Paragraph(
+            'Always billable. No discount or hourly rate applies.',
+            ps(7.5, C_MUTED)
+        ))
+        elements.append(Spacer(1, 0.2 * cm))
+
+        ex_data = [[
+            Paragraph('Project Code', ps(8, C_WHITE, bold=True)),
+            Paragraph('Project Name', ps(8, C_WHITE, bold=True)),
+            Paragraph('Expense Type', ps(8, C_WHITE, bold=True)),
+            Paragraph('Date', ps(8, C_WHITE, bold=True, align=TA_CENTER)),
+            Paragraph('Amount (CAD$)', ps(8, C_WHITE, bold=True, align=TA_RIGHT)),
+        ]]
+        for r in expense_rows_pdf:
+            ex_data.append([
+                Paragraph(r.get('project_code', ''), ps(8, C_TEXT)),
+                Paragraph(r.get('project_name', ''), ps(8, C_TEXT)),
+                Paragraph(r.get('expense_type', ''), ps(8, C_TEXT)),
+                Paragraph(r.get('date', ''), ps(8, C_TEXT, align=TA_CENTER)),
+                Paragraph(f"{r.get('amount', 0):,.2f}", ps(8, C_TEXT, align=TA_RIGHT)),
+            ])
+        ex_data.append([
+            Paragraph(''), Paragraph(''), Paragraph(''),
+            Paragraph('Total Expenses', ps(8, C_GREEN_TXT, bold=True, align=TA_RIGHT)),
+            Paragraph(f'{total_expenses_amount_pdf:,.2f}', ps(9, C_GREEN_TXT, bold=True, align=TA_RIGHT)),
+        ])
+
+        cw_ex = [PAGE_W * 0.15, PAGE_W * 0.32, PAGE_W * 0.18, PAGE_W * 0.15, PAGE_W * 0.20]
+        ex_t = Table(ex_data, colWidths=cw_ex, repeatRows=1)
+        ex_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), C_GREEN_HDR),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), C_WHITE),
+            ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE',   (0, 0), (-1, 0), 8),
+            ('TOPPADDING',    (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 4),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LINEBELOW', (0, 0), (-1, -2), 0.4, C_BORDER),
+            ('BACKGROUND', (0, -1), (-1, -1), C_GREEN_BG),
+            ('FONTNAME',   (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]
+        for i in range(1, len(ex_data) - 1):
+            if i % 2 == 0:
+                ex_style.append(('BACKGROUND', (0, i), (-1, i), C_LIGHT))
+        ex_t.setStyle(TableStyle(ex_style))
+        elements.append(ex_t)
         elements.append(Spacer(1, 0.5 * cm))
 
     # ── TOTAL BAND ─────────────────────────────────────────────────────
@@ -2972,19 +3090,21 @@ def get_project_by_code(current_user, code):
 @app.route('/api/projects/all', methods=['GET'])
 @token_required
 def get_all_projects(current_user):
-    """Get all projects (for dropdown lists), excluding hidden projects for current user"""
-    hidden_ids = [hp.project_id for hp in EmployeeHiddenProject.query.filter_by(employee_id=current_user.id).all()]
+    """Get ALL projects for dropdown (including hidden with hidden=true flag)"""
+    hidden_query = db.session.query(EmployeeHiddenProject.project_id).filter_by(employee_id=current_user.id)
+    hidden_projects = {hp.project_id for hp in hidden_query.all()}
     
-    projects = Project.query.filter(~Project.id.in_(hidden_ids)).all() if hidden_ids else Project.query.all()
+    projects = Project.query.all()
     result = []
     for project in projects:
-        client = db.session.get(Client, project.client_id)
+        client = Client.query.get(project.client_id)
         result.append({
             'id': project.id,
             'code': project.code,
             'name': project.name,
             'client_id': project.client_id,
             'client_name': client.name if client else None,
+            'hidden': project.id in hidden_projects,
         })
     return jsonify(result)
 
@@ -3028,6 +3148,104 @@ def resend_employee_welcome(current_user, employee_id):
     db.session.commit()
     send_welcome_email(employee, reset_token)
     return jsonify({'message': f'Welcome email resent to {employee.email}'}), 200
+
+
+
+
+# ==================== EXPENSE ROUTES ====================
+
+@app.route('/api/expenses', methods=['GET'])
+@token_required
+def get_my_expenses(current_user):
+    """Get all expense entries for the current user for a given week."""
+    week_start_str = request.args.get('week')
+    if not week_start_str:
+        return jsonify({'error': 'week parameter is required (YYYY-MM-DD)'}), 400
+    try:
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    week_end = week_start + timedelta(days=6)
+    expenses = Expense.query.filter(
+        Expense.employee_id == current_user.id,
+        Expense.date >= week_start,
+        Expense.date <= week_end
+    ).order_by(Expense.date).all()
+
+    return jsonify({'expenses': [e.to_dict() for e in expenses]})
+
+
+@app.route('/api/expenses', methods=['POST'])
+@token_required
+def save_expense_entry(current_user):
+    """Upsert a single expense entry (creates or updates by project+type+date)."""
+    data = request.json or {}
+    project_id   = data.get('project_id')
+    expense_type = (data.get('expense_type') or '').strip()
+    date_str     = data.get('date')
+    amount       = data.get('amount')
+    week_start_str = data.get('week_start_date')
+
+    if not all([project_id, expense_type, date_str, amount is not None, week_start_str]):
+        return jsonify({'error': 'project_id, expense_type, date, amount, and week_start_date are all required'}), 400
+
+    try:
+        entry_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+        amt = float(amount)
+        if amt < 0:
+            return jsonify({'error': 'amount must be non-negative'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid data format'}), 400
+
+    if not Project.query.get(project_id):
+        return jsonify({'error': 'Project not found'}), 404
+
+    existing = Expense.query.filter_by(
+        employee_id=current_user.id,
+        project_id=project_id,
+        expense_type=expense_type,
+        date=entry_date
+    ).first()
+
+    if amt == 0:
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+        return jsonify({'message': 'Expense entry cleared'})
+
+    if existing:
+        existing.amount = amt
+        existing.week_start_date = week_start
+        db.session.commit()
+        return jsonify(existing.to_dict())
+
+    new_exp = Expense(
+        employee_id=current_user.id,
+        project_id=project_id,
+        expense_type=expense_type,
+        date=entry_date,
+        amount=amt,
+        week_start_date=week_start
+    )
+    db.session.add(new_exp)
+    db.session.commit()
+    return jsonify(new_exp.to_dict()), 201
+
+
+@app.route('/api/expenses/<int:expense_id>', methods=['DELETE'])
+@token_required
+def delete_expense_entry(current_user, expense_id):
+    """Delete a single expense entry (employee can only delete their own)."""
+    exp = Expense.query.get(expense_id)
+    if not exp:
+        return jsonify({'error': 'Expense not found'}), 404
+    if exp.employee_id != current_user.id and not getattr(current_user, 'is_admin', False):
+        return jsonify({'error': 'Not authorised'}), 403
+    db.session.delete(exp)
+    db.session.commit()
+    return jsonify({'message': 'Expense deleted successfully'})
 
 
 if __name__ == '__main__':

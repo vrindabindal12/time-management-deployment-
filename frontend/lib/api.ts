@@ -208,6 +208,23 @@ export interface EmployeePayablesReport {
   total_unpaid: number;
 }
 
+export interface ExpenseEntry {
+  id?: number;
+  employee_id: number;
+  project_id: number;
+  project_name: string;
+  project_code?: string | null;
+  expense_type: string;
+  date: string;
+  amount: number;
+  week_start_date: string;
+  created_at: string;
+}
+
+export interface MyExpensesResponse {
+  expenses: ExpenseEntry[];
+}
+
 export interface ProjectRate {
   id: number;
   project_id: number;
@@ -231,6 +248,7 @@ export interface Project {
   discount?: number | null;
   project_discount: number;
   is_billable?: boolean;
+  hidden?: boolean;  // NEW: indicates if hidden by current employee
   created_at: string;
   updated_at: string;
   rates: ProjectRate[];
@@ -518,6 +536,26 @@ export const employeeApi = {
 
   hideProject: async (projectId: number): Promise<{ message: string }> => {
     const response = await api.post('/my-hidden-projects', { project_id: projectId });
+    return response.data;
+  },
+
+  unhideProject: async (projectId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/my-hidden-projects/${projectId}`);
+    return response.data;
+  },
+
+  getMyExpenses: async (week: string): Promise<MyExpensesResponse> => {
+    const response = await api.get('/expenses', { params: { week } });
+    return response.data;
+  },
+
+  saveExpense: async (data: Partial<ExpenseEntry>): Promise<ExpenseEntry> => {
+    const response = await api.post('/expenses', data);
+    return response.data;
+  },
+
+  deleteExpense: async (expenseId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/expenses/${expenseId}`);
     return response.data;
   },
 

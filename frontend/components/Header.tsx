@@ -54,6 +54,7 @@ export default function Header() {
 
   const employeeNavItems = [
     { name: 'Dashboard', path: '/dashboard' },
+    { name: 'Expenses', path: '/expenses' },
     { name: 'My History', path: '/my-history' },
     { name: 'Settings', path: '/settings' },
   ];

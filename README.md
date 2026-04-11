@@ -377,3 +377,13 @@ Admin
 
 Employee
 - Weekly Update
+
+
+//AD-US-STR-001
+client code- geography- service line(dropdown in project creation) - project code
+
+
+
+1. Backend: cd backend && python app.py
+2. Frontend: npm run dev  
+3. Expenses → Add Row → Hide project → Refresh → Faded + ✔ → Unhide → Normal!
