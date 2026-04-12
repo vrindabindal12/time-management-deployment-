@@ -254,6 +254,7 @@ class Project(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     rates = db.relationship('ProjectRate', backref='project', lazy=True, cascade='all, delete-orphan')
+    services = db.relationship('Service', secondary='project_services', backref=db.backref('projects', lazy='dynamic'))
 
     __table_args__ = (db.UniqueConstraint('client_id', 'code', name='uq_client_project_code'),)
 
@@ -272,7 +273,29 @@ class Project(db.Model):
             'is_billable': bool(self.is_billable),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'rates': [rate.to_dict() for rate in self.rates]
+            'rates': [rate.to_dict() for rate in self.rates],
+            'services': [service.to_dict() for service in self.services]
+        }
+
+project_services = db.Table('project_services',
+    db.Column('project_id', db.Integer, db.ForeignKey('project.id'), primary_key=True),
+    db.Column('service_id', db.Integer, db.ForeignKey('service.id'), primary_key=True)
+)
+
+class Service(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 class EmployeeHiddenProject(db.Model):
@@ -2845,9 +2868,13 @@ def create_project(current_user, client_id):
         is_billable=is_billable
     )
     
-    db.session.add(project)
-    db.session.flush()  # get project.id before commit
+    # Handle services
+    service_ids = data.get('service_ids', [])
+    if service_ids:
+        services = Service.query.filter(Service.id.in_(service_ids)).all()
+        project.services = services
 
+    db.session.add(project)
     db.session.commit()
     
     return jsonify(project.to_dict()), 201
@@ -2956,11 +2983,16 @@ def update_project(current_user, project_id):
     
     if 'is_billable' in data:
         project.is_billable = bool(data['is_billable'])
-    
+        
+    if 'service_ids' in data:
+        service_ids = data.get('service_ids') or []
+        services = Service.query.filter(Service.id.in_(service_ids)).all()
+        project.services = services
+
     project.updated_at = datetime.utcnow()
     db.session.commit()
     
-    return jsonify(project.to_dict())
+    return jsonify(project.to_dict()), 200
 
 @app.route('/api/projects/<int:project_id>', methods=['DELETE'])
 @token_required
@@ -3085,6 +3117,70 @@ def delete_project_rate(current_user, rate_id):
     db.session.commit()
     
     return jsonify({'message': 'Rate deleted successfully'}), 200
+
+# ==================== SERVICES CRUD ====================
+@app.route('/api/services', methods=['GET'])
+@token_required
+@admin_required
+def get_services(current_user):
+    services = Service.query.order_by(Service.name.asc()).all()
+    return jsonify([s.to_dict() for s in services])
+
+@app.route('/api/services', methods=['POST'])
+@token_required
+@admin_required
+def create_service(current_user):
+    data = request.json or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Service name is required'}), 400
+    
+    existing = Service.query.filter_by(name=name).first()
+    if existing:
+        return jsonify({'error': f'Service "{name}" already exists'}), 400
+    
+    service = Service(
+        name=name,
+        description=(data.get('description') or '').strip() or None
+    )
+    db.session.add(service)
+    db.session.commit()
+    return jsonify(service.to_dict()), 201
+
+@app.route('/api/services/<int:service_id>', methods=['PUT'])
+@token_required
+@admin_required
+def update_service(current_user, service_id):
+    service = Service.query.get(service_id)
+    if not service:
+        return jsonify({'error': 'Service not found'}), 404
+    
+    data = request.json or {}
+    name = (data.get('name') or '').strip()
+    if name:
+        existing = Service.query.filter_by(name=name).first()
+        if existing and existing.id != service.id:
+            return jsonify({'error': f'Service "{name}" already exists'}), 400
+        service.name = name
+    
+    if 'description' in data:
+        service.description = (data.get('description') or '').strip() or None
+        
+    service.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(service.to_dict()), 200
+
+@app.route('/api/services/<int:service_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_service(current_user, service_id):
+    service = Service.query.get(service_id)
+    if not service:
+        return jsonify({'error': 'Service not found'}), 404
+    
+    db.session.delete(service)
+    db.session.commit()
+    return jsonify({'message': 'Service deleted successfully'}), 200
 
 # ==================== CLIENT RATE ROUTES ====================
 # ==================== PROJECT CODE LOOKUP ROUTES ====================

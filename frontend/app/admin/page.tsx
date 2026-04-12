@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { employeeApi, clientApi, projectApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
-import type { Client, ClientInvoiceReport, ClientInvoiceExpense, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
+import { employeeApi, clientApi, projectApi, serviceApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
+import type { Client, ClientInvoiceReport, ClientInvoiceExpense, Employee, EmployeePayablesReport, Project, ProjectRate, Service } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import LiveClock from '@/components/LiveClock';
 
@@ -20,6 +20,7 @@ const emptyProjectForm = {
   project_discount: '0',
   standard_rate: '',
   is_billable: true,
+  service_ids: [] as number[],
 };
 
 const emptyOnboardingForm = {
@@ -217,6 +218,13 @@ export default function AdminDashboard() {
   const [editingRateId, setEditingRateId] = useState<number | null>(null);
   const [rateEditForm, setRateEditForm] = useState({ employeeName: '', designation: DESIGNATIONS[0], grossRate: '' });
 
+  // Service states
+  const [services, setServices] = useState<Service[]>([]);
+  const [showAddServiceForm, setShowAddServiceForm] = useState(false);
+  const [serviceForm, setServiceForm] = useState({ name: '', description: '' });
+  const [editingServiceId, setEditingServiceId] = useState<number | null>(null);
+  const [serviceEditForm, setServiceEditForm] = useState({ name: '', description: '' });
+
 
 
   const [deleteEntityModal, setDeleteEntityModal] = useState<{
@@ -247,6 +255,7 @@ export default function AdminDashboard() {
     setUser(currentUser);
     loadEmployees();
     loadClients();
+    loadServices();
 
     return () => { };
   }, [router]);
@@ -351,6 +360,72 @@ export default function AdminDashboard() {
     } catch (err: any) {
       setError('Failed to load clients');
       clearError();
+    }
+  };
+
+  const loadServices = async () => {
+    try {
+      const data = await serviceApi.getServices();
+      setServices(data);
+    } catch (err) {
+      setError('Failed to load services');
+    }
+  };
+
+  const handleCreateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await serviceApi.createService(serviceForm.name, serviceForm.description);
+      setServiceForm({ name: '', description: '' });
+      setShowAddServiceForm(false);
+      loadServices();
+      setSuccessMsg('Service created successfully');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to create service');
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startEditService = (service: Service) => {
+    setEditingServiceId(service.id);
+    setServiceEditForm({ name: service.name, description: service.description || '' });
+  };
+
+  const handleUpdateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingServiceId === null) return;
+    setLoading(true);
+    try {
+      await serviceApi.updateService(editingServiceId, serviceEditForm);
+      setEditingServiceId(null);
+      loadServices();
+      setSuccessMsg('Service updated successfully');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update service');
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteService = async (serviceId: number) => {
+    if (!confirm('Are you sure you want to delete this service?')) return;
+    setLoading(true);
+    try {
+      await serviceApi.deleteService(serviceId);
+      loadServices();
+      setSuccessMsg('Service deleted successfully');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete service');
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -680,7 +755,8 @@ export default function AdminDashboard() {
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.discount ? Number(projectForm.discount) : undefined,
         projectForm.contract_type === 'admin' && projectForm.standard_rate ? Number(projectForm.standard_rate) : undefined,
         Number(projectForm.project_discount || 0),
-        projectForm.is_billable
+        projectForm.is_billable,
+        projectForm.service_ids
       );
       setProjectForm(emptyProjectForm);
       setShowAddProjectForm(false);
@@ -835,6 +911,7 @@ export default function AdminDashboard() {
       project_discount: project.project_discount != null ? String(project.project_discount) : '0',
       standard_rate: project.standard_rate != null ? String(project.standard_rate) : '',
       is_billable: !!project.is_billable,
+      service_ids: (project.services || []).map(s => s.id),
     });
     setShowAddProjectForm(false);
   };
@@ -856,28 +933,30 @@ export default function AdminDashboard() {
       return;
     }
 
+    const { name, code, contract_type, fixed_fee_amount, expected_hours, discount, standard_rate, project_discount, is_billable, service_ids } = projectEditForm;
     setLoading(true);
     setError(null);
 
     try {
       await projectApi.updateProject(editingProjectId, {
-        name: projectEditForm.name,
-        code: projectEditForm.code,
-        contract_type: projectEditForm.contract_type,
-        fixed_fee_amount: ['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && projectEditForm.fixed_fee_amount
-          ? Number(projectEditForm.fixed_fee_amount)
+        name,
+        code,
+        contract_type,
+        fixed_fee_amount: ['fixed_fee', 'retainer'].includes(contract_type) && fixed_fee_amount
+          ? Number(fixed_fee_amount)
           : null,
-        expected_hours: ['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && projectEditForm.expected_hours
-          ? Number(projectEditForm.expected_hours)
+        expected_hours: ['fixed_fee', 'retainer'].includes(contract_type) && expected_hours
+          ? Number(expected_hours)
           : null,
-        discount: ['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && projectEditForm.discount
-          ? Number(projectEditForm.discount)
+        discount: ['fixed_fee', 'retainer'].includes(contract_type) && discount
+          ? Number(discount)
           : null,
-        standard_rate: projectEditForm.contract_type === 'admin' && projectEditForm.standard_rate
-          ? Number(projectEditForm.standard_rate)
+        standard_rate: contract_type === 'admin' && standard_rate
+          ? Number(standard_rate)
           : null,
-        project_discount: Number(projectEditForm.project_discount || 0),
-        is_billable: projectEditForm.is_billable,
+        project_discount: Number(project_discount || 0),
+        is_billable: !!is_billable,
+        service_ids: service_ids || []
       });
       cancelEditProject();
       if (selectedClient) {
@@ -1807,8 +1886,9 @@ export default function AdminDashboard() {
         {/* CLIENTS & PROJECTS TAB */}
         {activeTab === 'clients' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* LEFT: Clients + Client Default Rates */}
+            {/* LEFT: Clients + Services */}
             <div className="space-y-6">
+              {/* Clients Panel */}
               <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/75 to-blue-100/60">
                 <div className="flex justify-between items-center mb-5">
                   <div className="flex items-center gap-3">
@@ -1832,32 +1912,32 @@ export default function AdminDashboard() {
                   <form onSubmit={handleAddClient} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs font-bold text-cyan-700 mb-1">CLIENT NAME</label>
+                        <label className="block text-xs font-bold text-cyan-700 mb-1 leading-tight">CLIENT NAME</label>
                         <input
                           type="text"
                           placeholder="e.g., Lekadir"
                           value={clientForm.name}
                           onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
                           required
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-cyan-700 mb-1">CLIENT CODE</label>
+                        <label className="block text-xs font-bold text-cyan-700 mb-1 leading-tight">CLIENT CODE</label>
                         <input
                           type="text"
                           placeholder="e.g., LD"
                           value={clientForm.code}
                           onChange={(e) => setClientForm({ ...clientForm, code: e.target.value.toUpperCase() })}
                           required
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all font-mono"
                         />
                       </div>
                     </div>
                     <button
                       type="submit"
                       disabled={loading}
-                      className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                      className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50"
                     >
                       {loading ? 'Adding...' : 'Add Client'}
                     </button>
@@ -1880,14 +1960,14 @@ export default function AdminDashboard() {
                         value={clientEditForm.code}
                         onChange={(e) => setClientEditForm({ ...clientEditForm, code: e.target.value.toUpperCase() })}
                         required
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
                       />
                     </div>
                     <div className="mt-3 flex gap-2">
                       <button
                         type="submit"
                         disabled={loading}
-                        className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm transition disabled:opacity-50"
+                        className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50"
                       >
                         {loading ? 'Saving...' : 'Save Client'}
                       </button>
@@ -1902,7 +1982,7 @@ export default function AdminDashboard() {
                   </form>
                 )}
 
-                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                   {clients.map((client) => {
                     const cInitials = client.name.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
                     const cPalette = ['bg-cyan-500', 'bg-blue-500', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500'];
@@ -1917,7 +1997,7 @@ export default function AdminDashboard() {
                           : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
                           }`}
                       >
-                        <div className={`w-9 h-9 rounded-xl ${cBg} flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm`}>
+                        <div className={`w-9 h-9 rounded-xl ${cBg} flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm transition-transform group-hover:scale-110`}>
                           {cInitials}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -1932,7 +2012,7 @@ export default function AdminDashboard() {
                             onClick={() => startEditClient(client)}
                             disabled={loading}
                             title="Edit client"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition disabled:opacity-50"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-700 hover:bg-cyan-50 transition"
                           >
                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                           </button>
@@ -1940,7 +2020,7 @@ export default function AdminDashboard() {
                             onClick={() => openDeleteEntityModal('client', client.id, client.name)}
                             disabled={loading}
                             title="Delete client"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
                           >
                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
                           </button>
@@ -1951,14 +2031,139 @@ export default function AdminDashboard() {
                 </div>
 
                 {clients.length === 0 && !showAddClientForm && (
-                  <p className="text-slate-500 text-center py-4">No clients found.</p>
+                  <p className="text-slate-500 text-center py-4 italic">No clients found.</p>
                 )}
               </div>
-              {/* End clients panel */}
 
+              {/* Services Panel */}
+              <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-violet-50/70 via-white/75 to-indigo-100/60">
+                <div className="flex justify-between items-center mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-violet-100/80 shadow-inner">
+                      <svg className="w-4 h-4 text-violet-600" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14h-2v-4H8v-2h4V7h2v4h4v2h-4v4z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900 leading-tight">Services</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">{services.length} service{services.length !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowAddServiceForm(!showAddServiceForm)}
+                    className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm font-semibold transition bg-gradient-to-r from-violet-500 to-indigo-500 shadow-md"
+                  >
+                    {showAddServiceForm ? 'Cancel' : '+ New Service'}
+                  </button>
+                </div>
 
+                {showAddServiceForm && (
+                  <form onSubmit={handleCreateService} className="mb-4 p-3 glass-subtle rounded-xl border border-white/60">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-violet-700 mb-1 uppercase tracking-wider">Service Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g., UI Design"
+                          value={serviceForm.name}
+                          onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
+                          required
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-violet-700 mb-1 uppercase tracking-wider">Description</label>
+                        <textarea
+                          placeholder="Short description of what this service covers..."
+                          value={serviceForm.description}
+                          onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500 min-h-[60px]"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="mt-3 w-full glass-primary-btn hover:brightness-95 text-white px-3 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50 from-violet-600 to-indigo-600"
+                    >
+                      {loading ? 'Adding...' : 'Add Service'}
+                    </button>
+                  </form>
+                )}
+
+                {editingServiceId !== null && (
+                  <form onSubmit={handleUpdateService} className="mb-4 p-3 rounded-2xl border border-violet-200/70 bg-violet-50/70">
+                    <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-700 mb-3 text-center">Edit Service</p>
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={serviceEditForm.name}
+                        onChange={(e) => setServiceEditForm({ ...serviceEditForm, name: e.target.value })}
+                        required
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+                      <textarea
+                        value={serviceEditForm.description}
+                        onChange={(e) => setServiceEditForm({ ...serviceEditForm, description: e.target.value })}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-violet-500 min-h-[60px]"
+                      />
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="flex-1 glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50 from-violet-600 to-indigo-600"
+                      >
+                        {loading ? 'Saving...' : 'Save Changes'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingServiceId(null)}
+                        className="px-4 py-2 rounded-xl text-sm border border-slate-300 bg-white/70 text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {services.map((service) => (
+                    <div
+                      key={service.id}
+                      className="flex items-start gap-3 p-3 rounded-2xl border border-slate-100 bg-white/60 hover:border-violet-200/60 hover:bg-white/90 hover:shadow-sm group transition-all"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-900 truncate text-sm leading-tight group-hover:text-violet-700 transition-colors">{service.name}</p>
+                        {service.description && (
+                          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-tight">{service.description}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => startEditService(service)}
+                          disabled={loading}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-violet-700 hover:bg-violet-50 transition"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteService(service.id)}
+                          disabled={loading}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {services.length === 0 && !showAddServiceForm && (
+                  <p className="text-slate-500 text-center py-4 italic text-sm">No services defined yet.</p>
+                )}
+              </div>
             </div>
-            {/* End left column wrapper */}
 
             {/* RIGHT: Projects & Rates */}
             <div className="space-y-6">
@@ -2038,8 +2243,36 @@ export default function AdminDashboard() {
                             <option value="fixed_fee">Fixed fee</option>
                             <option value="retainer">Retainers</option>
                             <option value="documentation">Documentation</option>
-                            <option value="admin">Admin</option>
                           </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-blue-700 mb-1 uppercase tracking-wider">Services</label>
+                          <div className="flex flex-wrap gap-2 p-2.5 border border-slate-200 rounded-2xl bg-white/75 min-h-[48px] items-center">
+                            {services.map(s => {
+                              const selected = projectForm.service_ids.includes(s.id);
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const newIds = selected
+                                      ? projectForm.service_ids.filter(id => id !== s.id)
+                                      : [...projectForm.service_ids, s.id];
+                                    setProjectForm({ ...projectForm, service_ids: newIds });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
+                                    selected
+                                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md scale-105'
+                                      : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'
+                                  }`}
+                                >
+                                  {s.name}
+                                </button>
+                              );
+                            })}
+                            {services.length === 0 && <span className="text-xs text-slate-400 italic font-medium">No services available. Create one in the sidebar.</span>}
+                          </div>
                         </div>
                         {['fixed_fee', 'retainer'].includes(projectForm.contract_type) && (
                           <>
@@ -2085,6 +2318,35 @@ export default function AdminDashboard() {
                             />
                           </div>
                         )}
+
+                        <div className="lg:col-span-2">
+                          <label className="block text-xs font-bold text-blue-700 mb-1 uppercase tracking-wider">Services</label>
+                          <div className="flex flex-wrap gap-2 p-2.5 border border-slate-200 rounded-2xl bg-white/75 min-h-[48px] items-center">
+                            {services.map(s => {
+                              const selected = projectForm.service_ids.includes(s.id);
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const newIds = selected
+                                      ? projectForm.service_ids.filter(id => id !== s.id)
+                                      : [...projectForm.service_ids, s.id];
+                                    setProjectForm({ ...projectForm, service_ids: newIds });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
+                                    selected
+                                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md scale-105'
+                                      : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'
+                                  }`}
+                                >
+                                  {s.name}
+                                </button>
+                              );
+                            })}
+                            {services.length === 0 && <span className="text-xs text-slate-400 italic font-medium">No services available. Create one in the sidebar.</span>}
+                          </div>
+                        </div>
                         {projectForm.contract_type === 'documentation' && (
                           <div className="rounded-xl border border-blue-200/60 bg-blue-50/40 p-3">
                             <label className="block text-xs font-bold text-blue-700 mb-2 uppercase tracking-wide">Billing Logic</label>
@@ -2187,6 +2449,35 @@ export default function AdminDashboard() {
                             <option value="documentation">Documentation</option>
                             <option value="admin">Admin</option>
                           </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-cyan-700 mb-1 uppercase tracking-wider">Services</label>
+                          <div className="flex flex-wrap gap-2 p-2.5 border border-slate-200 rounded-2xl bg-white/85 min-h-[48px] items-center">
+                            {services.map(s => {
+                              const selected = projectEditForm.service_ids.includes(s.id);
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const newIds = selected
+                                      ? projectEditForm.service_ids.filter(id => id !== s.id)
+                                      : [...projectEditForm.service_ids, s.id];
+                                    setProjectEditForm({ ...projectEditForm, service_ids: newIds });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
+                                    selected
+                                      ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md scale-105'
+                                      : 'bg-white border border-slate-200 text-slate-500 hover:border-cyan-300 hover:text-cyan-600'
+                                  }`}
+                                >
+                                  {s.name}
+                                </button>
+                              );
+                            })}
+                            {services.length === 0 && <span className="text-xs text-slate-400 italic font-medium">No services available.</span>}
+                          </div>
                         </div>
                         {['fixed_fee', 'retainer'].includes(projectEditForm.contract_type) && (
                           <>
@@ -2330,6 +2621,11 @@ export default function AdminDashboard() {
                                   $ {project.fixed_fee_amount.toFixed(2)}
                                 </span>
                               )}
+                              {project.services && project.services.map(svc => (
+                                <span key={svc.id} className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 uppercase tracking-tighter">
+                                  {svc.name}
+                                </span>
+                              ))}
                             </div>
                           </div>
                           {pIsSelected && (

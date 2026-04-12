@@ -247,6 +247,14 @@ export interface ProjectRate {
   updated_at: string;
 }
 
+export interface Service {
+  id: number;
+  name: string;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 
 export interface Project {
   id: number;
@@ -264,6 +272,7 @@ export interface Project {
   created_at: string;
   updated_at: string;
   rates: ProjectRate[];
+  services: Service[];
 }
 
 export interface Client {
@@ -618,6 +627,28 @@ export const clientApi = {
   },
 };
 
+export const serviceApi = {
+  getServices: async (): Promise<Service[]> => {
+    const response = await api.get('/services');
+    return response.data;
+  },
+
+  createService: async (name: string, description?: string): Promise<Service> => {
+    const response = await api.post('/services', { name, description });
+    return response.data;
+  },
+
+  updateService: async (serviceId: number, data: Partial<Pick<Service, 'name' | 'description'>>): Promise<Service> => {
+    const response = await api.put(`/services/${serviceId}`, data);
+    return response.data;
+  },
+
+  deleteService: async (serviceId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/services/${serviceId}`);
+    return response.data;
+  },
+};
+
 export const projectApi = {
   getClientProjects: async (clientId: number): Promise<Project[]> => {
     const response = await api.get(`/clients/${clientId}/projects`);
@@ -634,9 +665,10 @@ export const projectApi = {
     discount?: number,
     standardRate?: number,
     projectDiscount: number = 0,
-    isBillable: boolean = true
+    isBillable: boolean = true,
+    serviceIds: number[] = []
   ): Promise<Project> => {
-    const payload: any = { name, code, contract_type: contractType, project_discount: projectDiscount, is_billable: isBillable };
+    const payload: any = { name, code, contract_type: contractType, project_discount: projectDiscount, is_billable: isBillable, service_ids: serviceIds };
     if (fixedFeeAmount != null) payload.fixed_fee_amount = fixedFeeAmount;
     if (expectedHours != null) payload.expected_hours = expectedHours;
     if (discount != null) payload.discount = discount;
@@ -652,7 +684,7 @@ export const projectApi = {
 
   updateProject: async (
     projectId: number,
-    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount' | 'expected_hours' | 'discount' | 'standard_rate' | 'project_discount' | 'is_billable'>>
+    data: Partial<Pick<Project, 'name' | 'code' | 'contract_type' | 'fixed_fee_amount' | 'expected_hours' | 'discount' | 'standard_rate' | 'project_discount' | 'is_billable'>> & { service_ids?: number[] }
   ): Promise<Project> => {
     const payload: any = { ...data };
     if ('contract_type' in payload) payload.contract_type = payload.contract_type;
