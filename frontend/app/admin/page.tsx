@@ -1135,6 +1135,7 @@ export default function AdminDashboard() {
           work_id: `expense-${idx}`,
           work_date: ex.date,
           hours: 0,
+          gross_billable: ex.amount,
           net_billable: ex.amount,
           task_performed: ex.expense_type,
           employee_name: ex.employee_name,
@@ -1210,6 +1211,7 @@ export default function AdminDashboard() {
       'Project Discount (%)',
       'Final Rate',
       'Hours',
+      'Gross Billable',
       'Net Billable',
       'Task Performed',
     ]];
@@ -1225,6 +1227,7 @@ export default function AdminDashboard() {
         row.isExpense ? '-' : row.discount.toFixed(2),
         row.isExpense ? '-' : row.net_rate.toFixed(2),
         row.isExpense ? '-' : row.hours.toFixed(2),
+        row.gross_billable.toFixed(2),
         row.net_billable.toFixed(2),
         row.task_performed || '',
       ]);
@@ -2519,6 +2522,7 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Discount</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Net Rate</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Hours</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Gross Billable</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Net Billable</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Task Performed</th>
                       </tr>
@@ -2549,6 +2553,9 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : `${row.discount.toFixed(2)}%`}</td>
                             <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : row.net_rate.toFixed(2)}</td>
                             <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : row.hours.toFixed(2)}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-600">
+                              {row.gross_billable.toFixed(2)}
+                            </td>
                             <td className={row.isExpense ? "px-4 py-3 font-bold text-emerald-700" : "px-4 py-3 font-bold text-slate-900"}>
                               {row.net_billable.toFixed(2)}
                             </td>

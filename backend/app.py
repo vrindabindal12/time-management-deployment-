@@ -1836,6 +1836,7 @@ def _build_client_invoice_data(client, start_date, end_date):
         # Use simple project-level discount instead of complex role-based overrides
         project_discount = float(project.project_discount or 0.0)
         hours = float(punch.hours_worked) if punch.hours_worked is not None else 0.0
+        gross_billable = round(gross_rate * hours, 2)
         net_rate = round(gross_rate * (1 - project_discount / 100.0), 2)
         net_billable = round(net_rate * hours, 2)
         total_hours += hours
@@ -1863,6 +1864,7 @@ def _build_client_invoice_data(client, start_date, end_date):
             'discount': project_discount,
             'net_rate': net_rate,
             'hours': round(hours, 2),
+            'gross_billable': gross_billable,
             'net_billable': net_billable,
             'task_performed': punch.description or '',
             'is_invoice_override': False
@@ -2186,8 +2188,8 @@ def _generate_invoice_pdf(data, project_filter=None):
     if tm_rows:
         elements.append(Paragraph('DETAILED BILLING', ps(7, C_MUTED, bold=True)))
         elements.append(Spacer(1, 0.2 * cm))
-        d_cols = [PAGE_W * 0.12, PAGE_W * 0.12, PAGE_W * 0.20, PAGE_W * 0.18, PAGE_W * 0.12, PAGE_W * 0.13, PAGE_W * 0.13]
-        d_hdrs = ['Date', 'Project', 'Employee', 'Description', 'Hours', 'Rate', 'Amount']
+        d_cols = [PAGE_W * 0.10, PAGE_W * 0.10, PAGE_W * 0.16, PAGE_W * 0.15, PAGE_W * 0.08, PAGE_W * 0.10, PAGE_W * 0.15, PAGE_W * 0.16]
+        d_hdrs = ['Date', 'Project', 'Employee', 'Description', 'Hours', 'Rate', 'Gross Amt', 'Net Amt']
         d_data = [[Paragraph(h, ps(7, C_WHITE, bold=True)) for h in d_hdrs]]
         d_style = [
             ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
@@ -2209,6 +2211,7 @@ def _generate_invoice_pdf(data, project_filter=None):
                 Paragraph((row.get('task_performed') or '-')[:90],   ps(7.5, C_MUTED)),
                 Paragraph(f"{row['hours']:.2f}",         ps(7.5, align=TA_RIGHT)),
                 Paragraph(f"{row['net_rate']:,.2f}",     ps(7.5, align=TA_RIGHT)),
+                Paragraph(f"{row['gross_billable']:,.2f}", ps(7.5, align=TA_RIGHT)),
                 Paragraph(f"{row['net_billable']:,.2f}", ps(7.5, C_NAVY, bold=True, align=TA_RIGHT)),
             ])
         d_table = Table(d_data, colWidths=d_cols, repeatRows=1)
