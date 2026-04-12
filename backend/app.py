@@ -39,6 +39,27 @@ def validate_password_strength(password: str):
         return 'Password must contain at least one special character'
     return None
 
+GEOGRAPHY_MAPPING = {
+    "UNITED STATES": "US",
+    "INDIA": "IN",
+    "GERMANY": "DE",
+    "NETHERLANDS": "NL"
+}
+
+def get_region_code(geography):
+    if not geography:
+        return ""
+    normalized = geography.strip().upper()
+    if normalized in GEOGRAPHY_MAPPING:
+        return GEOGRAPHY_MAPPING[normalized]
+    
+    words = normalized.split()
+    if len(words) >= 2:
+        return (words[0][0] + words[1][0]).upper()
+    elif normalized:
+        return normalized[:2].upper()
+    return ""
+
 # Project code that identifies non-billable / internal work.
 # Entries logged against this project bypass employee compensation rates;
 # payables rates must be set manually by an admin.
@@ -224,6 +245,8 @@ class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     code = db.Column(db.String(50), unique=True, nullable=False)
+    geography = db.Column(db.String(100), nullable=True)
+    region_code = db.Column(db.String(2), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -236,6 +259,8 @@ class Client(db.Model):
             'id': self.id,
             'name': self.name,
             'code': self.code,
+            'geography': self.geography,
+            'region_code': self.region_code,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -286,6 +311,7 @@ project_services = db.Table('project_services',
 class Service(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
+    service_code = db.Column(db.String(2), unique=True, nullable=True)
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -294,6 +320,7 @@ class Service(db.Model):
         return {
             'id': self.id,
             'name': self.name,
+            'service_code': self.service_code,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
@@ -787,6 +814,55 @@ def ensure_expenses_schema():
     db.create_all()
 
 
+def ensure_client_schema():
+    """Add geography fields to Client table for existing databases."""
+    required_columns = {
+        'geography': 'VARCHAR(100)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
+        'region_code': 'VARCHAR(2)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
+    }
+    
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(client)")).fetchall()
+        }
+        for column_name, column_type in required_columns.items():
+            if column_name not in existing:
+                db.session.execute(text(f"ALTER TABLE client ADD COLUMN {column_name} {column_type}"))
+        db.session.commit()
+    else:
+        for column_name, column_type in required_columns.items():
+            try:
+                db.session.execute(text(f"ALTER TABLE client ADD COLUMN {column_name} {column_type}"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+
+def ensure_service_schema():
+    """Add service_code column to Service table for existing databases."""
+    required_columns = {
+        'service_code': 'VARCHAR(2)' if not DATABASE_URL.startswith('sqlite') else 'TEXT',
+    }
+    
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(service)")).fetchall()
+        }
+        for column_name, column_type in required_columns.items():
+            if column_name not in existing:
+                db.session.execute(text(f"ALTER TABLE service ADD COLUMN {column_name} {column_type}"))
+        db.session.commit()
+    else:
+        for column_name, column_type in required_columns.items():
+            try:
+                db.session.execute(text(f"ALTER TABLE service ADD COLUMN {column_name} {column_type}"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+
 def ensure_project_contract_schema():
     """Add project contract fields for existing databases."""
     if DATABASE_URL.startswith('sqlite'):
@@ -1082,6 +1158,48 @@ def generate_client_code(name, current_client_id=None):
     
     return None
 
+def generate_service_code(name, current_service_id=None):
+    """
+    Generates a unique 2-character service code based on the name.
+    Logic: First Letter + Next Available Letter from Name.
+    Fallback: First Letter + A-Z.
+    """
+    if not name:
+        return None
+    
+    # Preprocess: Uppercase + Alphanumeric only
+    cleaned_name = "".join(c for c in name if c.isalnum()).upper()
+    if not cleaned_name:
+        cleaned_name = "XX" # Fallback if name has no alphanumeric chars
+    
+    first = cleaned_name[0]
+    tried = set()
+    
+    # Step 2 & 3: Try First Letter + Next Available Letter
+    if len(cleaned_name) > 1:
+        for char in cleaned_name[1:]:
+            code = first + char
+            if code in tried:
+                continue
+            tried.add(code)
+            
+            existing = Service.query.filter_by(service_code=code).first()
+            if not existing or (current_service_id and existing.id == current_service_id):
+                return code
+    
+    # Step 4: Fallback - Iterate A-Z
+    for char in string.ascii_uppercase:
+        code = first + char
+        if code in tried:
+            continue
+        tried.add(code)
+        
+        existing = Service.query.filter_by(service_code=code).first()
+        if not existing or (current_service_id and existing.id == current_service_id):
+            return code
+    
+    return None
+
 # Initialize database
 with app.app_context():
     db.create_all()
@@ -1094,6 +1212,8 @@ with app.app_context():
     ensure_project_contract_schema()
     ensure_hidden_projects_schema()
     ensure_expenses_schema()
+    ensure_client_schema()
+    ensure_service_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
     if legacy_null_descriptions:
@@ -2769,9 +2889,13 @@ def create_client(current_user):
     if existing_code:
         return jsonify({'error': 'Client with this code already exists'}), 400
     
+    geography = (data.get('geography') or '').strip()
+    
     client = Client(
         name=data['name'].strip(),
-        code=code
+        code=code,
+        geography=geography or None,
+        region_code=get_region_code(geography) if geography else None
     )
     
     db.session.add(client)
@@ -2830,6 +2954,11 @@ def update_client(current_user, client_id):
             return jsonify({'error': 'Client with this code already exists'}), 400
         
         client.code = new_code
+
+    if 'geography' in data:
+        geography = (data.get('geography') or '').strip()
+        client.geography = geography or None
+        client.region_code = get_region_code(geography) if geography else None
     
     client.updated_at = datetime.utcnow()
     db.session.commit()
@@ -3196,9 +3325,14 @@ def create_service(current_user):
     if existing:
         return jsonify({'error': f'Service "{name}" already exists'}), 400
     
+    service_code = generate_service_code(name)
+    if not service_code:
+        return jsonify({'error': 'Could not generate unique service code'}), 400
+    
     service = Service(
         name=name,
-        description=(data.get('description') or '').strip() or None
+        description=(data.get('description') or '').strip() or None,
+        service_code=service_code
     )
     db.session.add(service)
     db.session.commit()
@@ -3219,6 +3353,9 @@ def update_service(current_user, service_id):
         if existing and existing.id != service.id:
             return jsonify({'error': f'Service "{name}" already exists'}), 400
         service.name = name
+        new_code = generate_service_code(name, service.id)
+        if new_code:
+            service.service_code = new_code
     
     if 'description' in data:
         service.description = (data.get('description') or '').strip() or None

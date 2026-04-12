@@ -250,6 +250,7 @@ export interface ProjectRate {
 export interface Service {
   id: number;
   name: string;
+  service_code?: string | null;
   description?: string | null;
   created_at: string;
   updated_at: string;
@@ -279,6 +280,8 @@ export interface Client {
   id: number;
   name: string;
   code: string;
+  geography?: string | null;
+  region_code?: string | null;
   created_at: string;
   updated_at: string;
 
@@ -606,8 +609,8 @@ export const clientApi = {
     return response.data;
   },
 
-  createClient: async (name: string, code?: string): Promise<Client> => {
-    const response = await api.post('/clients', { name, code });
+  createClient: async (name: string, code?: string, geography?: string): Promise<Client> => {
+    const response = await api.post('/clients', { name, code, geography });
     return response.data;
   },
 
@@ -616,7 +619,7 @@ export const clientApi = {
     return response.data;
   },
 
-  updateClient: async (clientId: number, data: Partial<Pick<Client, 'name' | 'code'>>): Promise<Client> => {
+  updateClient: async (clientId: number, data: Partial<Pick<Client, 'name' | 'code' | 'geography'>>): Promise<Client> => {
     const response = await api.put(`/clients/${clientId}`, data);
     return response.data;
   },
@@ -638,7 +641,7 @@ export const serviceApi = {
     return response.data;
   },
 
-  updateService: async (serviceId: number, data: Partial<Pick<Service, 'name' | 'description'>>): Promise<Service> => {
+  updateService: async (serviceId: number, data: Partial<Pick<Service, 'name' | 'description' | 'service_code'>>): Promise<Service> => {
     const response = await api.put(`/services/${serviceId}`, data);
     return response.data;
   },

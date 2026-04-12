@@ -166,9 +166,9 @@ export default function AdminDashboard() {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
   const [showAddClientForm, setShowAddClientForm] = useState(false);
-  const [clientForm, setClientForm] = useState({ name: '' });
+  const [clientForm, setClientForm] = useState({ name: '', geography: '' });
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
-  const [clientEditForm, setClientEditForm] = useState({ name: '' });
+  const [clientEditForm, setClientEditForm] = useState({ name: '', geography: '' });
   const [invoiceClientId, setInvoiceClientId] = useState<number | null>(null);
   const [invoiceStartDate, setInvoiceStartDate] = useState(() => {
     const now = new Date();
@@ -271,7 +271,7 @@ export default function AdminDashboard() {
       loadClientProjects(selectedClient);
     }
     setEditingClientId(null);
-    setClientEditForm({ name: '' });
+    setClientEditForm({ name: '', geography: '' });
     setEditingProjectId(null);
     setProjectEditForm(emptyProjectForm);
   }, [selectedClient]);
@@ -712,8 +712,8 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      await clientApi.createClient(clientForm.name);
-      setClientForm({ name: '' });
+      await clientApi.createClient(clientForm.name, undefined, clientForm.geography);
+      setClientForm({ name: '', geography: '' });
       setShowAddClientForm(false);
       setSelectedClient(null);
       setSelectedProject(null);
@@ -868,13 +868,13 @@ export default function AdminDashboard() {
 
   const startEditClient = (client: Client) => {
     setEditingClientId(client.id);
-    setClientEditForm({ name: client.name });
+    setClientEditForm({ name: client.name, geography: client.geography || '' });
     setShowAddClientForm(false);
   };
 
   const cancelEditClient = () => {
     setEditingClientId(null);
-    setClientEditForm({ name: '' });
+    setClientEditForm({ name: '', geography: '' });
   };
 
   const handleUpdateClient = async (e: React.FormEvent) => {
@@ -887,6 +887,7 @@ export default function AdminDashboard() {
     try {
       await clientApi.updateClient(editingClientId, {
         name: clientEditForm.name,
+        geography: clientEditForm.geography
       });
       await loadClients();
       cancelEditClient();
@@ -1920,7 +1921,25 @@ export default function AdminDashboard() {
                           required
                           className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
                         />
-                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">2-character code will be auto-generated</p>
+                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">Code will be auto-generated</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-cyan-700 mb-1 leading-tight">GEOGRAPHY / REGION</label>
+                        <input
+                          type="text"
+                          list="common-geographies"
+                          placeholder="e.g., India or United States"
+                          value={clientForm.geography}
+                          onChange={(e) => setClientForm({ ...clientForm, geography: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+                        />
+                        <datalist id="common-geographies">
+                          <option value="India" />
+                          <option value="United States" />
+                          <option value="Germany" />
+                          <option value="Netherlands" />
+                          <option value="United Kingdom" />
+                        </datalist>
                       </div>
                     </div>
                     <button
@@ -1946,7 +1965,17 @@ export default function AdminDashboard() {
                           required
                           className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                         />
-                        <p className="text-[10px] text-cyan-600/60 mt-1 uppercase tracking-wider font-semibold">Code will be updated automatically</p>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-cyan-700 mb-1 uppercase tracking-widest">Geography</label>
+                        <input
+                          type="text"
+                          list="common-geographies"
+                          value={clientEditForm.geography}
+                          onChange={(e) => setClientEditForm({ ...clientEditForm, geography: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        />
+                        <p className="text-[10px] text-cyan-600/60 mt-1 uppercase tracking-wider font-semibold">Region code will be auto-updated</p>
                       </div>
                     </div>
                     <div className="mt-3 flex gap-2">
@@ -1988,7 +2017,12 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-slate-900 truncate text-sm leading-tight">{client.name}</p>
-                          <p className="text-[11px] font-mono text-slate-400 mt-0.5 uppercase tracking-wider">{client.code}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[11px] font-mono text-slate-400 uppercase tracking-wider">{client.code}</p>
+                            {client.region_code && (
+                              <span className="text-[10px] font-bold text-slate-300 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 uppercase">{client.region_code}</span>
+                            )}
+                          </div>
                         </div>
                         {isSelected && (
                           <span className="text-[10px] font-bold text-cyan-600 bg-cyan-100 px-2 py-0.5 rounded-full shrink-0">Active</span>
@@ -2056,6 +2090,7 @@ export default function AdminDashboard() {
                           required
                           className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-violet-500 transition-all"
                         />
+                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">Code will be auto-generated</p>
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-violet-700 mb-1 uppercase tracking-wider">Description</label>
@@ -2088,6 +2123,7 @@ export default function AdminDashboard() {
                         required
                         className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-violet-500"
                       />
+                      <p className="text-[10px] text-violet-600/60 mt-1 uppercase tracking-wider font-semibold">Code will be updated automatically</p>
                       <textarea
                         value={serviceEditForm.description}
                         onChange={(e) => setServiceEditForm({ ...serviceEditForm, description: e.target.value })}
@@ -2120,7 +2156,12 @@ export default function AdminDashboard() {
                       className="flex items-start gap-3 p-3 rounded-2xl border border-slate-100 bg-white/60 hover:border-violet-200/60 hover:bg-white/90 hover:shadow-sm group transition-all"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-900 truncate text-sm leading-tight group-hover:text-violet-700 transition-colors">{service.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-slate-900 truncate text-sm leading-tight group-hover:text-violet-700 transition-colors">{service.name}</p>
+                          {service.service_code && (
+                            <span className="text-[10px] font-mono font-bold text-violet-400/70 bg-violet-50 px-1 rounded uppercase">{service.service_code}</span>
+                          )}
+                        </div>
                         {service.description && (
                           <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-tight">{service.description}</p>
                         )}
@@ -2605,8 +2646,8 @@ export default function AdminDashboard() {
                                 </span>
                               )}
                               {project.services && project.services.map(svc => (
-                                <span key={svc.id} className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 uppercase tracking-tighter">
-                                  {svc.name}
+                                <span key={svc.id} className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 uppercase tracking-tight">
+                                  {svc.service_code || svc.name}
                                 </span>
                               ))}
                             </div>
