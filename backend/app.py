@@ -13,6 +13,7 @@ import re
 import secrets
 import csv
 import io
+import string
 from functools import wraps
 from collections import defaultdict
 from openpyxl import Workbook
@@ -1038,6 +1039,48 @@ def build_employee_hierarchy(employee):
         'direct_reports': direct_reports,
         'current_employee_id': employee.id
     }
+
+def generate_client_code(name, current_client_id=None):
+    """
+    Generates a unique 2-character client code based on the name.
+    Logic: First Letter + Next Available Letter from Name.
+    Fallback: First Letter + A-Z.
+    """
+    if not name:
+        return None
+    
+    # Preprocess: Uppercase + Alphanumeric only
+    cleaned_name = "".join(c for c in name if c.isalnum()).upper()
+    if not cleaned_name:
+        cleaned_name = "XX" # Fallback if name has no alphanumeric chars
+    
+    first = cleaned_name[0]
+    tried = set()
+    
+    # Step 2 & 3: Try First Letter + Next Available Letter
+    if len(cleaned_name) > 1:
+        for char in cleaned_name[1:]:
+            code = first + char
+            if code in tried:
+                continue
+            tried.add(code)
+            
+            existing = Client.query.filter_by(code=code).first()
+            if not existing or (current_client_id and existing.id == current_client_id):
+                return code
+    
+    # Step 4: Fallback - Iterate A-Z
+    for char in string.ascii_uppercase:
+        code = first + char
+        if code in tried:
+            continue
+        tried.add(code)
+        
+        existing = Client.query.filter_by(code=code).first()
+        if not existing or (current_client_id and existing.id == current_client_id):
+            return code
+    
+    return None
 
 # Initialize database
 with app.app_context():
@@ -2706,20 +2749,29 @@ def get_clients(current_user):
 def create_client(current_user):
     data = request.json
     
-    if not data.get('name') or not data.get('code'):
-        return jsonify({'error': 'Client name and code are required'}), 400
+    if not data.get('name'):
+        return jsonify({'error': 'Client name is required'}), 400
     
     existing_name = Client.query.filter_by(name=data['name']).first()
     if existing_name:
         return jsonify({'error': 'Client with this name already exists'}), 400
     
-    existing_code = Client.query.filter_by(code=data['code']).first()
+    # Automatically generate code if not provided or to ensure it follows rules
+    code = data.get('code', '').strip().upper()
+    if not code or len(code) != 2:
+        code = generate_client_code(data['name'])
+    
+    if not code:
+        return jsonify({'error': 'Could not generate a unique code for this client'}), 400
+    
+    # Final check for uniqueness (especially if manually provided)
+    existing_code = Client.query.filter_by(code=code).first()
     if existing_code:
         return jsonify({'error': 'Client with this code already exists'}), 400
     
     client = Client(
         name=data['name'].strip(),
-        code=data['code'].strip().upper()
+        code=code
     )
     
     db.session.add(client)
@@ -2762,11 +2814,16 @@ def update_client(current_user, client_id):
             return jsonify({'error': 'Client with this name already exists'}), 400
         
         client.name = new_name
+        # If code is not explicitly updated in the same request, auto-update it
+        if 'code' not in data:
+            new_code = generate_client_code(new_name, client_id)
+            if new_code:
+                client.code = new_code
     
     if 'code' in data:
-        new_code = data['code'].strip().upper()
-        if not new_code:
-            return jsonify({'error': 'Client code cannot be empty'}), 400
+        new_code = (data.get('code') or '').strip().upper()
+        if not new_code or len(new_code) != 2:
+            return jsonify({'error': 'Client code must be exactly 2 characters'}), 400
         
         existing = Client.query.filter_by(code=new_code).first()
         if existing and existing.id != client_id:

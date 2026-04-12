@@ -606,7 +606,7 @@ export const clientApi = {
     return response.data;
   },
 
-  createClient: async (name: string, code: string): Promise<Client> => {
+  createClient: async (name: string, code?: string): Promise<Client> => {
     const response = await api.post('/clients', { name, code });
     return response.data;
   },

@@ -166,9 +166,9 @@ export default function AdminDashboard() {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
   const [showAddClientForm, setShowAddClientForm] = useState(false);
-  const [clientForm, setClientForm] = useState({ name: '', code: '' });
+  const [clientForm, setClientForm] = useState({ name: '' });
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
-  const [clientEditForm, setClientEditForm] = useState({ name: '', code: '' });
+  const [clientEditForm, setClientEditForm] = useState({ name: '' });
   const [invoiceClientId, setInvoiceClientId] = useState<number | null>(null);
   const [invoiceStartDate, setInvoiceStartDate] = useState(() => {
     const now = new Date();
@@ -271,7 +271,7 @@ export default function AdminDashboard() {
       loadClientProjects(selectedClient);
     }
     setEditingClientId(null);
-    setClientEditForm({ name: '', code: '' });
+    setClientEditForm({ name: '' });
     setEditingProjectId(null);
     setProjectEditForm(emptyProjectForm);
   }, [selectedClient]);
@@ -712,8 +712,8 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      await clientApi.createClient(clientForm.name, clientForm.code);
-      setClientForm({ name: '', code: '' });
+      await clientApi.createClient(clientForm.name);
+      setClientForm({ name: '' });
       setShowAddClientForm(false);
       setSelectedClient(null);
       setSelectedProject(null);
@@ -868,13 +868,13 @@ export default function AdminDashboard() {
 
   const startEditClient = (client: Client) => {
     setEditingClientId(client.id);
-    setClientEditForm({ name: client.name, code: client.code });
+    setClientEditForm({ name: client.name });
     setShowAddClientForm(false);
   };
 
   const cancelEditClient = () => {
     setEditingClientId(null);
-    setClientEditForm({ name: '', code: '' });
+    setClientEditForm({ name: '' });
   };
 
   const handleUpdateClient = async (e: React.FormEvent) => {
@@ -887,7 +887,6 @@ export default function AdminDashboard() {
     try {
       await clientApi.updateClient(editingClientId, {
         name: clientEditForm.name,
-        code: clientEditForm.code,
       });
       await loadClients();
       cancelEditClient();
@@ -1196,9 +1195,9 @@ export default function AdminDashboard() {
   const selectedClientData = clients.find((client) => client.id === selectedClient) || null;
   const invoiceProjectOptions = invoiceReport
     ? Array.from(new Set([
-        ...invoiceReport.rows.map((row) => row.project_code),
-        ...(invoiceReport.expense_rows || []).map((ex: ClientInvoiceExpense) => ex.project_code)
-      ])).filter(Boolean).sort()
+      ...invoiceReport.rows.map((row) => row.project_code),
+      ...(invoiceReport.expense_rows || []).map((ex: ClientInvoiceExpense) => ex.project_code)
+    ])).filter(Boolean).sort()
     : [];
 
   const invoiceWorkRows = invoiceReport
@@ -1207,25 +1206,25 @@ export default function AdminDashboard() {
 
   const invoiceExpenseRows = invoiceReport
     ? (invoiceReport.expense_rows || [])
-        .filter((ex: ClientInvoiceExpense) => invoiceProjectFilter === 'ALL' || ex.project_code === invoiceProjectFilter)
-        .map((ex: ClientInvoiceExpense, idx: number) => ({
-          ...ex,
-          isExpense: true,
-          work_id: `expense-${idx}`,
-          work_date: ex.date,
-          hours: 0,
-          gross_billable: ex.amount,
-          net_billable: ex.amount,
-          task_performed: ex.expense_type,
-          employee_name: ex.employee_name,
-          employee_designation: ex.employee_designation,
-          gross_rate: 0,
-          discount: 0,
-          net_rate: 0,
-          project_name: ex.project_name,
-          project_code: ex.project_code,
-          is_invoice_override: false
-        }))
+      .filter((ex: ClientInvoiceExpense) => invoiceProjectFilter === 'ALL' || ex.project_code === invoiceProjectFilter)
+      .map((ex: ClientInvoiceExpense, idx: number) => ({
+        ...ex,
+        isExpense: true,
+        work_id: `expense-${idx}`,
+        work_date: ex.date,
+        hours: 0,
+        gross_billable: ex.amount,
+        net_billable: ex.amount,
+        task_performed: ex.expense_type,
+        employee_name: ex.employee_name,
+        employee_designation: ex.employee_designation,
+        gross_rate: 0,
+        discount: 0,
+        net_rate: 0,
+        project_name: ex.project_name,
+        project_code: ex.project_code,
+        is_invoice_override: false
+      }))
     : [];
 
   const filteredInvoiceRows = [...invoiceWorkRows, ...invoiceExpenseRows];
@@ -1921,17 +1920,7 @@ export default function AdminDashboard() {
                           required
                           className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
                         />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-cyan-700 mb-1 leading-tight">CLIENT CODE</label>
-                        <input
-                          type="text"
-                          placeholder="e.g., LD"
-                          value={clientForm.code}
-                          onChange={(e) => setClientForm({ ...clientForm, code: e.target.value.toUpperCase() })}
-                          required
-                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all font-mono"
-                        />
+                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">2-character code will be auto-generated</p>
                       </div>
                     </div>
                     <button
@@ -1948,20 +1937,17 @@ export default function AdminDashboard() {
                   <form onSubmit={handleUpdateClient} className="mb-4 p-3 rounded-2xl border border-cyan-200/70 bg-cyan-50/70">
                     <p className="text-xs uppercase tracking-[0.18em] font-bold text-cyan-700 mb-3">Edit Client</p>
                     <div className="space-y-3">
-                      <input
-                        type="text"
-                        value={clientEditForm.name}
-                        onChange={(e) => setClientEditForm({ ...clientEditForm, name: e.target.value })}
-                        required
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                      />
-                      <input
-                        type="text"
-                        value={clientEditForm.code}
-                        onChange={(e) => setClientEditForm({ ...clientEditForm, code: e.target.value.toUpperCase() })}
-                        required
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
-                      />
+                      <div>
+                        <label className="block text-[10px] font-bold text-cyan-700 mb-1 uppercase tracking-widest">Client Name</label>
+                        <input
+                          type="text"
+                          value={clientEditForm.name}
+                          onChange={(e) => setClientEditForm({ ...clientEditForm, name: e.target.value })}
+                          required
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        />
+                        <p className="text-[10px] text-cyan-600/60 mt-1 uppercase tracking-wider font-semibold">Code will be updated automatically</p>
+                      </div>
                     </div>
                     <div className="mt-3 flex gap-2">
                       <button
@@ -2261,11 +2247,10 @@ export default function AdminDashboard() {
                                       : [...projectForm.service_ids, s.id];
                                     setProjectForm({ ...projectForm, service_ids: newIds });
                                   }}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
-                                    selected
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${selected
                                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md scale-105'
                                       : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'
-                                  }`}
+                                    }`}
                                 >
                                   {s.name}
                                 </button>
@@ -2334,11 +2319,10 @@ export default function AdminDashboard() {
                                       : [...projectForm.service_ids, s.id];
                                     setProjectForm({ ...projectForm, service_ids: newIds });
                                   }}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
-                                    selected
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${selected
                                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md scale-105'
                                       : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'
-                                  }`}
+                                    }`}
                                 >
                                   {s.name}
                                 </button>
@@ -2466,11 +2450,10 @@ export default function AdminDashboard() {
                                       : [...projectEditForm.service_ids, s.id];
                                     setProjectEditForm({ ...projectEditForm, service_ids: newIds });
                                   }}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
-                                    selected
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${selected
                                       ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md scale-105'
                                       : 'bg-white border border-slate-200 text-slate-500 hover:border-cyan-300 hover:text-cyan-600'
-                                  }`}
+                                    }`}
                                 >
                                   {s.name}
                                 </button>
