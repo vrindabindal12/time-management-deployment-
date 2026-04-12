@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { employeeApi, clientApi, projectApi, getCurrentUser, isAuthenticated, isAdmin } from '@/lib/api';
-import type { Client, ClientInvoiceReport, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
+import type { Client, ClientInvoiceReport, ClientInvoiceExpense, Employee, EmployeePayablesReport, Project, ProjectRate } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import LiveClock from '@/components/LiveClock';
 
@@ -1116,11 +1116,39 @@ export default function AdminDashboard() {
   const pagedEmployeeCards = searchFilteredEmployeeCards.slice(empCardsStartIndex, empCardsStartIndex + EMPLOYEE_CARDS_PAGE_SIZE);
   const selectedClientData = clients.find((client) => client.id === selectedClient) || null;
   const invoiceProjectOptions = invoiceReport
-    ? Array.from(new Set(invoiceReport.rows.map((row) => row.project_code))).sort()
+    ? Array.from(new Set([
+        ...invoiceReport.rows.map((row) => row.project_code),
+        ...(invoiceReport.expense_rows || []).map((ex: ClientInvoiceExpense) => ex.project_code)
+      ])).filter(Boolean).sort()
     : [];
-  const filteredInvoiceRows = invoiceReport
+
+  const invoiceWorkRows = invoiceReport
     ? invoiceReport.rows.filter((row) => invoiceProjectFilter === 'ALL' || row.project_code === invoiceProjectFilter)
     : [];
+
+  const invoiceExpenseRows = invoiceReport
+    ? (invoiceReport.expense_rows || [])
+        .filter((ex: ClientInvoiceExpense) => invoiceProjectFilter === 'ALL' || ex.project_code === invoiceProjectFilter)
+        .map((ex: ClientInvoiceExpense, idx: number) => ({
+          ...ex,
+          isExpense: true,
+          work_id: `expense-${idx}`,
+          work_date: ex.date,
+          hours: 0,
+          net_billable: ex.amount,
+          task_performed: ex.expense_type,
+          employee_name: ex.employee_name,
+          employee_designation: ex.employee_designation,
+          gross_rate: 0,
+          discount: 0,
+          net_rate: 0,
+          project_name: ex.project_name,
+          project_code: ex.project_code,
+          is_invoice_override: false
+        }))
+    : [];
+
+  const filteredInvoiceRows = [...invoiceWorkRows, ...invoiceExpenseRows];
   const payablesProjectOptions = payablesReport
     ? Array.from(new Set(payablesReport.rows.map((row) => row.project_code || '-'))).sort()
     : [];
@@ -1186,17 +1214,17 @@ export default function AdminDashboard() {
       'Task Performed',
     ]];
 
-    filteredInvoiceRows.forEach((row) => {
+    filteredInvoiceRows.forEach((row: any) => {
       rows.push([
-        row.project_code,
+        row.project_code + (row.isExpense ? ' (Expense)' : ''),
         row.employee_name,
         row.employee_designation,
         row.project_name,
         row.work_date,
-        row.gross_rate.toFixed(2),
-        row.discount.toFixed(2),
-        row.net_rate.toFixed(2),
-        row.hours.toFixed(2),
+        row.isExpense ? '-' : row.gross_rate.toFixed(2),
+        row.isExpense ? '-' : row.discount.toFixed(2),
+        row.isExpense ? '-' : row.net_rate.toFixed(2),
+        row.isExpense ? '-' : row.hours.toFixed(2),
         row.net_billable.toFixed(2),
         row.task_performed || '',
       ]);
@@ -2503,18 +2531,27 @@ export default function AdminDashboard() {
                           </td>
                         </tr>
                       ) : (
-                        pagedInvoiceRows.map((row) => (
-                          <tr key={row.work_id} className="hover:bg-slate-50/70">
-                            <td className="px-4 py-3 text-slate-800 font-semibold">{row.project_code}</td>
+                        pagedInvoiceRows.map((row: any) => (
+                          <tr key={row.work_id} className={row.isExpense ? "bg-emerald-50/40 hover:bg-emerald-50/60 transition-colors" : "hover:bg-slate-50/70"}>
+                            <td className="px-4 py-3 text-slate-800 font-semibold">
+                              {row.project_code}
+                              {row.isExpense && (
+                                <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                                  Expense
+                                </span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
                             <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
-                            <td className="px-4 py-3 text-slate-700">{row.gross_rate.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-slate-700">{row.discount.toFixed(2)}%</td>
-                            <td className="px-4 py-3 text-slate-700">{row.net_rate.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-slate-700">{row.hours.toFixed(2)}</td>
-                            <td className="px-4 py-3 font-bold text-slate-900">{row.net_billable.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : row.gross_rate.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : `${row.discount.toFixed(2)}%`}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : row.net_rate.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : row.hours.toFixed(2)}</td>
+                            <td className={row.isExpense ? "px-4 py-3 font-bold text-emerald-700" : "px-4 py-3 font-bold text-slate-900"}>
+                              {row.net_billable.toFixed(2)}
+                            </td>
                             <td className="px-4 py-3 text-slate-700 align-top">
                               <span className="block whitespace-pre-line break-words max-w-[200px]" title={row.task_performed || '-'}>{row.task_performed || '-'}</span>
                               {row.is_invoice_override && (

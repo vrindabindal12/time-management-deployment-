@@ -1769,8 +1769,14 @@ def _build_client_invoice_data(client, start_date, end_date):
         elif punch.project_name and punch.project_name in project_by_name:
             punches.append(punch)
 
-    employee_ids = list({p.employee_id for p in punches})
-    employees = Employee.query.filter(Employee.id.in_(employee_ids)).all() if employee_ids else []
+    expenses = Expense.query.filter(
+        Expense.project_id.in_(project_ids),
+        Expense.date >= start_date,
+        Expense.date <= end_date
+    ).all() if project_ids else []
+
+    all_employee_ids = list({p.employee_id for p in punches} | {e.employee_id for e in expenses})
+    employees = Employee.query.filter(Employee.id.in_(all_employee_ids)).all() if all_employee_ids else []
     employee_by_id = {emp.id: emp for emp in employees}
 
     def _norm(v):
@@ -1923,20 +1929,21 @@ def _build_client_invoice_data(client, start_date, end_date):
 
     # ── EXPENSES ────────────────────────────────────────────────────────
     # Expenses are always billable — no discount, not tied to hourly rates.
-    expenses = Expense.query.filter(
-        Expense.project_id.in_(project_ids),
-        Expense.date >= start_date,
-        Expense.date <= end_date
-    ).all() if project_ids else []
-
     total_expenses_amount = 0.0
     expense_rows = []
     for expense in expenses:
         total_expenses_amount += float(expense.amount)
         project = project_by_id.get(expense.project_id)
+        employee = employee_by_id.get(expense.employee_id)
+        
+        # Get employee designation on the date of the expense
+        _, designation = get_employee_compensation_for_date(employee, expense.date) if employee else (0.0, 'Unspecified')
+        
         expense_rows.append({
             'project_code': project.code if project else '',
             'project_name': project.name if project else '',
+            'employee_name': employee.name if employee else 'Unknown',
+            'employee_designation': designation,
             'expense_type': expense.expense_type,
             'amount': round(float(expense.amount), 2),
             'date': expense.date.isoformat()
@@ -2277,27 +2284,29 @@ def _generate_invoice_pdf(data, project_filter=None):
         elements.append(Spacer(1, 0.2 * cm))
 
         ex_data = [[
-            Paragraph('Project Code', ps(8, C_WHITE, bold=True)),
-            Paragraph('Project Name', ps(8, C_WHITE, bold=True)),
-            Paragraph('Expense Type', ps(8, C_WHITE, bold=True)),
+            Paragraph('Project', ps(8, C_WHITE, bold=True)),
+            Paragraph('Employee', ps(8, C_WHITE, bold=True)),
+            Paragraph('Level', ps(8, C_WHITE, bold=True)),
+            Paragraph('Type', ps(8, C_WHITE, bold=True)),
             Paragraph('Date', ps(8, C_WHITE, bold=True, align=TA_CENTER)),
-            Paragraph('Amount (CAD$)', ps(8, C_WHITE, bold=True, align=TA_RIGHT)),
+            Paragraph('Amount', ps(8, C_WHITE, bold=True, align=TA_RIGHT)),
         ]]
         for r in expense_rows_pdf:
             ex_data.append([
                 Paragraph(r.get('project_code', ''), ps(8, C_TEXT)),
-                Paragraph(r.get('project_name', ''), ps(8, C_TEXT)),
+                Paragraph(r.get('employee_name', ''), ps(8, C_TEXT)),
+                Paragraph(r.get('employee_designation', ''), ps(8, C_TEXT)),
                 Paragraph(r.get('expense_type', ''), ps(8, C_TEXT)),
                 Paragraph(r.get('date', ''), ps(8, C_TEXT, align=TA_CENTER)),
                 Paragraph(f"{r.get('amount', 0):,.2f}", ps(8, C_TEXT, align=TA_RIGHT)),
             ])
         ex_data.append([
-            Paragraph(''), Paragraph(''), Paragraph(''),
+            Paragraph(''), Paragraph(''), Paragraph(''), Paragraph(''),
             Paragraph('Total Expenses', ps(8, C_GREEN_TXT, bold=True, align=TA_RIGHT)),
             Paragraph(f'{total_expenses_amount_pdf:,.2f}', ps(9, C_GREEN_TXT, bold=True, align=TA_RIGHT)),
         ])
 
-        cw_ex = [PAGE_W * 0.15, PAGE_W * 0.32, PAGE_W * 0.18, PAGE_W * 0.15, PAGE_W * 0.20]
+        cw_ex = [PAGE_W * 0.12, PAGE_W * 0.18, PAGE_W * 0.18, PAGE_W * 0.20, PAGE_W * 0.14, PAGE_W * 0.18]
         ex_t = Table(ex_data, colWidths=cw_ex, repeatRows=1)
         ex_style = [
             ('BACKGROUND', (0, 0), (-1, 0), C_GREEN_HDR),

@@ -152,6 +152,16 @@ export interface FixedFeeProjectSummary {
   status: 'ok' | 'near_limit' | 'overage';
 }
 
+export interface ClientInvoiceExpense {
+  project_code: string;
+  project_name: string;
+  employee_name: string;
+  employee_designation: string;
+  expense_type: string;
+  amount: number;
+  date: string;
+}
+
 export interface ClientInvoiceReport {
   client: Client;
   start_date: string;
@@ -170,6 +180,8 @@ export interface ClientInvoiceReport {
     total_amount: number;
   }>;
   fixed_fee_warnings: FixedFeeProjectSummary[];
+  expense_rows: ClientInvoiceExpense[];
+  total_expenses_amount: number;
 }
 
 export interface EmployeePayableRow {
