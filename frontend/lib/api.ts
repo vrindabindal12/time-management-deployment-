@@ -269,6 +269,7 @@ export interface Project {
   discount?: number | null;
   project_discount: number;
   is_billable?: boolean;
+  sequence_number?: number | null;
   hidden?: boolean;  // NEW: indicates if hidden by current employee
   created_at: string;
   updated_at: string;
@@ -661,7 +662,7 @@ export const projectApi = {
   createProject: async (
     clientId: number,
     name: string,
-    code: string,
+    code?: string,
     contractType: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin' | 'documentation',
     fixedFeeAmount?: number,
     expectedHours?: number,

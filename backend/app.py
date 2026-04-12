@@ -277,6 +277,7 @@ class Project(db.Model):
     project_discount = db.Column(db.Float, default=0.0)
     standard_rate = db.Column(db.Float, nullable=True)
     is_billable = db.Column(db.Boolean, default=True)
+    sequence_number = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     rates = db.relationship('ProjectRate', backref='project', lazy=True, cascade='all, delete-orphan')
@@ -297,6 +298,7 @@ class Project(db.Model):
             'project_discount': float(self.project_discount) if self.project_discount is not None else 0.0,
             'standard_rate': float(self.standard_rate) if self.standard_rate is not None else None,
             'is_billable': bool(self.is_billable),
+            'sequence_number': self.sequence_number,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'rates': [rate.to_dict() for rate in self.rates],
@@ -863,6 +865,43 @@ def ensure_service_schema():
                 db.session.rollback()
 
 
+def ensure_project_sequence_schema():
+    """Ensures all projects have sequence numbers and correctly formatted project codes."""
+    try:
+        # Check if sequence_number column exists
+        if DATABASE_URL.startswith('sqlite'):
+            columns = [row[1] for row in db.session.execute(text("PRAGMA table_info(project)")).fetchall()]
+        else:
+            # For Postgres or other
+            columns = [] # Simplified for this env
+            
+        if 'sequence_number' not in columns and columns: # if columns is empty, table might not exist yet (db.create_all handles it)
+            db.session.execute(text("ALTER TABLE project ADD COLUMN sequence_number INTEGER"))
+            db.session.commit()
+        
+        # Force refresh ALL codes and sequences to the new standard as requested
+        clients = Client.query.all()
+        for client in clients:
+            projects = Project.query.filter_by(client_id=client.id).order_by(Project.created_at).all()
+            for i, p in enumerate(projects, 1):
+                p.sequence_number = i
+                
+                # Determine primary service code
+                service_id = None
+                if p.services:
+                    service_id = p.services[0].id
+                
+                # Generate new standard code
+                new_code, _ = generate_project_code_data(client.id, service_id, i)
+                if new_code:
+                    p.code = new_code
+        
+        db.session.commit()
+    except Exception as e:
+        print(f"Error during project code backfill: {e}")
+        db.session.rollback()
+
+
 def ensure_project_contract_schema():
     """Add project contract fields for existing databases."""
     if DATABASE_URL.startswith('sqlite'):
@@ -1200,6 +1239,35 @@ def generate_service_code(name, current_service_id=None):
     
     return None
 
+def generate_project_code_data(client_id, service_id=None, existing_sequence=None):
+    """
+    Generates a unique Project Code string and sequence number.
+    Format: [CLIENT_CODE]-[GEO_CODE]-[SVC_CODE]-[SEQUENCE]
+    Sequence is scoped per Client.
+    """
+    client = Client.query.get(client_id)
+    if not client:
+        return None, None
+    
+    if existing_sequence is not None:
+        next_seq = existing_sequence
+    else:
+        # Find max sequence for this client
+        max_seq = db.session.query(db.func.max(Project.sequence_number)).filter_by(client_id=client_id).scalar() or 0
+        next_seq = max_seq + 1
+    
+    client_code = (client.code or 'XX').upper()
+    geo_code = (client.region_code or 'XX').upper()
+    
+    svc_code = 'XX'
+    if service_id:
+        svc = Service.query.get(service_id)
+        if svc and svc.service_code:
+            svc_code = svc.service_code.upper()
+    
+    formatted_code = f"{client_code}-{geo_code}-{svc_code}-{next_seq:04d}"
+    return formatted_code, next_seq
+
 # Initialize database
 with app.app_context():
     db.create_all()
@@ -1214,6 +1282,7 @@ with app.app_context():
     ensure_expenses_schema()
     ensure_client_schema()
     ensure_service_schema()
+    ensure_project_sequence_schema()
     # Backfill legacy rows where description may be null from older schema versions.
     legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
     if legacy_null_descriptions:
@@ -3041,10 +3110,19 @@ def create_project(current_user, client_id):
     if existing:
         return jsonify({'error': 'Project with this code already exists for this client'}), 400
     
+    # Handle automated project code generation
+    service_ids = data.get('service_ids', [])
+    primary_svc_id = service_ids[0] if service_ids else None
+    
+    generated_code, sequence = generate_project_code_data(client_id, primary_svc_id)
+    if not generated_code:
+        return jsonify({'error': 'Failed to generate project code (missing client data)'}), 400
+
     project = Project(
         client_id=client_id,
         name=data['name'].strip(),
-        code=data['code'].strip().upper(),
+        code=generated_code,
+        sequence_number=sequence,
         contract_type=contract_type,
         fixed_fee_amount=fixed_fee_amount,
         expected_hours=expected_hours,
@@ -3174,6 +3252,11 @@ def update_project(current_user, project_id):
         service_ids = data.get('service_ids') or []
         services = Service.query.filter(Service.id.in_(service_ids)).all()
         project.services = services
+        # Update code if service changed (keeping same sequence)
+        if service_ids:
+            new_code, _ = generate_project_code_data(project.client_id, service_ids[0], project.sequence_number)
+            if new_code:
+                project.code = new_code
 
     project.updated_at = datetime.utcnow()
     db.session.commit()

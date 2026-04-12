@@ -748,7 +748,7 @@ export default function AdminDashboard() {
       await projectApi.createProject(
         selectedClient,
         projectForm.name,
-        projectForm.code,
+        undefined,
         projectForm.contract_type,
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) ? Number(projectForm.fixed_fee_amount) : undefined,
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.expected_hours ? Number(projectForm.expected_hours) : undefined,
@@ -943,7 +943,7 @@ export default function AdminDashboard() {
     try {
       await projectApi.updateProject(editingProjectId, {
         name,
-        code,
+        // code is auto-updated by backend if services change
         contract_type,
         fixed_fee_amount: ['fixed_fee', 'retainer'].includes(contract_type) && fixed_fee_amount
           ? Number(fixed_fee_amount)
@@ -2239,16 +2239,25 @@ export default function AdminDashboard() {
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-blue-700 mb-1">NEW PROJECT CODE</label>
-                          <input
-                            type="text"
-                            placeholder="e.g., BD001"
-                            value={projectForm.code}
-                            onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value.toUpperCase() })}
-                            required
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
+                        <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/50">
+                          <label className="block text-[10px] font-bold text-blue-700 mb-1 uppercase tracking-widest">Project Code Preview</label>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-mono font-black text-blue-900">
+                              {(() => {
+                                if (!selectedClientData) return '...';
+                                const cCode = (selectedClientData.code || 'XX').toUpperCase();
+                                const gCode = (selectedClientData.region_code || 'XX').toUpperCase();
+                                let sCode = 'XX';
+                                if (projectForm.service_ids.length > 0) {
+                                  const svc = services.find(s => s.id === projectForm.service_ids[0]);
+                                  if (svc && svc.service_code) sCode = svc.service_code.toUpperCase();
+                                }
+                                const nextSeq = (selectedClientData.projects?.length || 0) + 1;
+                                return `${cCode}-${gCode}-${sCode}-${String(nextSeq).padStart(4, '0')}`;
+                              })()}
+                            </span>
+                            <span className="text-[9px] font-bold text-blue-400 uppercase bg-white px-1.5 py-0.5 rounded border border-blue-100 italic">Auto-calculated</span>
+                          </div>
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-blue-700 mb-1">CONTRACT TYPE</label>
@@ -2442,15 +2451,27 @@ export default function AdminDashboard() {
                             className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-cyan-700 mb-1">PROJECT CODE</label>
-                          <input
-                            type="text"
-                            value={projectEditForm.code}
-                            onChange={(e) => setProjectEditForm({ ...projectEditForm, code: e.target.value.toUpperCase() })}
-                            required
-                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white/85 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                          />
+                        <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/50">
+                          <label className="block text-[10px] font-bold text-blue-700 mb-1 uppercase tracking-widest">Project Code</label>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-mono font-black text-blue-900">
+                              {(() => {
+                                if (!selectedClientData) return '...';
+                                const cCode = (selectedClientData.code || 'XX').toUpperCase();
+                                const gCode = (selectedClientData.region_code || 'XX').toUpperCase();
+                                let sCode = 'XX';
+                                if (projectEditForm.service_ids.length > 0) {
+                                  const svc = services.find(s => s.id === projectEditForm.service_ids[0]);
+                                  if (svc && svc.service_code) sCode = svc.service_code.toUpperCase();
+                                }
+                                // For edit, we use the existing sequence if available
+                                const prj = selectedClientData.projects?.find(p => p.id === editingProjectId);
+                                const seq = prj?.sequence_number || 1;
+                                return `${cCode}-${gCode}-${sCode}-${String(seq).padStart(4, '0')}`;
+                              })()}
+                            </span>
+                            <span className="text-[9px] font-bold text-blue-400 uppercase bg-white px-1.5 py-0.5 rounded border border-blue-100 italic">Locked Sequence</span>
+                          </div>
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-cyan-700 mb-1">CONTRACT TYPE</label>
@@ -2627,7 +2648,7 @@ export default function AdminDashboard() {
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-slate-900 truncate text-sm leading-tight">{project.name}</p>
                             <span className="inline-block mt-0.5 text-[10px] font-bold font-mono text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-md">
-                              {selectedClientData.code}-{project.code}
+                              {project.code}
                             </span>
                             <div className="mt-1 flex flex-wrap gap-1.5">
                               <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${project.contract_type === 'fixed_fee'
