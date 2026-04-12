@@ -662,7 +662,6 @@ export const projectApi = {
   createProject: async (
     clientId: number,
     name: string,
-    code?: string,
     contractType: 'fixed_fee' | 'time_materials' | 'retainer' | 'admin' | 'documentation',
     fixedFeeAmount?: number,
     expectedHours?: number,
@@ -670,7 +669,8 @@ export const projectApi = {
     standardRate?: number,
     projectDiscount: number = 0,
     isBillable: boolean = true,
-    serviceIds: number[] = []
+    serviceIds: number[] = [],
+    code?: string
   ): Promise<Project> => {
     const payload: any = { name, code, contract_type: contractType, project_discount: projectDiscount, is_billable: isBillable, service_ids: serviceIds };
     if (fixedFeeAmount != null) payload.fixed_fee_amount = fixedFeeAmount;

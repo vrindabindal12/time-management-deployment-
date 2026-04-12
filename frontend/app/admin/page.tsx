@@ -748,7 +748,6 @@ export default function AdminDashboard() {
       await projectApi.createProject(
         selectedClient,
         projectForm.name,
-        undefined,
         projectForm.contract_type,
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) ? Number(projectForm.fixed_fee_amount) : undefined,
         ['fixed_fee', 'retainer'].includes(projectForm.contract_type) && projectForm.expected_hours ? Number(projectForm.expected_hours) : undefined,
@@ -756,7 +755,8 @@ export default function AdminDashboard() {
         projectForm.contract_type === 'admin' && projectForm.standard_rate ? Number(projectForm.standard_rate) : undefined,
         Number(projectForm.project_discount || 0),
         projectForm.is_billable,
-        projectForm.service_ids
+        projectForm.service_ids,
+        undefined // code is auto-generated
       );
       setProjectForm(emptyProjectForm);
       setShowAddProjectForm(false);
