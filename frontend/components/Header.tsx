@@ -52,6 +52,10 @@ export default function Header() {
     { name: 'Settings', path: '/settings' },
   ];
 
+  if (user?.role === 'superadmin' || (user as any)?.is_superadmin) {
+    adminNavItems.push({ name: 'Global Access', path: '/superadmin' });
+  }
+
   const employeeNavItems = [
     { name: 'Time Sheet', path: '/dashboard' },
     { name: 'Expenses', path: '/expenses' },

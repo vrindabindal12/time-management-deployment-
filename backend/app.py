@@ -1389,6 +1389,15 @@ def admin_required(f):
     
     return decorated
 
+# Superadmin-only decorator
+def superadmin_required(f):
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        if not getattr(current_user, 'is_superadmin', False):
+            return jsonify({'error': 'Superadmin access required'}), 403
+        return f(current_user, *args, **kwargs)
+    return decorated
+
 # Routes
 @app.route('/api/register_organization', methods=['POST'])
 @limiter.limit("5 per minute")
@@ -3755,6 +3764,64 @@ def delete_expense_entry(current_user, expense_id):
     db.session.delete(exp)
     db.session.commit()
     return jsonify({'message': 'Expense deleted successfully'})
+
+
+# ==========================================
+# SUPER ADMIN ROUTES
+# ==========================================
+
+@app.route('/api/superadmin/organizations', methods=['GET'])
+@token_required
+@superadmin_required
+def superadmin_get_organizations(current_user):
+    orgs = Organization.query.order_by(Organization.created_at.desc()).all()
+    result = []
+    for org in orgs:
+        employees = Employee.query.filter_by(organization_id=org.id).all()
+        admin_count = sum(1 for e in employees if e.is_admin or getattr(e, 'role', '') == 'admin')
+        result.append({
+            'id': org.id,
+            'name': org.name,
+            'created_at': org.created_at.isoformat() if org.created_at else None,
+            'total_employees': len(employees),
+            'total_admins': admin_count,
+            'is_active': len(employees) > 0
+        })
+    return jsonify(result)
+
+
+@app.route('/api/superadmin/organizations/<int:org_id>/users', methods=['GET'])
+@token_required
+@superadmin_required
+def superadmin_get_org_users(current_user, org_id):
+    org = Organization.query.get(org_id)
+    if not org:
+        return jsonify({'error': 'Organization not found'}), 404
+        
+    employees = Employee.query.filter_by(organization_id=org_id).order_by(Employee.name).all()
+    admins = []
+    regulars = []
+    
+    for emp in employees:
+        is_adm = emp.is_admin or getattr(emp, 'role', '') == 'admin' or getattr(emp, 'role', '') == 'superadmin'
+        emp_data = {
+            'id': emp.id,
+            'name': emp.name,
+            'email': emp.email,
+            'role': emp.role,
+            'is_admin': emp.is_admin,
+            'status': 'Active' if emp.has_set_password else 'Pending Verification'
+        }
+        if is_adm:
+            admins.append(emp_data)
+        else:
+            regulars.append(emp_data)
+            
+    return jsonify({
+        'organization': {'id': org.id, 'name': org.name},
+        'admins': admins,
+        'employees': regulars
+    })
 
 
 if __name__ == '__main__':

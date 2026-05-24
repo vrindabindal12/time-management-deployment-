@@ -781,4 +781,45 @@ export const logout = () => {
   window.location.href = '/login';
 };
 
+export interface SuperAdminOrganization {
+  id: number;
+  name: string;
+  created_at: string | null;
+  total_employees: number;
+  total_admins: number;
+  is_active: boolean;
+}
+
+export interface SuperAdminOrgUsersResponse {
+  organization: { id: number; name: string };
+  admins: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+    is_admin: boolean;
+    status: string;
+  }[];
+  employees: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+    is_admin: boolean;
+    status: string;
+  }[];
+}
+
+export const superadminApi = {
+  getOrganizations: async (): Promise<SuperAdminOrganization[]> => {
+    const response = await api.get('/superadmin/organizations');
+    return response.data;
+  },
+
+  getOrganizationUsers: async (orgId: number): Promise<SuperAdminOrgUsersResponse> => {
+    const response = await api.get(`/superadmin/organizations/${orgId}/users`);
+    return response.data;
+  },
+};
+
 export default api;
