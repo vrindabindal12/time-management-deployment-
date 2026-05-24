@@ -47,7 +47,7 @@ export interface Employee {
   name: string;
   email: string;
   is_admin: boolean;
-  role: 'admin' | 'employee' | 'both';
+  role: 'admin' | 'employee' | 'both' | 'superadmin';
   employee_code?: string | null;
   designation?: string | null;
   reporting_manager?: string | null;
@@ -763,16 +763,15 @@ export const setActiveRole = (role: 'admin' | 'employee'): void => {
 
 export const isBothRole = (): boolean => {
   const user = getCurrentUser();
-  return (user?.role ?? 'employee') === 'both';
+  if (!user) return false;
+  return user.role === 'both' || user.role === 'admin' || user.role === 'superadmin' || user.is_admin;
 };
 
 export const isAdmin = (): boolean => {
   const user = getCurrentUser();
   if (!user) return false;
-  const role = user.role ?? (user.is_admin ? 'admin' : 'employee');
-  if (role === 'admin') return true;
-  if (role === 'both') return getActiveRole() === 'admin';
-  return false;
+  if (isBothRole()) return getActiveRole() === 'admin';
+  return user.role === 'admin' || user.role === 'superadmin' || user.is_admin;
 };
 
 export const logout = () => {

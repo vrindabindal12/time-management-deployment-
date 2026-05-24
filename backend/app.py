@@ -1383,7 +1383,7 @@ def token_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated(current_user, *args, **kwargs):
-        if not current_user.is_admin:
+        if not current_user.is_admin and not getattr(current_user, 'is_superadmin', False):
             return jsonify({'error': 'Admin access required'}), 403
         return f(current_user, *args, **kwargs)
     

@@ -24,7 +24,7 @@ export default function Login() {
       localStorage.setItem('user', JSON.stringify(response.employee));
 
       const role = response.employee.role ?? (response.employee.is_admin ? 'admin' : 'employee');
-      if (role === 'both' || role === 'admin') {
+      if (role === 'both' || role === 'admin' || role === 'superadmin' || response.employee.is_admin) {
         localStorage.setItem('activeRole', 'admin');
         router.push('/admin');
       } else {
