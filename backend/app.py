@@ -126,6 +126,8 @@ limiter = Limiter(app=app, key_func=get_remote_address, storage_uri='memory://')
 
 # Models
 class Employee(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
@@ -202,6 +204,8 @@ class Employee(db.Model):
         }
 
 class Punch(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     project_name = db.Column(db.String(200), nullable=False)
@@ -242,6 +246,8 @@ class Punch(db.Model):
         }
 
 class Client(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     code = db.Column(db.String(50), unique=True, nullable=False)
@@ -266,6 +272,8 @@ class Client(db.Model):
         }
 
 class Project(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     name = db.Column(db.String(200), nullable=False)
@@ -311,6 +319,8 @@ project_services = db.Table('project_services',
 )
 
 class Service(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     service_code = db.Column(db.String(2), unique=True, nullable=True)
@@ -329,6 +339,8 @@ class Service(db.Model):
         }
 
 class EmployeeHiddenProject(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
@@ -337,6 +349,8 @@ class EmployeeHiddenProject(db.Model):
 
 
 class Expense(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
@@ -364,6 +378,8 @@ class Expense(db.Model):
 
 
 class FixedFeeAlertLog(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     alert_date = db.Column(db.Date, nullable=False)
@@ -375,6 +391,8 @@ class FixedFeeAlertLog(db.Model):
     )
 
 class ProjectRate(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     employee_name = db.Column(db.String(120), nullable=True)
@@ -1269,42 +1287,43 @@ def generate_project_code_data(client_id, service_id=None, existing_sequence=Non
     return formatted_code, next_seq
 
 # Initialize database
-with app.app_context():
-    db.create_all()
-    ensure_employee_schema()
-    ensure_role_schema()
-    ensure_password_reset_schema()
-    ensure_employee_codes()
-    ensure_punch_invoice_schema()
-    ensure_project_rate_schema()
-    ensure_project_contract_schema()
-    ensure_hidden_projects_schema()
-    ensure_expenses_schema()
-    ensure_client_schema()
-    ensure_service_schema()
-    ensure_project_sequence_schema()
-    # Backfill legacy rows where description may be null from older schema versions.
-    legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
-    if legacy_null_descriptions:
-        for entry in legacy_null_descriptions:
-            entry.description = ''
-        db.session.commit()
+if not os.environ.get('VERCEL'):
+    with app.app_context():
+        db.create_all()
+        ensure_employee_schema()
+        ensure_role_schema()
+        ensure_password_reset_schema()
+        ensure_employee_codes()
+        ensure_punch_invoice_schema()
+        ensure_project_rate_schema()
+        ensure_project_contract_schema()
+        ensure_hidden_projects_schema()
+        ensure_expenses_schema()
+        ensure_client_schema()
+        ensure_service_schema()
+        ensure_project_sequence_schema()
+        # Backfill legacy rows where description may be null from older schema versions.
+        legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
+        if legacy_null_descriptions:
+            for entry in legacy_null_descriptions:
+                entry.description = ''
+            db.session.commit()
 
-    # Create admin user if not exists
-    admin = Employee.query.filter_by(email=ADMIN_EMAIL).first()
-    if not admin:
-        if not ADMIN_EMAIL or not ADMIN_PASSWORD:
-            raise ValueError("ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env to create the initial admin user")
-        admin = Employee(
-            name='Admin',
-            email=ADMIN_EMAIL,
-            is_admin=True,
-            role='admin'
-        )
-        admin.set_password(ADMIN_PASSWORD)
-        db.session.add(admin)
-        db.session.commit()
-        print(f"Admin user created: {ADMIN_EMAIL}")
+        # Create admin user if not exists
+        admin = Employee.query.filter_by(email=ADMIN_EMAIL).first()
+        if not admin:
+            if not ADMIN_EMAIL or not ADMIN_PASSWORD:
+                raise ValueError("ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env to create the initial admin user")
+            admin = Employee(
+                name='Admin',
+                email=ADMIN_EMAIL,
+                is_admin=True,
+                role='admin'
+            )
+            admin.set_password(ADMIN_PASSWORD)
+            db.session.add(admin)
+            db.session.commit()
+            print(f"Admin user created: {ADMIN_EMAIL}")
 
 # Authentication decorator
 def token_required(f):
@@ -1561,6 +1580,26 @@ def update_employee_profile(current_user, employee_id):
         return jsonify({'error': 'Employee not found'}), 404
 
     data = request.json or {}
+
+    if 'name' in data and data['name'].strip():
+        employee.name = data['name'].strip()
+        
+    if 'email' in data and data['email'].strip():
+        new_email = data['email'].strip().lower()
+        if new_email != employee.email:
+            existing = Employee.query.filter_by(email=new_email).first()
+            if existing:
+                return jsonify({'error': 'Email already in use by another employee'}), 400
+            employee.email = new_email
+            
+    if 'employee_code' in data:
+        new_code = (data['employee_code'] or '').strip()
+        if new_code and new_code != employee.employee_code:
+            existing = Employee.query.filter_by(employee_code=new_code).first()
+            if existing:
+                return jsonify({'error': 'Employee code already in use'}), 400
+            employee.employee_code = new_code
+
     try:
         apply_employee_profile(employee, data)
     except ValueError as exc:

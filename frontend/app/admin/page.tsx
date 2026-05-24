@@ -50,6 +50,8 @@ const emptyOnboardingForm = {
 };
 
 type EmployeeProfileEdit = {
+  name: string;
+  email: string;
   designation: string;
   reporting_manager: string;
   start_date: string;
@@ -72,6 +74,8 @@ type EmployeeProfileEdit = {
 };
 
 const buildEmployeeProfileEdit = (employee: Employee): EmployeeProfileEdit => ({
+  name: employee.name || '',
+  email: employee.email || '',
   designation: employee.designation || '',
   reporting_manager: employee.reporting_manager || '',
   start_date: employee.start_date || '',
@@ -564,6 +568,8 @@ export default function AdminDashboard() {
       ...prev,
       [employeeId]: {
         ...(prev[employeeId] || {
+          name: '',
+          email: '',
           designation: '',
           reporting_manager: '',
           start_date: '',
@@ -615,6 +621,8 @@ export default function AdminDashboard() {
 
     try {
       await employeeApi.updateEmployeeProfile(employeeId, {
+        name: toNullableText(edit.name) || '',
+        email: toNullableText(edit.email) || '',
         designation: toNullableText(edit.designation),
         reporting_manager: toNullableText(edit.reporting_manager),
         start_date: toNullableText(edit.start_date),
@@ -3536,6 +3544,20 @@ export default function AdminDashboard() {
                   {employees.find((emp) => emp.id === editingEmployeeId)?.employee_code || 'Auto-generated'}
                 </p>
               </div>
+              <input
+                type="text"
+                placeholder="Name"
+                value={employeeProfileEdits[editingEmployeeId].name}
+                onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, 'name', e.target.value)}
+                className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={employeeProfileEdits[editingEmployeeId].email}
+                onChange={(e) => handleEmployeeProfileEditChange(editingEmployeeId, 'email', e.target.value)}
+                className="border border-slate-300 rounded-xl px-3 py-2 bg-white/85"
+              />
               <input
                 type="text"
                 placeholder="Designation"

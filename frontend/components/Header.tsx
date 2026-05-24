@@ -53,7 +53,7 @@ export default function Header() {
   ];
 
   const employeeNavItems = [
-    { name: 'Dashboard', path: '/dashboard' },
+    { name: 'Time Sheet', path: '/dashboard' },
     { name: 'Expenses', path: '/expenses' },
     { name: 'My History', path: '/my-history' },
     { name: 'Settings', path: '/settings' },
@@ -89,7 +89,7 @@ export default function Header() {
             />
             <div>
               <h1 className="text-slate-900 font-bold text-xl md:text-2xl tracking-tight">
-                BKP Cygnus Consulting Inc.
+                BKP
               </h1>
               <p className="text-slate-600 text-xs md:text-sm">Atlas</p>
             </div>
