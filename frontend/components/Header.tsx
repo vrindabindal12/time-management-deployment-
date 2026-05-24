@@ -52,7 +52,7 @@ export default function Header() {
     { name: 'Settings', path: '/settings' },
   ];
 
-  if (user?.role === 'superadmin' || (user as any)?.is_superadmin) {
+  if (user?.role === 'superadmin' || user?.is_superadmin) {
     adminNavItems.push({ name: 'Global Access', path: '/superadmin' });
   }
 

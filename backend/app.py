@@ -199,6 +199,7 @@ class Employee(db.Model):
             'name': self.name,
             'email': self.email,
             'is_admin': effective_role in ('admin', 'both'),
+            'is_superadmin': getattr(self, 'is_superadmin', False),
             'role': effective_role,
             'employee_code': self.employee_code,
             'designation': self.designation,

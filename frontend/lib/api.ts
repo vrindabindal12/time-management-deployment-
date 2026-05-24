@@ -47,6 +47,7 @@ export interface Employee {
   name: string;
   email: string;
   is_admin: boolean;
+  is_superadmin?: boolean;
   role: 'admin' | 'employee' | 'both' | 'superadmin';
   employee_code?: string | null;
   designation?: string | null;
