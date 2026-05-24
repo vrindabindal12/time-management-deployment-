@@ -1,6 +1,7 @@
+import os
+os.environ['VERCEL'] = '1'
 from app import app, db, Organization, Employee, Client, Project, Punch, Service, EmployeeHiddenProject, Expense, FixedFeeAlertLog, ProjectRate
 from sqlalchemy import text
-import os
 
 def migrate():
     with app.app_context():
