@@ -107,7 +107,11 @@ if not DATABASE_URL.startswith('sqlite'):
 
 # CORS configuration
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
-CORS(app, origins=[FRONTEND_URL, 'http://localhost:3000'], supports_credentials=True)
+# Split by comma to allow multiple frontend URLs
+origins = [url.strip() for url in FRONTEND_URL.split(',')]
+if 'http://localhost:3000' not in origins:
+    origins.append('http://localhost:3000')
+CORS(app, origins=origins, supports_credentials=True)
 
 # Mail configuration
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
@@ -125,15 +129,26 @@ db = SQLAlchemy(app)
 limiter = Limiter(app=app, key_func=get_remote_address, storage_uri='memory://')
 
 # Models
+class Organization(db.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class Employee(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(256))
+    password_reset_token = db.Column(db.String(100), unique=True, nullable=True)
+    password_reset_expires = db.Column(db.DateTime, nullable=True)
     is_admin = db.Column(db.Boolean, default=False)
-    role = db.Column(db.String(20), nullable=False, server_default='employee')
+    is_superadmin = db.Column(db.Boolean, default=False)
+    role = db.Column(db.String(50), nullable=False, default='employee')
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     employee_code = db.Column(db.String(50), unique=True, nullable=True)
     designation = db.Column(db.String(120), nullable=True)
     reporting_manager = db.Column(db.String(120), nullable=True)
@@ -207,6 +222,7 @@ class Punch(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     project_name = db.Column(db.String(200), nullable=False)
     project_code = db.Column(db.String(50), nullable=True)  # New field for project code
@@ -249,6 +265,7 @@ class Client(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     code = db.Column(db.String(50), unique=True, nullable=False)
     geography = db.Column(db.String(100), nullable=True)
@@ -275,6 +292,7 @@ class Project(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     name = db.Column(db.String(200), nullable=False)
     code = db.Column(db.String(50), nullable=False)
@@ -322,6 +340,7 @@ class Service(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     service_code = db.Column(db.String(2), unique=True, nullable=True)
     description = db.Column(db.Text, nullable=True)
@@ -342,6 +361,7 @@ class EmployeeHiddenProject(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
 
@@ -352,6 +372,7 @@ class Expense(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     expense_type = db.Column(db.String(100), nullable=False)
@@ -381,6 +402,7 @@ class FixedFeeAlertLog(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     alert_date = db.Column(db.Date, nullable=False)
     alert_type = db.Column(db.String(20), nullable=False)  # near_limit | overage
@@ -394,6 +416,7 @@ class ProjectRate(db.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     employee_name = db.Column(db.String(120), nullable=True)
     designation = db.Column(db.String(100), nullable=False)  # Managing Director, Associate Director, Senior Consultant
