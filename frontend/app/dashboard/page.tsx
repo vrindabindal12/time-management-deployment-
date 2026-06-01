@@ -416,7 +416,7 @@ export default function Dashboard() {
         )}
 
         {/* Week Selector */}
-        <div className="flex justify-center items-center gap-4 mb-6">
+        <div className="flex flex-wrap justify-center items-center gap-4 mb-6">
           <button
             onClick={() => {
               const prev = new Date(weekAnchorDate);
