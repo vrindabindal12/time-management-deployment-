@@ -18,6 +18,7 @@ from functools import wraps
 from collections import defaultdict
 from openpyxl import Workbook
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib import colors as rl_colors
@@ -97,13 +98,22 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Production database engine options (connection pooling & SSL)
+from sqlalchemy.pool import NullPool
+
 if not DATABASE_URL.startswith('sqlite'):
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_size': 5,
-        'pool_recycle': 300,
-        'pool_pre_ping': True,
-        'max_overflow': 10,
-    }
+    if '-pooler.' in DATABASE_URL:
+        # Neon PgBouncer handles connection pooling, so disable SQLAlchemy's pool
+        # to prevent "server closed the connection unexpectedly" errors
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'poolclass': NullPool,
+        }
+    else:
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': 5,
+            'pool_recycle': 300,
+            'pool_pre_ping': True,
+            'max_overflow': 10,
+        }
 
 # CORS configuration
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
@@ -125,6 +135,13 @@ app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.co
 mail = Mail(app)
 
 db = SQLAlchemy(app)
+
+@app.errorhandler(IntegrityError)
+def handle_integrity_error(e):
+    db.session.rollback()
+    if request.method == 'DELETE':
+        return jsonify({'error': 'Cannot delete this item because it has associated records (e.g. work entries, projects, or rates).'}), 400
+    return jsonify({'error': 'Database integrity error. This item may already exist or is referencing missing data.'}), 400
 
 limiter = Limiter(app=app, key_func=get_remote_address, storage_uri='memory://')
 
@@ -1525,7 +1542,7 @@ def reset_password():
 @token_required
 @admin_required
 def update_work_payable_values(current_user, work_id):
-    work_entry = get_query(Punch, current_user).get(work_id)
+    work_entry = get_query(Punch, current_user).filter_by(id=work_id).first()
     if not work_entry:
         return jsonify({'error': 'Work entry not found'}), 404
     
@@ -1642,7 +1659,7 @@ def create_employee(current_user):
 @token_required
 @admin_required
 def update_employee_role(current_user, employee_id):
-    employee = get_query(Employee, current_user).get(employee_id)
+    employee = get_query(Employee, current_user).filter_by(id=employee_id).first()
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
 
@@ -1664,7 +1681,7 @@ def update_employee_role(current_user, employee_id):
 @token_required
 @admin_required
 def update_employee_profile(current_user, employee_id):
-    employee = get_query(Employee, current_user).get(employee_id)
+    employee = get_query(Employee, current_user).filter_by(id=employee_id).first()
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
 
@@ -1701,7 +1718,7 @@ def update_employee_profile(current_user, employee_id):
 @token_required
 @admin_required
 def delete_employee(current_user, employee_id):
-    employee = get_query(Employee, current_user).get(employee_id)
+    employee = get_query(Employee, current_user).filter_by(id=employee_id).first()
 
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
@@ -1821,7 +1838,7 @@ def export_my_work(current_user):
 @app.route('/api/work/<int:work_id>', methods=['PUT'])
 @token_required
 def edit_work(current_user, work_id):
-    work_entry = get_query(Punch, current_user).get(work_id)
+    work_entry = get_query(Punch, current_user).filter_by(id=work_id).first()
     
     if not work_entry:
         return jsonify({'error': 'Work entry not found'}), 404
@@ -1889,7 +1906,7 @@ def edit_work(current_user, work_id):
                     work_entry.payable_rate = 0.0
                     work_entry.payable_designation = 'Non-Billable'
                 else:
-                    employee = get_query(Employee, current_user).get(work_entry.employee_id)
+                    employee = get_query(Employee, current_user).filter_by(id=work_entry.employee_id).first()
                     if employee:
                         res_rate, res_des = get_employee_compensation_for_date(employee, new_date)
                         work_entry.payable_rate = res_rate
@@ -1917,7 +1934,7 @@ def edit_work(current_user, work_id):
 @app.route('/api/work/<int:work_id>', methods=['DELETE'])
 @token_required
 def delete_work(current_user, work_id):
-    work_entry = get_query(Punch, current_user).get(work_id)
+    work_entry = get_query(Punch, current_user).filter_by(id=work_id).first()
     
     if not work_entry:
         return jsonify({'error': 'Work entry not found'}), 404
@@ -1945,7 +1962,7 @@ def delete_work(current_user, work_id):
 @token_required
 @admin_required
 def update_work_invoice_values(current_user, work_id):
-    work_entry = get_query(Punch, current_user).get(work_id)
+    work_entry = get_query(Punch, current_user).filter_by(id=work_id).first()
     if not work_entry:
         return jsonify({'error': 'Work entry not found'}), 404
 
@@ -2036,7 +2053,7 @@ def get_my_punches(current_user):
 @token_required
 @admin_required
 def get_employee_status(current_user, employee_id):
-    employee = get_query(Employee, current_user).get(employee_id)
+    employee = get_query(Employee, current_user).filter_by(id=employee_id).first()
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
     
@@ -2059,7 +2076,7 @@ def get_employee_status(current_user, employee_id):
 @token_required
 @admin_required
 def get_employee_work(current_user, employee_id):
-    employee = get_query(Employee, current_user).get(employee_id)
+    employee = get_query(Employee, current_user).filter_by(id=employee_id).first()
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
 
@@ -2077,7 +2094,7 @@ def get_employee_work(current_user, employee_id):
 @token_required
 @admin_required
 def export_employee_work(current_user, employee_id):
-    employee = get_query(Employee, current_user).get(employee_id)
+    employee = get_query(Employee, current_user).filter_by(id=employee_id).first()
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
 
@@ -2768,7 +2785,7 @@ def get_client_invoice_report(current_user):
     if end_date < start_date:
         return jsonify({'error': 'end_date cannot be before start_date'}), 400
 
-    client = get_query(Client, current_user).get(client_id)
+    client = get_query(Client, current_user).filter_by(id=client_id).first()
     if not client:
         return jsonify({'error': 'Client not found'}), 404
 
@@ -2798,7 +2815,7 @@ def get_client_invoice_pdf(current_user):
     if end_date < start_date:
         return jsonify({'error': 'end_date cannot be before start_date'}), 400
 
-    client = get_query(Client, current_user).get(client_id)
+    client = get_query(Client, current_user).filter_by(id=client_id).first()
     if not client:
         return jsonify({'error': 'Client not found'}), 404
 
@@ -3106,7 +3123,7 @@ def create_client(current_user):
 @token_required
 @admin_required
 def get_client(current_user, client_id):
-    client = get_query(Client, current_user).get(client_id)
+    client = get_query(Client, current_user).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
@@ -3120,7 +3137,7 @@ def get_client(current_user, client_id):
 @token_required
 @admin_required
 def update_client(current_user, client_id):
-    client = get_query(Client, current_user).get(client_id)
+    client = get_query(Client, current_user).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
@@ -3168,7 +3185,7 @@ def update_client(current_user, client_id):
 @token_required
 @admin_required
 def delete_client(current_user, client_id):
-    client = get_query(Client, current_user).get(client_id)
+    client = get_query(Client, current_user).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
@@ -3183,7 +3200,7 @@ def delete_client(current_user, client_id):
 @token_required
 @admin_required
 def get_client_projects(current_user, client_id):
-    client = get_query(Client, current_user).get(client_id)
+    client = get_query(Client, current_user).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
@@ -3194,15 +3211,15 @@ def get_client_projects(current_user, client_id):
 @token_required
 @admin_required
 def create_project(current_user, client_id):
-    client = get_query(Client, current_user).get(client_id)
+    client = get_query(Client, current_user).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
     
     data = request.json
     
-    if not data.get('name') or not data.get('code'):
-        return jsonify({'error': 'Project name and code are required'}), 400
+    if not data.get('name'):
+        return jsonify({'error': 'Project name is required'}), 400
 
     contract_type = _normalize_contract_type(data.get('contract_type'))
     if not contract_type:
@@ -3235,11 +3252,6 @@ def create_project(current_user, client_id):
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
     
-    # Check if project code already exists for this client
-    existing = get_query(Project, current_user).filter_by(client_id=client_id, code=data['code']).first()
-    if existing:
-        return jsonify({'error': 'Project with this code already exists for this client'}), 400
-    
     # Handle automated project code generation
     service_ids = data.get('service_ids', [])
     primary_svc_id = service_ids[0] if service_ids else None
@@ -3247,6 +3259,11 @@ def create_project(current_user, client_id):
     generated_code, sequence = generate_project_code_data(client_id, primary_svc_id)
     if not generated_code:
         return jsonify({'error': 'Failed to generate project code (missing client data)'}), 400
+
+    # Check if project code already exists for this client
+    existing = get_query(Project, current_user).filter_by(client_id=client_id, code=generated_code).first()
+    if existing:
+        return jsonify({'error': 'Project with this generated code already exists for this client'}), 400
 
     project = Project(
         organization_id=current_user.organization_id,
@@ -3278,7 +3295,7 @@ def create_project(current_user, client_id):
 @token_required
 @admin_required
 def get_project(current_user, project_id):
-    project = get_query(Project, current_user).get(project_id)
+    project = get_query(Project, current_user).filter_by(id=project_id).first()
     
     if not project:
         return jsonify({'error': 'Project not found'}), 404
@@ -3289,7 +3306,7 @@ def get_project(current_user, project_id):
 @token_required
 @admin_required
 def update_project(current_user, project_id):
-    project = get_query(Project, current_user).get(project_id)
+    project = get_query(Project, current_user).filter_by(id=project_id).first()
     
     if not project:
         return jsonify({'error': 'Project not found'}), 404
@@ -3398,7 +3415,7 @@ def update_project(current_user, project_id):
 @token_required
 @admin_required
 def delete_project(current_user, project_id):
-    project = get_query(Project, current_user).get(project_id)
+    project = get_query(Project, current_user).filter_by(id=project_id).first()
     
     if not project:
         return jsonify({'error': 'Project not found'}), 404
@@ -3413,7 +3430,7 @@ def delete_project(current_user, project_id):
 @token_required
 @admin_required
 def get_project_rates(current_user, project_id):
-    project = get_query(Project, current_user).get(project_id)
+    project = get_query(Project, current_user).filter_by(id=project_id).first()
     
     if not project:
         return jsonify({'error': 'Project not found'}), 404
@@ -3424,7 +3441,7 @@ def get_project_rates(current_user, project_id):
 @token_required
 @admin_required
 def create_project_rate(current_user, project_id):
-    project = get_query(Project, current_user).get(project_id)
+    project = get_query(Project, current_user).filter_by(id=project_id).first()
     
     if not project:
         return jsonify({'error': 'Project not found'}), 404
@@ -3469,7 +3486,7 @@ def create_project_rate(current_user, project_id):
 @token_required
 @admin_required
 def update_project_rate(current_user, rate_id):
-    rate = get_query(ProjectRate, current_user).get(rate_id)
+    rate = get_query(ProjectRate, current_user).filter_by(id=rate_id).first()
     
     if not rate:
         return jsonify({'error': 'Rate not found'}), 404
@@ -3509,7 +3526,7 @@ def update_project_rate(current_user, rate_id):
 @token_required
 @admin_required
 def delete_project_rate(current_user, rate_id):
-    rate = get_query(ProjectRate, current_user).get(rate_id)
+    rate = get_query(ProjectRate, current_user).filter_by(id=rate_id).first()
     
     if not rate:
         return jsonify({'error': 'Rate not found'}), 404
@@ -3558,7 +3575,7 @@ def create_service(current_user):
 @token_required
 @admin_required
 def update_service(current_user, service_id):
-    service = get_query(Service, current_user).get(service_id)
+    service = get_query(Service, current_user).filter_by(id=service_id).first()
     if not service:
         return jsonify({'error': 'Service not found'}), 404
     
@@ -3584,7 +3601,7 @@ def update_service(current_user, service_id):
 @token_required
 @admin_required
 def delete_service(current_user, service_id):
-    service = get_query(Service, current_user).get(service_id)
+    service = get_query(Service, current_user).filter_by(id=service_id).first()
     if not service:
         return jsonify({'error': 'Service not found'}), 404
     
@@ -3615,7 +3632,7 @@ def get_all_projects(current_user):
     projects = get_query(Project, current_user).all()
     result = []
     for project in projects:
-        client = get_query(Client, current_user).get(project.client_id)
+        client = get_query(Client, current_user).filter_by(id=project.client_id).first()
         result.append({
             'id': project.id,
             'code': project.code,
@@ -3634,7 +3651,7 @@ def hide_project(current_user):
     if not project_id:
         return jsonify({'error': 'project_id is required'}), 400
     
-    project = get_query(Project, current_user).get(project_id)
+    project = get_query(Project, current_user).filter_by(id=project_id).first()
     if not project:
         return jsonify({'error': 'Project not found'}), 404
         
@@ -3659,7 +3676,7 @@ def unhide_project(current_user, project_id):
 @token_required
 @admin_required
 def resend_employee_welcome(current_user, employee_id):
-    employee = get_query(Employee, current_user).get(employee_id)
+    employee = get_query(Employee, current_user).filter_by(id=employee_id).first()
     if not employee:
         return jsonify({'error': 'Employee not found'}), 404
     reset_token = employee.generate_password_reset_token()
@@ -3717,7 +3734,7 @@ def save_expense_entry(current_user):
     except (ValueError, TypeError):
         return jsonify({'error': 'Invalid data format'}), 400
 
-    if not get_query(Project, current_user).get(project_id):
+    if not get_query(Project, current_user).filter_by(id=project_id).first():
         return jsonify({'error': 'Project not found'}), 404
 
     existing = get_query(Expense, current_user).filter_by(
@@ -3757,7 +3774,7 @@ def save_expense_entry(current_user):
 @token_required
 def delete_expense_entry(current_user, expense_id):
     """Delete a single expense entry (employee can only delete their own)."""
-    exp = get_query(Expense, current_user).get(expense_id)
+    exp = get_query(Expense, current_user).filter_by(id=expense_id).first()
     if not exp:
         return jsonify({'error': 'Expense not found'}), 404
     if exp.employee_id != current_user.id and not getattr(current_user, 'is_admin', False):
