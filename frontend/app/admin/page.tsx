@@ -243,6 +243,10 @@ export default function AdminDashboard() {
     entityName: '',
   });
   const [deleteEntityConfirmationText, setDeleteEntityConfirmationText] = useState('');
+  const [archiveReason, setArchiveReason] = useState('');
+  const [clientStatusFilter, setClientStatusFilter] = useState<'active' | 'archived' | 'all'>('active');
+  const [projectStatusFilter, setProjectStatusFilter] = useState<'active' | 'archived' | 'all'>('active');
+  const [serviceStatusFilter, setServiceStatusFilter] = useState<'active' | 'archived' | 'all'>('active');
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -258,11 +262,21 @@ export default function AdminDashboard() {
 
     setUser(currentUser);
     loadEmployees();
-    loadClients();
-    loadServices();
 
     return () => { };
   }, [router]);
+
+  useEffect(() => {
+    if (user) {
+      loadClients(clientStatusFilter);
+    }
+  }, [clientStatusFilter, user]);
+
+  useEffect(() => {
+    if (user) {
+      loadServices(serviceStatusFilter);
+    }
+  }, [serviceStatusFilter, user]);
 
   useEffect(() => {
     if (selectedEmployee) {
@@ -272,13 +286,15 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (selectedClient) {
-      loadClientProjects(selectedClient);
+      loadClientProjects(selectedClient, projectStatusFilter);
+    } else {
+      setProjects([]);
     }
     setEditingClientId(null);
     setClientEditForm({ name: '', geography: '' });
     setEditingProjectId(null);
     setProjectEditForm(emptyProjectForm);
-  }, [selectedClient]);
+  }, [selectedClient, projectStatusFilter]);
 
   useEffect(() => {
     if (!invoiceClientId && clients.length > 0) {
@@ -357,9 +373,9 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadClients = async () => {
+  const loadClients = async (status: 'active' | 'archived' | 'all' = clientStatusFilter) => {
     try {
-      const data = await clientApi.getClients();
+      const data = await clientApi.getClients(status);
       setClients(data);
     } catch (err: any) {
       setError('Failed to load clients');
@@ -367,9 +383,9 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadServices = async () => {
+  const loadServices = async (status: 'active' | 'archived' | 'all' = serviceStatusFilter) => {
     try {
-      const data = await serviceApi.getServices();
+      const data = await serviceApi.getServices(status);
       setServices(data);
     } catch (err) {
       setError('Failed to load services');
@@ -383,7 +399,7 @@ export default function AdminDashboard() {
       await serviceApi.createService(serviceForm.name, serviceForm.description);
       setServiceForm({ name: '', description: '' });
       setShowAddServiceForm(false);
-      loadServices();
+      loadServices(serviceStatusFilter);
       setSuccessMsg('Service created successfully');
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
@@ -406,7 +422,7 @@ export default function AdminDashboard() {
     try {
       await serviceApi.updateService(editingServiceId, serviceEditForm);
       setEditingServiceId(null);
-      loadServices();
+      loadServices(serviceStatusFilter);
       setSuccessMsg('Service updated successfully');
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
@@ -422,7 +438,7 @@ export default function AdminDashboard() {
     setLoading(true);
     try {
       await serviceApi.deleteService(serviceId);
-      loadServices();
+      loadServices(serviceStatusFilter);
       setSuccessMsg('Service deleted successfully');
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
@@ -433,9 +449,9 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadClientProjects = async (clientId: number) => {
+  const loadClientProjects = async (clientId: number, status: 'active' | 'archived' | 'all' = projectStatusFilter) => {
     try {
-      const data = await projectApi.getClientProjects(clientId);
+      const data = await projectApi.getClientProjects(clientId, status);
       setProjects(data);
       setSelectedProject(null);
       setProjectRates([]);
@@ -720,13 +736,17 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      await clientApi.createClient(clientForm.name, undefined, clientForm.geography);
+      const newClient = await clientApi.createClient(clientForm.name, undefined, clientForm.geography);
       setClientForm({ name: '', geography: '' });
       setShowAddClientForm(false);
-      setSelectedClient(null);
-      setSelectedProject(null);
-      setProjects([]);
-      await loadClients();
+      
+      // Auto-select and optimistically insert the new client
+      if (newClient && newClient.id) {
+        setClients(prev => [...prev, newClient].sort((a, b) => a.name.localeCompare(b.name)));
+        setSelectedClient(newClient.id);
+      } else {
+        await loadClients();
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create client');
     } finally {
@@ -753,7 +773,7 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      await projectApi.createProject(
+      const newProject = await projectApi.createProject(
         selectedClient,
         projectForm.name,
         projectForm.contract_type,
@@ -768,7 +788,15 @@ export default function AdminDashboard() {
       );
       setProjectForm(emptyProjectForm);
       setShowAddProjectForm(false);
-      await loadClientProjects(selectedClient);
+      
+      // Auto-select and optimistically insert the new project
+      if (newProject && newProject.id) {
+        setProjects(prev => [...prev, newProject]);
+        setSelectedProject(newProject.id);
+        setProjectRates(newProject.rates || []);
+      } else {
+        await loadClientProjects(selectedClient);
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create project');
     } finally {
@@ -815,6 +843,7 @@ export default function AdminDashboard() {
       entityName,
     });
     setDeleteEntityConfirmationText('');
+    setArchiveReason('');
   };
 
   const closeDeleteEntityModal = () => {
@@ -825,6 +854,7 @@ export default function AdminDashboard() {
       entityName: '',
     });
     setDeleteEntityConfirmationText('');
+    setArchiveReason('');
   };
 
   const handleConfirmDeleteEntity = async () => {
@@ -840,36 +870,68 @@ export default function AdminDashboard() {
     setError(null);
     try {
       if (deleteEntityModal.entityType === 'client') {
-        await clientApi.deleteClient(deleteEntityModal.entityId);
-        await loadClients();
+        const response = await clientApi.deleteClient(deleteEntityModal.entityId, archiveReason);
+        await loadClients(clientStatusFilter);
         if (selectedClient === deleteEntityModal.entityId) {
           setSelectedClient(null);
           setProjects([]);
           setSelectedProject(null);
           setProjectRates([]);
         }
+        setSuccessMsg(response.message || 'Client archived successfully');
+        setTimeout(() => setSuccessMsg(null), 3000);
       } else if (deleteEntityModal.entityType === 'project') {
-        await projectApi.deleteProject(deleteEntityModal.entityId);
+        const response = await projectApi.deleteProject(deleteEntityModal.entityId, archiveReason);
         if (selectedClient) {
-          await loadClientProjects(selectedClient);
+          await loadClientProjects(selectedClient, projectStatusFilter);
         }
         if (selectedProject === deleteEntityModal.entityId) {
           setSelectedProject(null);
           setProjectRates([]);
         }
+        setSuccessMsg(response.message || 'Project archived successfully');
+        setTimeout(() => setSuccessMsg(null), 3000);
       } else if (deleteEntityModal.entityType === 'rate') {
         await projectApi.deleteProjectRate(deleteEntityModal.entityId);
         if (selectedProject) {
           await loadProjectRates(selectedProject);
         }
       } else if (deleteEntityModal.entityType === 'service') {
-        await serviceApi.deleteService(deleteEntityModal.entityId);
-        await loadServices();
+        const response = await serviceApi.deleteService(deleteEntityModal.entityId, archiveReason);
+        await loadServices(serviceStatusFilter);
+        setSuccessMsg(response.message || 'Service archived successfully');
+        setTimeout(() => setSuccessMsg(null), 3000);
       }
 
       closeDeleteEntityModal();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to delete item');
+      clearError();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreEntity = async (type: 'client' | 'project' | 'service', id: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (type === 'client') {
+        await clientApi.restoreClient(id);
+        await loadClients(clientStatusFilter);
+      } else if (type === 'project') {
+        await projectApi.restoreProject(id);
+        if (selectedClient) {
+          await loadClientProjects(selectedClient, projectStatusFilter);
+        }
+      } else if (type === 'service') {
+        await serviceApi.restoreService(id);
+        await loadServices(serviceStatusFilter);
+      }
+      setSuccessMsg(`${type.charAt(0).toUpperCase() + type.slice(1)} restored successfully`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || `Failed to restore ${type}`);
       clearError();
     } finally {
       setLoading(false);
@@ -1901,7 +1963,7 @@ export default function AdminDashboard() {
             <div className="space-y-6">
               {/* Clients Panel */}
               <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/70 via-white/75 to-blue-100/60">
-                <div className="flex justify-between items-center mb-5">
+                <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-xl bg-cyan-100/80">
                       <svg className="w-4 h-4 text-cyan-600" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" /></svg>
@@ -1917,6 +1979,23 @@ export default function AdminDashboard() {
                   >
                     {showAddClientForm ? 'Cancel' : '+ Add Client'}
                   </button>
+                </div>
+
+                <div className="flex gap-1.5 mb-4 bg-slate-100/85 p-1 rounded-xl w-fit">
+                  {(['active', 'archived', 'all'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setClientStatusFilter(filter)}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                        clientStatusFilter === filter
+                          ? 'bg-white text-slate-800 shadow-sm animate-fade-in'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
                 </div>
 
                 {showAddClientForm && (
@@ -2021,7 +2100,7 @@ export default function AdminDashboard() {
                         className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all duration-200 ${isSelected
                           ? 'border-cyan-300/80 bg-gradient-to-r from-cyan-50 to-blue-50/60 shadow-md ring-1 ring-cyan-200/50'
                           : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
-                          }`}
+                          } ${!client.is_active ? 'opacity-60 grayscale-[30%]' : ''}`}
                       >
                         <div className={`w-9 h-9 rounded-xl ${cBg} flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm transition-transform group-hover:scale-110`}>
                           {cInitials}
@@ -2036,7 +2115,12 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         {isSelected && (
-                          <span className="text-[10px] font-bold text-cyan-600 bg-cyan-100 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${client.is_active ? 'text-cyan-600 bg-cyan-100' : 'text-slate-600 bg-slate-100'}`}>
+                            {client.is_active ? 'Active' : 'Archived'}
+                          </span>
+                        )}
+                        {!isSelected && !client.is_active && (
+                          <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase shrink-0">Archived</span>
                         )}
                         <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <button
@@ -2047,14 +2131,25 @@ export default function AdminDashboard() {
                           >
                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                           </button>
-                          <button
-                            onClick={() => openDeleteEntityModal('client', client.id, client.name)}
-                            disabled={loading}
-                            title="Delete client"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
-                          >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
-                          </button>
+                          {client.is_active ? (
+                            <button
+                              onClick={() => openDeleteEntityModal('client', client.id, client.name)}
+                              disabled={loading}
+                              title="Delete client"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleRestoreEntity('client', client.id)}
+                              disabled={loading}
+                              title="Restore client"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14H9v-2h4v2zm4-5H7V9h10v2z" /></svg>
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -2068,7 +2163,7 @@ export default function AdminDashboard() {
 
               {/* Services Panel */}
               <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-violet-50/70 via-white/75 to-indigo-100/60">
-                <div className="flex justify-between items-center mb-5">
+                <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-xl bg-violet-100/80 shadow-inner">
                       <svg className="w-4 h-4 text-violet-600" viewBox="0 0 24 24" fill="currentColor">
@@ -2086,6 +2181,23 @@ export default function AdminDashboard() {
                   >
                     {showAddServiceForm ? 'Cancel' : '+ New Service'}
                   </button>
+                </div>
+
+                <div className="flex gap-1.5 mb-4 bg-slate-100/85 p-1 rounded-xl w-fit">
+                  {(['active', 'archived', 'all'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setServiceStatusFilter(filter)}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                        serviceStatusFilter === filter
+                          ? 'bg-white text-slate-800 shadow-sm animate-fade-in'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
                 </div>
 
                 {showAddServiceForm && (
@@ -2164,13 +2276,16 @@ export default function AdminDashboard() {
                   {services.map((service) => (
                     <div
                       key={service.id}
-                      className="flex items-start gap-3 p-3 rounded-2xl border border-slate-100 bg-white/60 hover:border-violet-200/60 hover:bg-white/90 hover:shadow-sm group transition-all"
+                      className={`flex items-start gap-3 p-3 rounded-2xl border border-slate-100 bg-white/60 hover:border-violet-200/60 hover:bg-white/90 hover:shadow-sm group transition-all ${!service.is_active ? 'opacity-60 grayscale-[30%]' : ''}`}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-slate-900 truncate text-sm leading-tight group-hover:text-violet-700 transition-colors">{service.name}</p>
                           {service.service_code && (
                             <span className="text-[10px] font-mono font-bold text-violet-400/70 bg-violet-50 px-1 rounded uppercase">{service.service_code}</span>
+                          )}
+                          {!service.is_active && (
+                            <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase shrink-0">Archived</span>
                           )}
                         </div>
                         {service.description && (
@@ -2185,13 +2300,23 @@ export default function AdminDashboard() {
                         >
                           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                         </button>
-                        <button
-                          onClick={() => openDeleteEntityModal('service', service.id, service.name)}
-                          disabled={loading}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
-                        >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
-                        </button>
+                        {service.is_active ? (
+                          <button
+                            onClick={() => openDeleteEntityModal('service', service.id, service.name)}
+                            disabled={loading}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                          >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleRestoreEntity('service', service.id)}
+                            disabled={loading}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                          >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14H9v-2h4v2zm4-5H7V9h10v2z" /></svg>
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -2208,7 +2333,7 @@ export default function AdminDashboard() {
               {/* Projects Section */}
               {selectedClient && selectedClientData && (
                 <div className="glass-panel rounded-3xl p-6 border border-white/70 bg-gradient-to-br from-cyan-50/75 via-white/75 to-blue-100/65 transition-all duration-500">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 rounded-2xl bg-cyan-100/80">
                         <svg className="w-5 h-5 text-cyan-600" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" /></svg>
@@ -2230,6 +2355,23 @@ export default function AdminDashboard() {
                     >
                       {showAddProjectForm ? 'Hide Form' : '+ New Project'}
                     </button>
+                  </div>
+
+                  <div className="flex gap-1.5 mb-4 bg-slate-100/85 p-1 rounded-xl w-fit">
+                    {(['active', 'archived', 'all'] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        type="button"
+                        onClick={() => setProjectStatusFilter(filter)}
+                        className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                          projectStatusFilter === filter
+                            ? 'bg-white text-slate-800 shadow-sm animate-fade-in'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {filter}
+                      </button>
+                    ))}
                   </div>
 
                   {showAddProjectForm && (
@@ -2364,34 +2506,6 @@ export default function AdminDashboard() {
                             />
                           </div>
                         )}
-
-                        <div className="lg:col-span-2">
-                          <label className="block text-xs font-bold text-blue-700 mb-1 uppercase tracking-wider">Services</label>
-                          <div className="flex flex-wrap gap-2 p-2.5 border border-slate-200 rounded-2xl bg-white/75 min-h-[48px] items-center">
-                            {services.map(s => {
-                              const selected = projectForm.service_ids.includes(s.id);
-                              return (
-                                <button
-                                  key={s.id}
-                                  type="button"
-                                  onClick={() => {
-                                    const newIds = selected
-                                      ? projectForm.service_ids.filter(id => id !== s.id)
-                                      : [...projectForm.service_ids, s.id];
-                                    setProjectForm({ ...projectForm, service_ids: newIds });
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${selected
-                                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md scale-105'
-                                      : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'
-                                    }`}
-                                >
-                                  {s.name}
-                                </button>
-                              );
-                            })}
-                            {services.length === 0 && <span className="text-xs text-slate-400 italic font-medium">No services available. Create one in the sidebar.</span>}
-                          </div>
-                        </div>
                         {projectForm.contract_type === 'documentation' && (
                           <div className="rounded-xl border border-blue-200/60 bg-blue-50/40 p-3">
                             <label className="block text-xs font-bold text-blue-700 mb-2 uppercase tracking-wide">Billing Logic</label>
@@ -2644,7 +2758,9 @@ export default function AdminDashboard() {
                         <div
                           key={project.id}
                           onClick={() => setSelectedProject(project.id)}
-                          className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all duration-200 ${pIsSelected
+                          className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all duration-200 ${
+                            !project.is_active ? 'opacity-60 grayscale-[30%]' : ''
+                          } ${pIsSelected
                             ? 'border-cyan-300/80 bg-gradient-to-r from-cyan-50 to-blue-50/60 shadow-md ring-1 ring-cyan-200/50'
                             : 'border-slate-100 bg-white/60 hover:border-cyan-200/60 hover:bg-white/90 hover:shadow-sm'
                             }`}
@@ -2655,9 +2771,14 @@ export default function AdminDashboard() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-slate-900 truncate text-sm leading-tight">{project.name}</p>
-                            <span className="inline-block mt-0.5 text-[10px] font-bold font-mono text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-md">
-                              {project.code}
-                            </span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="inline-block text-[10px] font-bold font-mono text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-md">
+                                {project.code}
+                              </span>
+                              {!project.is_active && (
+                                <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase shrink-0">Archived</span>
+                              )}
+                            </div>
                             <div className="mt-1 flex flex-wrap gap-1.5">
                               <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${project.contract_type === 'fixed_fee'
                                 ? 'text-amber-700 bg-amber-50 border-amber-200'
@@ -2685,7 +2806,9 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                           {pIsSelected && (
-                            <span className="text-[10px] font-bold text-cyan-600 bg-cyan-100 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${project.is_active ? 'text-cyan-600 bg-cyan-100' : 'text-slate-600 bg-slate-100'}`}>
+                              {project.is_active ? 'Active' : 'Archived'}
+                            </span>
                           )}
                           <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <button
@@ -2696,14 +2819,25 @@ export default function AdminDashboard() {
                             >
                               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
                             </button>
-                            <button
-                              onClick={() => openDeleteEntityModal('project', project.id, project.name)}
-                              disabled={loading}
-                              title="Delete project"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
-                            >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
-                            </button>
+                            {project.is_active ? (
+                              <button
+                                onClick={() => openDeleteEntityModal('project', project.id, project.name)}
+                                disabled={loading}
+                                title="Delete project"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                              >
+                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleRestoreEntity('project', project.id)}
+                                disabled={loading}
+                                title="Restore project"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition disabled:opacity-50"
+                              >
+                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14H9v-2h4v2zm4-5H7V9h10v2z" /></svg>
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -3677,12 +3811,24 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-md flex items-center justify-center px-4">
           <div className="w-full max-w-md rounded-3xl glass-panel p-6">
             <h3 className="text-xl font-bold text-slate-900">
-              Confirm {deleteEntityModal.entityType === 'client' ? 'Client' : deleteEntityModal.entityType === 'project' ? 'Project' : 'Rate'} Deletion
+              Confirm {deleteEntityModal.entityType === 'client' ? 'Client' : deleteEntityModal.entityType === 'project' ? 'Project' : deleteEntityModal.entityType === 'service' ? 'Service' : 'Rate'} Deletion
             </h3>
             <p className="mt-2 text-sm text-slate-600">
-              This will permanently delete{' '}
+              This will archive{' '}
               <span className="font-semibold text-slate-900">{deleteEntityModal.entityName}</span>.
             </p>
+            {deleteEntityModal.entityType !== 'rate' && (
+              <div className="mt-4">
+                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Archive Reason (Optional)</label>
+                <input
+                  type="text"
+                  value={archiveReason}
+                  onChange={(e) => setArchiveReason(e.target.value)}
+                  placeholder="e.g., Project Completed or Client inactive"
+                  className="w-full border border-slate-300 bg-white/80 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+              </div>
+            )}
             <p className="mt-4 text-sm font-semibold text-red-600">
               Type <span className="px-2 py-0.5 rounded bg-red-100 text-red-700">DELETE</span> to continue.
             </p>

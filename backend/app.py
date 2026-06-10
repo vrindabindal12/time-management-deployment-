@@ -132,9 +132,12 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config['MAIL_USERNAME'])
 
+from flask_migrate import Migrate
+
 mail = Mail(app)
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 @app.errorhandler(IntegrityError)
 def handle_integrity_error(e):
@@ -146,10 +149,30 @@ def handle_integrity_error(e):
 limiter = Limiter(app=app, key_func=get_remote_address, storage_uri='memory://')
 
 # Models
-def get_query(model, current_user=None):
+def get_query(model, current_user=None, include_archived=False):
     query = model.query
     if current_user and not current_user.is_superadmin and hasattr(model, 'organization_id'):
         query = query.filter_by(organization_id=current_user.organization_id)
+    if hasattr(model, 'is_active') and not include_archived:
+        status_param = 'active'
+        try:
+            from flask import request
+            if request:
+                status_param = request.args.get('status', 'active').lower()
+        except RuntimeError:
+            pass
+        is_admin = False
+        if current_user:
+            is_admin = current_user.is_admin or getattr(current_user, 'is_superadmin', False) or (current_user.role in ('admin', 'both'))
+        if is_admin:
+            if status_param == 'archived':
+                query = query.filter_by(is_active=False)
+            elif status_param == 'all':
+                pass
+            else:
+                query = query.filter_by(is_active=True)
+        else:
+            query = query.filter_by(is_active=True)
     return query
 
 class Organization(db.Model):
@@ -297,6 +320,14 @@ class Client(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Soft Delete & Archive columns
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True)
+    archived_reason = db.Column(db.Text, nullable=True)
+    
+    archived_by = db.relationship('Employee', foreign_keys=[archived_by_id])
+
     # Relationship to projects: one client can have many projects.
     # When a client is deleted, its projects (and their related data) are also deleted.
     projects = db.relationship('Project', backref='client', lazy=True, cascade='all, delete-orphan')
@@ -308,6 +339,14 @@ class Client(db.Model):
             'code': self.code,
             'geography': self.geography,
             'region_code': self.region_code,
+            'is_active': self.is_active,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': {
+                'id': self.archived_by.id,
+                'name': self.archived_by.name,
+                'email': self.archived_by.email
+            } if self.archived_by else None,
+            'archived_reason': self.archived_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -330,6 +369,15 @@ class Project(db.Model):
     sequence_number = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Soft Delete & Archive columns
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True)
+    archived_reason = db.Column(db.Text, nullable=True)
+    
+    archived_by = db.relationship('Employee', foreign_keys=[archived_by_id])
+
     rates = db.relationship('ProjectRate', backref='project', lazy=True, cascade='all, delete-orphan')
     services = db.relationship('Service', secondary='project_services', backref=db.backref('projects', lazy='dynamic'))
 
@@ -349,6 +397,14 @@ class Project(db.Model):
             'standard_rate': float(self.standard_rate) if self.standard_rate is not None else None,
             'is_billable': bool(self.is_billable),
             'sequence_number': self.sequence_number,
+            'is_active': self.is_active,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': {
+                'id': self.archived_by.id,
+                'name': self.archived_by.name,
+                'email': self.archived_by.email
+            } if self.archived_by else None,
+            'archived_reason': self.archived_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'rates': [rate.to_dict() for rate in self.rates],
@@ -371,12 +427,28 @@ class Service(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Soft Delete & Archive columns
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True)
+    archived_reason = db.Column(db.Text, nullable=True)
+    
+    archived_by = db.relationship('Employee', foreign_keys=[archived_by_id])
+
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'service_code': self.service_code,
             'description': self.description,
+            'is_active': self.is_active,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': {
+                'id': self.archived_by.id,
+                'name': self.archived_by.name,
+                'email': self.archived_by.email
+            } if self.archived_by else None,
+            'archived_reason': self.archived_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -1237,6 +1309,12 @@ def generate_client_code(name, current_client_id=None):
     first = cleaned_name[0]
     tried = set()
     
+    # Fetch all existing client codes starting with 'first' in one query
+    query = Client.query.filter(Client.code.like(f"{first}%"))
+    if current_client_id:
+        query = query.filter(Client.id != current_client_id)
+    existing_codes = {c.code.upper() for c in query.all() if c.code}
+    
     # Step 2 & 3: Try First Letter + Next Available Letter
     if len(cleaned_name) > 1:
         for char in cleaned_name[1:]:
@@ -1245,8 +1323,7 @@ def generate_client_code(name, current_client_id=None):
                 continue
             tried.add(code)
             
-            existing = Client.query.filter_by(code=code).first()
-            if not existing or (current_client_id and existing.id == current_client_id):
+            if code not in existing_codes:
                 return code
     
     # Step 4: Fallback - Iterate A-Z
@@ -1256,8 +1333,7 @@ def generate_client_code(name, current_client_id=None):
             continue
         tried.add(code)
         
-        existing = Client.query.filter_by(code=code).first()
-        if not existing or (current_client_id and existing.id == current_client_id):
+        if code not in existing_codes:
             return code
     
     return None
@@ -1279,6 +1355,12 @@ def generate_service_code(name, current_service_id=None):
     first = cleaned_name[0]
     tried = set()
     
+    # Fetch all existing service codes starting with 'first' in one query
+    query = Service.query.filter(Service.service_code.like(f"{first}%"))
+    if current_service_id:
+        query = query.filter(Service.id != current_service_id)
+    existing_codes = {s.service_code.upper() for s in query.all() if s.service_code}
+    
     # Step 2 & 3: Try First Letter + Next Available Letter
     if len(cleaned_name) > 1:
         for char in cleaned_name[1:]:
@@ -1287,8 +1369,7 @@ def generate_service_code(name, current_service_id=None):
                 continue
             tried.add(code)
             
-            existing = Service.query.filter_by(service_code=code).first()
-            if not existing or (current_service_id and existing.id == current_service_id):
+            if code not in existing_codes:
                 return code
     
     # Step 4: Fallback - Iterate A-Z
@@ -1298,19 +1379,19 @@ def generate_service_code(name, current_service_id=None):
             continue
         tried.add(code)
         
-        existing = Service.query.filter_by(service_code=code).first()
-        if not existing or (current_service_id and existing.id == current_service_id):
+        if code not in existing_codes:
             return code
     
     return None
 
-def generate_project_code_data(client_id, service_id=None, existing_sequence=None):
+def generate_project_code_data(client_id, service_id=None, existing_sequence=None, client=None):
     """
     Generates a unique Project Code string and sequence number.
     Format: [CLIENT_CODE]-[GEO_CODE]-[SVC_CODE]-[SEQUENCE]
     Sequence is scoped per Client.
     """
-    client = Client.query.get(client_id)
+    if not client:
+        client = Client.query.get(client_id)
     if not client:
         return None, None
     
@@ -1336,41 +1417,44 @@ def generate_project_code_data(client_id, service_id=None, existing_sequence=Non
 # Initialize database
 if not os.environ.get('VERCEL'):
     with app.app_context():
-        db.create_all()
-        ensure_employee_schema()
-        ensure_role_schema()
-        ensure_password_reset_schema()
-        ensure_employee_codes()
-        ensure_punch_invoice_schema()
-        ensure_project_rate_schema()
-        ensure_project_contract_schema()
-        ensure_hidden_projects_schema()
-        ensure_expenses_schema()
-        ensure_client_schema()
-        ensure_service_schema()
-        ensure_project_sequence_schema()
-        # Backfill legacy rows where description may be null from older schema versions.
-        legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
-        if legacy_null_descriptions:
-            for entry in legacy_null_descriptions:
-                entry.description = ''
-            db.session.commit()
+        try:
+            db.create_all()
+            ensure_employee_schema()
+            ensure_role_schema()
+            ensure_password_reset_schema()
+            ensure_employee_codes()
+            ensure_punch_invoice_schema()
+            ensure_project_rate_schema()
+            ensure_project_contract_schema()
+            ensure_hidden_projects_schema()
+            ensure_expenses_schema()
+            ensure_client_schema()
+            ensure_service_schema()
+            ensure_project_sequence_schema()
+            # Backfill legacy rows where description may be null from older schema versions.
+            legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
+            if legacy_null_descriptions:
+                for entry in legacy_null_descriptions:
+                    entry.description = ''
+                db.session.commit()
 
-        # Create admin user if not exists
-        admin = Employee.query.filter_by(email=ADMIN_EMAIL).first()
-        if not admin:
-            if not ADMIN_EMAIL or not ADMIN_PASSWORD:
-                raise ValueError("ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env to create the initial admin user")
-            admin = Employee(
-                name='Admin',
-                email=ADMIN_EMAIL,
-                is_admin=True,
-                role='admin'
-            )
-            admin.set_password(ADMIN_PASSWORD)
-            db.session.add(admin)
-            db.session.commit()
-            print(f"Admin user created: {ADMIN_EMAIL}")
+            # Create admin user if not exists
+            admin = Employee.query.filter_by(email=ADMIN_EMAIL).first()
+            if not admin:
+                if not ADMIN_EMAIL or not ADMIN_PASSWORD:
+                    raise ValueError("ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env to create the initial admin user")
+                admin = Employee(
+                    name='Admin',
+                    email=ADMIN_EMAIL,
+                    is_admin=True,
+                    role='admin'
+                )
+                admin.set_password(ADMIN_PASSWORD)
+                db.session.add(admin)
+                db.session.commit()
+                print(f"Admin user created: {ADMIN_EMAIL}")
+        except Exception as startup_err:
+            print(f"Database bootstrap warning (normal during migrations): {startup_err}")
 
 # Authentication decorator
 def token_required(f):
@@ -3087,7 +3171,7 @@ def create_client(current_user):
     if not data.get('name'):
         return jsonify({'error': 'Client name is required'}), 400
     
-    existing_name = get_query(Client, current_user).filter_by(name=data['name']).first()
+    existing_name = get_query(Client, current_user, include_archived=True).filter_by(name=data['name']).first()
     if existing_name:
         return jsonify({'error': 'Client with this name already exists'}), 400
     
@@ -3095,14 +3179,13 @@ def create_client(current_user):
     code = data.get('code', '').strip().upper()
     if not code or len(code) != 2:
         code = generate_client_code(data['name'])
-    
-    if not code:
-        return jsonify({'error': 'Could not generate a unique code for this client'}), 400
-    
-    # Final check for uniqueness (especially if manually provided)
-    existing_code = get_query(Client, current_user).filter_by(code=code).first()
-    if existing_code:
-        return jsonify({'error': 'Client with this code already exists'}), 400
+        if not code:
+            return jsonify({'error': 'Could not generate a unique code for this client'}), 400
+    else:
+        # Final check for uniqueness (only if manually provided)
+        existing_code = get_query(Client, current_user, include_archived=True).filter_by(code=code).first()
+        if existing_code:
+            return jsonify({'error': 'Client with this code already exists'}), 400
     
     geography = (data.get('geography') or '').strip()
     
@@ -3123,21 +3206,22 @@ def create_client(current_user):
 @token_required
 @admin_required
 def get_client(current_user, client_id):
-    client = get_query(Client, current_user).filter_by(id=client_id).first()
+    client = get_query(Client, current_user, include_archived=True).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
     
+    projects = get_query(Project, current_user).filter_by(client_id=client.id).all()
     return jsonify({
         **client.to_dict(),
-        'projects': [project.to_dict() for project in client.projects]
+        'projects': [project.to_dict() for project in projects]
     })
 
 @app.route('/api/clients/<int:client_id>', methods=['PUT'])
 @token_required
 @admin_required
 def update_client(current_user, client_id):
-    client = get_query(Client, current_user).filter_by(id=client_id).first()
+    client = get_query(Client, current_user, include_archived=True).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
@@ -3149,7 +3233,7 @@ def update_client(current_user, client_id):
         if not new_name:
             return jsonify({'error': 'Client name cannot be empty'}), 400
         
-        existing = get_query(Client, current_user).filter_by(name=new_name).first()
+        existing = get_query(Client, current_user, include_archived=True).filter_by(name=new_name).first()
         if existing and existing.id != client_id:
             return jsonify({'error': 'Client with this name already exists'}), 400
         
@@ -3165,7 +3249,7 @@ def update_client(current_user, client_id):
         if not new_code or len(new_code) != 2:
             return jsonify({'error': 'Client code must be exactly 2 characters'}), 400
         
-        existing = get_query(Client, current_user).filter_by(code=new_code).first()
+        existing = get_query(Client, current_user, include_archived=True).filter_by(code=new_code).first()
         if existing and existing.id != client_id:
             return jsonify({'error': 'Client with this code already exists'}), 400
         
@@ -3185,36 +3269,86 @@ def update_client(current_user, client_id):
 @token_required
 @admin_required
 def delete_client(current_user, client_id):
-    client = get_query(Client, current_user).filter_by(id=client_id).first()
+    client = get_query(Client, current_user, include_archived=True).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
     
-    db.session.delete(client)
+    reason = "Client Archived"
+    if request.is_json:
+        data = request.json or {}
+        client_reason = data.get('reason')
+        if client_reason:
+            reason = client_reason
+            
+    client.is_active = False
+    client.archived_at = datetime.utcnow()
+    client.archived_by_id = current_user.id
+    client.archived_reason = reason
+    
+    # Cascade to active projects
+    for project in client.projects:
+        if project.is_active:
+            project.is_active = False
+            project.archived_at = client.archived_at
+            project.archived_by_id = current_user.id
+            project.archived_reason = f"Client Archived: {reason}"
+            
+    # Check if there are time entries or expenses
+    project_ids = [p.id for p in client.projects]
+    has_historical = False
+    if project_ids:
+        has_punches = Punch.query.filter(Punch.project_id.in_(project_ids)).first() is not None
+        has_expenses = Expense.query.filter(Expense.project_id.in_(project_ids)).first() is not None
+        has_historical = has_punches or has_expenses
+        
     db.session.commit()
     
-    return jsonify({'message': 'Client deleted successfully'}), 200
+    if has_historical:
+        return jsonify({'message': 'This record contains historical data and has been archived instead of permanently deleted.'}), 200
+    return jsonify({'message': 'Client archived successfully'}), 200
+
+@app.route('/api/clients/<int:client_id>/restore', methods=['POST'])
+@token_required
+@admin_required
+def restore_client(current_user, client_id):
+    client = get_query(Client, current_user, include_archived=True).filter_by(id=client_id).first()
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+        
+    client.is_active = True
+    client.archived_at = None
+    client.archived_by_id = None
+    client.archived_reason = None
+    
+    # Do NOT automatically restore all Projects.
+    db.session.commit()
+    return jsonify({'message': 'Client restored successfully', 'client': client.to_dict()}), 200
 
 # ==================== PROJECT ROUTES ====================
 @app.route('/api/clients/<int:client_id>/projects', methods=['GET'])
 @token_required
 @admin_required
 def get_client_projects(current_user, client_id):
-    client = get_query(Client, current_user).filter_by(id=client_id).first()
+    client = get_query(Client, current_user, include_archived=True).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
     
-    return jsonify([project.to_dict() for project in client.projects])
+    projects = get_query(Project, current_user).filter_by(client_id=client_id).all()
+    return jsonify([project.to_dict() for project in projects])
 
 @app.route('/api/clients/<int:client_id>/projects', methods=['POST'])
 @token_required
 @admin_required
 def create_project(current_user, client_id):
-    client = get_query(Client, current_user).filter_by(id=client_id).first()
+    client = get_query(Client, current_user, include_archived=True).filter_by(id=client_id).first()
     
     if not client:
         return jsonify({'error': 'Client not found'}), 404
+        
+    if not client.is_active:
+        return jsonify({'error': 'Cannot create project under an archived client.'}), 400
     
     data = request.json
     
@@ -3256,7 +3390,7 @@ def create_project(current_user, client_id):
     service_ids = data.get('service_ids', [])
     primary_svc_id = service_ids[0] if service_ids else None
     
-    generated_code, sequence = generate_project_code_data(client_id, primary_svc_id)
+    generated_code, sequence = generate_project_code_data(client_id, primary_svc_id, client=client)
     if not generated_code:
         return jsonify({'error': 'Failed to generate project code (missing client data)'}), 400
 
@@ -3415,15 +3549,54 @@ def update_project(current_user, project_id):
 @token_required
 @admin_required
 def delete_project(current_user, project_id):
-    project = get_query(Project, current_user).filter_by(id=project_id).first()
+    project = get_query(Project, current_user, include_archived=True).filter_by(id=project_id).first()
     
     if not project:
         return jsonify({'error': 'Project not found'}), 404
+        
+    reason = "Project Archived"
+    if request.is_json:
+        data = request.json or {}
+        project_reason = data.get('reason')
+        if project_reason:
+            reason = project_reason
+            
+    project.is_active = False
+    project.archived_at = datetime.utcnow()
+    project.archived_by_id = current_user.id
+    project.archived_reason = reason
     
-    db.session.delete(project)
+    # Check if there are time entries or expenses
+    has_punches = Punch.query.filter_by(project_id=project.id).first() is not None
+    has_expenses = Expense.query.filter_by(project_id=project.id).first() is not None
+    has_historical = has_punches or has_expenses
+    
     db.session.commit()
     
-    return jsonify({'message': 'Project deleted successfully'}), 200
+    if has_historical:
+        return jsonify({'message': 'This record contains historical data and has been archived instead of permanently deleted.'}), 200
+    return jsonify({'message': 'Project archived successfully'}), 200
+
+@app.route('/api/projects/<int:project_id>/restore', methods=['POST'])
+@token_required
+@admin_required
+def restore_project(current_user, project_id):
+    project = get_query(Project, current_user, include_archived=True).filter_by(id=project_id).first()
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+        
+    # Validate: If parent client is not active, reject request
+    client = get_query(Client, current_user, include_archived=True).filter_by(id=project.client_id).first()
+    if not client or not client.is_active:
+        return jsonify({'error': 'Cannot restore project because its parent client is archived. Please restore the client first.'}), 400
+        
+    project.is_active = True
+    project.archived_at = None
+    project.archived_by_id = None
+    project.archived_reason = None
+    
+    db.session.commit()
+    return jsonify({'message': 'Project restored successfully', 'project': project.to_dict()}), 200
 
 # ==================== PROJECT RATE ROUTES ====================
 @app.route('/api/projects/<int:project_id>/rates', methods=['GET'])
@@ -3553,7 +3726,7 @@ def create_service(current_user):
     if not name:
         return jsonify({'error': 'Service name is required'}), 400
     
-    existing = get_query(Service, current_user).filter_by(name=name).first()
+    existing = get_query(Service, current_user, include_archived=True).filter_by(name=name).first()
     if existing:
         return jsonify({'error': f'Service "{name}" already exists'}), 400
     
@@ -3575,14 +3748,14 @@ def create_service(current_user):
 @token_required
 @admin_required
 def update_service(current_user, service_id):
-    service = get_query(Service, current_user).filter_by(id=service_id).first()
+    service = get_query(Service, current_user, include_archived=True).filter_by(id=service_id).first()
     if not service:
         return jsonify({'error': 'Service not found'}), 404
     
     data = request.json or {}
     name = (data.get('name') or '').strip()
     if name:
-        existing = get_query(Service, current_user).filter_by(name=name).first()
+        existing = get_query(Service, current_user, include_archived=True).filter_by(name=name).first()
         if existing and existing.id != service.id:
             return jsonify({'error': f'Service "{name}" already exists'}), 400
         service.name = name
@@ -3601,13 +3774,40 @@ def update_service(current_user, service_id):
 @token_required
 @admin_required
 def delete_service(current_user, service_id):
-    service = get_query(Service, current_user).filter_by(id=service_id).first()
+    service = get_query(Service, current_user, include_archived=True).filter_by(id=service_id).first()
     if not service:
         return jsonify({'error': 'Service not found'}), 404
+        
+    reason = "Service Archived"
+    if request.is_json:
+        data = request.json or {}
+        service_reason = data.get('reason')
+        if service_reason:
+            reason = service_reason
+            
+    service.is_active = False
+    service.archived_at = datetime.utcnow()
+    service.archived_by_id = current_user.id
+    service.archived_reason = reason
     
-    db.session.delete(service)
     db.session.commit()
-    return jsonify({'message': 'Service deleted successfully'}), 200
+    return jsonify({'message': 'Service archived successfully'}), 200
+
+@app.route('/api/services/<int:service_id>/restore', methods=['POST'])
+@token_required
+@admin_required
+def restore_service(current_user, service_id):
+    service = get_query(Service, current_user, include_archived=True).filter_by(id=service_id).first()
+    if not service:
+        return jsonify({'error': 'Service not found'}), 404
+        
+    service.is_active = True
+    service.archived_at = None
+    service.archived_by_id = None
+    service.archived_reason = None
+    
+    db.session.commit()
+    return jsonify({'message': 'Service restored successfully', 'service': service.to_dict()}), 200
 
 # ==================== CLIENT RATE ROUTES ====================
 # ==================== PROJECT CODE LOOKUP ROUTES ====================

@@ -56,7 +56,8 @@ else:
 print("\n[Setup] Create project...")
 project_resp = requests.post(f"{BASE_URL}/clients/{client_id}/projects", json={
     "name": "Test Project",
-    "code": "TP-001"
+    "code": "TP-001",
+    "contract_type": "time_materials"
 }, headers={"Authorization": f"Bearer {admin_token}"}).json()
 project_id = project_resp["id"]
 project_code = project_resp["code"]
@@ -83,20 +84,21 @@ else:
     print(f"  FAIL: Project not found in list")
     exit(1)
 
-# Register user
+# Register user (via Admin create_employee endpoint)
 print("\n[Setup] Register user...")
 user_email = f"user{random.randint(10000,99999)}@test.com"
-requests.post(f"{BASE_URL}/register", json={
+requests.post(f"{BASE_URL}/employees", json={
     "name": "Test User",
     "email": user_email,
-    "password": "pass123"
-})
+    "password": "Pass123!@#",
+    "reporting_manager": "Admin"
+}, headers={"Authorization": f"Bearer {admin_token}"})
 print(f"  PASS: User registered")
 
 # User login
 user_login = requests.post(f"{BASE_URL}/login", json={
     "email": user_email,
-    "password": "pass123"
+    "password": "Pass123!@#"
 }).json()
 user_token = user_login["token"]
 print("  PASS: User logged in")
@@ -131,7 +133,8 @@ print("\n[TEST 4] Admin updates project code...")
 # Create another project first
 project2_resp = requests.post(f"{BASE_URL}/clients/{client_id}/projects", json={
     "name": "Test Project 2",
-    "code": "TP-002"
+    "code": "TP-002",
+    "contract_type": "time_materials"
 }, headers={"Authorization": f"Bearer {admin_token}"}).json()
 project2_code = project2_resp["code"]
 project2_name = project2_resp["name"]

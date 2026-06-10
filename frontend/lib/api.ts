@@ -255,6 +255,10 @@ export interface Service {
   description?: string | null;
   created_at: string;
   updated_at: string;
+  is_active: boolean;
+  archived_at?: string | null;
+  archived_by?: { id: number; name: string; email: string } | null;
+  archived_reason?: string | null;
 }
 
 
@@ -276,6 +280,10 @@ export interface Project {
   updated_at: string;
   rates: ProjectRate[];
   services: Service[];
+  is_active: boolean;
+  archived_at?: string | null;
+  archived_by?: { id: number; name: string; email: string } | null;
+  archived_reason?: string | null;
 }
 
 export interface Client {
@@ -286,8 +294,11 @@ export interface Client {
   region_code?: string | null;
   created_at: string;
   updated_at: string;
-
   projects?: Project[];
+  is_active: boolean;
+  archived_at?: string | null;
+  archived_by?: { id: number; name: string; email: string } | null;
+  archived_reason?: string | null;
 }
 
 export interface LoginResponse {
@@ -606,8 +617,9 @@ export const employeeApi = {
 };
 
 export const clientApi = {
-  getClients: async (): Promise<Client[]> => {
-    const response = await api.get('/clients');
+  getClients: async (status?: 'active' | 'archived' | 'all'): Promise<Client[]> => {
+    const params = status ? { status } : undefined;
+    const response = await api.get('/clients', { params });
     return response.data;
   },
 
@@ -626,15 +638,21 @@ export const clientApi = {
     return response.data;
   },
 
-  deleteClient: async (clientId: number): Promise<{ message: string }> => {
-    const response = await api.delete(`/clients/${clientId}`);
+  deleteClient: async (clientId: number, reason?: string): Promise<{ message: string }> => {
+    const response = await api.delete(`/clients/${clientId}`, { data: { reason } });
+    return response.data;
+  },
+
+  restoreClient: async (clientId: number): Promise<{ message: string; client: Client }> => {
+    const response = await api.post(`/clients/${clientId}/restore`);
     return response.data;
   },
 };
 
 export const serviceApi = {
-  getServices: async (): Promise<Service[]> => {
-    const response = await api.get('/services');
+  getServices: async (status?: 'active' | 'archived' | 'all'): Promise<Service[]> => {
+    const params = status ? { status } : undefined;
+    const response = await api.get('/services', { params });
     return response.data;
   },
 
@@ -648,15 +666,21 @@ export const serviceApi = {
     return response.data;
   },
 
-  deleteService: async (serviceId: number): Promise<{ message: string }> => {
-    const response = await api.delete(`/services/${serviceId}`);
+  deleteService: async (serviceId: number, reason?: string): Promise<{ message: string }> => {
+    const response = await api.delete(`/services/${serviceId}`, { data: { reason } });
+    return response.data;
+  },
+
+  restoreService: async (serviceId: number): Promise<{ message: string; service: Service }> => {
+    const response = await api.post(`/services/${serviceId}/restore`);
     return response.data;
   },
 };
 
 export const projectApi = {
-  getClientProjects: async (clientId: number): Promise<Project[]> => {
-    const response = await api.get(`/clients/${clientId}/projects`);
+  getClientProjects: async (clientId: number, status?: 'active' | 'archived' | 'all'): Promise<Project[]> => {
+    const params = status ? { status } : undefined;
+    const response = await api.get(`/clients/${clientId}/projects`, { params });
     return response.data;
   },
 
@@ -697,8 +721,13 @@ export const projectApi = {
     return response.data;
   },
 
-  deleteProject: async (projectId: number): Promise<{ message: string }> => {
-    const response = await api.delete(`/projects/${projectId}`);
+  deleteProject: async (projectId: number, reason?: string): Promise<{ message: string }> => {
+    const response = await api.delete(`/projects/${projectId}`, { data: { reason } });
+    return response.data;
+  },
+
+  restoreProject: async (projectId: number): Promise<{ message: string; project: Project }> => {
+    const response = await api.post(`/projects/${projectId}/restore`);
     return response.data;
   },
 
