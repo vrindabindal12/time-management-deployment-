@@ -71,6 +71,8 @@ export interface Employee {
   promotion_5_designation?: string | null;
   profile_photo?: string | null;
   has_set_password?: boolean;
+  organization_name?: string | null;
+  organization_logo?: string | null;
 }
 
 export interface WorkEntry {

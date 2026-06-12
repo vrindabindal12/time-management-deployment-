@@ -180,6 +180,7 @@ class Organization(db.Model):
         super().__init__(**kwargs)
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
+    logo = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Employee(db.Model):
@@ -195,6 +196,7 @@ class Employee(db.Model):
     is_superadmin = db.Column(db.Boolean, default=False)
     role = db.Column(db.String(50), nullable=False, default='employee')
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
+    organization = db.relationship('Organization', backref=db.backref('employees', lazy=True))
     employee_code = db.Column(db.String(50), unique=True, nullable=True)
     designation = db.Column(db.String(120), nullable=True)
     reporting_manager = db.Column(db.String(120), nullable=True)
@@ -262,6 +264,8 @@ class Employee(db.Model):
             'promotion_5_rate': self.promotion_5_rate,
             'promotion_5_designation': self.promotion_5_designation,
             'profile_photo': self.profile_photo,
+            'organization_name': self.organization.name if self.organization else None,
+            'organization_logo': self.organization.logo if self.organization else None,
             'has_set_password': self.password_reset_token is None
         }
 
@@ -1002,6 +1006,24 @@ def ensure_service_schema():
                 db.session.rollback()
 
 
+def ensure_organization_logo_schema():
+    """Add logo column to Organization table for existing databases."""
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(organization)")).fetchall()
+        }
+        if 'logo' not in existing:
+            db.session.execute(text("ALTER TABLE organization ADD COLUMN logo TEXT"))
+            db.session.commit()
+    else:
+        try:
+            db.session.execute(text("ALTER TABLE organization ADD COLUMN logo TEXT"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
 def ensure_project_sequence_schema():
     """Ensures all projects have sequence numbers and correctly formatted project codes."""
     try:
@@ -1157,6 +1179,22 @@ def parse_profile_photo(value, field_name='profile_photo'):
     if len(photo_data) > 2_000_000:
         raise ValueError(f'{field_name} is too large')
     return photo_data
+
+
+def parse_organization_logo(value, field_name='logo'):
+    if value is None or value == '':
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f'{field_name} must be a string')
+
+    logo_data = value.strip()
+    if not logo_data:
+        return None
+    if not any(logo_data.startswith(p) for p in _ALLOWED_PHOTO_PREFIXES):
+        raise ValueError(f'{field_name} must be a JPEG, PNG, GIF, or WebP image')
+    if len(logo_data) > 2_500_000:
+        raise ValueError(f'{field_name} is too large')
+    return logo_data
 
 
 def apply_employee_profile(employee, data):
@@ -1430,6 +1468,7 @@ if not os.environ.get('VERCEL'):
             ensure_expenses_schema()
             ensure_client_schema()
             ensure_service_schema()
+            ensure_organization_logo_schema()
             ensure_project_sequence_schema()
             # Backfill legacy rows where description may be null from older schema versions.
             legacy_null_descriptions = Punch.query.filter(Punch.description.is_(None)).all()
@@ -1515,9 +1554,17 @@ def register_organization():
     if Employee.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already exists'}), 400
         
+    logo_raw = data.get('logo')
+    logo = None
+    if logo_raw:
+        try:
+            logo = parse_organization_logo(logo_raw)
+        except ValueError as val_err:
+            return jsonify({'error': str(val_err)}), 400
+
     try:
         # Create organization
-        org = Organization(name=data['company_name'].strip())
+        org = Organization(name=data['company_name'].strip(), logo=logo)
         db.session.add(org)
         db.session.flush() # To get org.id
         

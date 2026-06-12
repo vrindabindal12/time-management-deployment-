@@ -79,23 +79,23 @@ export default function Header() {
       ? 'bg-gradient-to-r from-violet-500 to-indigo-600 text-white'
       : 'bg-gradient-to-r from-slate-400 to-slate-500 text-white');
 
+  const logoSrc = user?.organization_logo || "/assets/bkp-logo.png";
+  const orgName = user?.organization_name || "BKP";
+
   return (
     <header className="sticky top-0 z-40 glass-panel border-b border-white/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
           {/* Company Logo/Name */}
           <div className="flex items-center gap-3">
-            <Image
-              src="/assets/bkp-logo.png"
-              alt="BKP - Your Knowledge Partners"
-              width={180}
-              height={60}
-              className="h-12 w-auto object-contain"
-              priority
+            <img
+              src={logoSrc}
+              alt={orgName}
+              className="h-12 w-auto object-contain max-w-[180px]"
             />
             <div>
               <h1 className="text-slate-900 font-bold text-xl md:text-2xl tracking-tight">
-                BKP
+                {orgName}
               </h1>
               <p className="text-slate-600 text-xs md:text-sm">Atlas</p>
             </div>
