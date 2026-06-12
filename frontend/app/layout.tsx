@@ -7,8 +7,8 @@ import Header from '@/components/Header'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'BKP Cygnus - Time Tracking',
-  description: 'Employee time tracking system for BKP Cygnus Consulting Inc.',
+  title: 'Time Tracking',
+  description: 'Employee time tracking system',
 }
 
 export default function RootLayout({
