@@ -1491,25 +1491,27 @@ export default function AdminDashboard() {
           <div className="flex">
             <button
               onClick={() => setActiveTab('onboarding')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'onboarding'
+              className={`flex-1 px-2 sm:px-6 py-3 sm:py-4 text-xs sm:text-base font-semibold transition text-center ${activeTab === 'onboarding'
                 ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
                 : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
                 }`}
             >
-              Employee Management
+              <span className="hidden sm:inline">Employee Management</span>
+              <span className="inline sm:hidden">Employees</span>
             </button>
             <button
               onClick={() => setActiveTab('clients')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'clients'
+              className={`flex-1 px-2 sm:px-6 py-3 sm:py-4 text-xs sm:text-base font-semibold transition text-center ${activeTab === 'clients'
                 ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
                 : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
                 }`}
             >
-              Clients & Projects
+              <span className="hidden sm:inline">Clients & Projects</span>
+              <span className="inline sm:hidden">Clients</span>
             </button>
             <button
               onClick={() => setActiveTab('invoicing')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'invoicing'
+              className={`flex-1 px-2 sm:px-6 py-3 sm:py-4 text-xs sm:text-base font-semibold transition text-center ${activeTab === 'invoicing'
                 ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
                 : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
                 }`}
@@ -1518,7 +1520,7 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('payables')}
-              className={`flex-1 px-6 py-4 font-semibold transition text-center ${activeTab === 'payables'
+              className={`flex-1 px-2 sm:px-6 py-3 sm:py-4 text-xs sm:text-base font-semibold transition text-center ${activeTab === 'payables'
                 ? 'text-blue-700 border-b-2 border-blue-600 bg-white/50'
                 : 'text-slate-600 hover:text-slate-800 border-b-2 border-transparent'
                 }`}
@@ -1662,14 +1664,14 @@ export default function AdminDashboard() {
         {activeTab === 'onboarding' && (
           <div className="space-y-6">
             <div className="glass-panel rounded-3xl p-6">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-800">Employee Management</h2>
                   <p className="text-sm text-slate-600 mt-1">Create employee + compensation/promotion profile in one step.</p>
                 </div>
                 <button
                   onClick={() => { setShowOnboardingForm(true); setShowOnboardingPassword(false); setOnboardingEmailError(null); setOnboardingPasswordError(null); }}
-                  className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition"
+                  className="glass-primary-btn hover:brightness-95 text-white px-4 py-2 rounded-xl transition whitespace-nowrap self-start sm:self-auto"
                 >
                   + Add Employee Profile
                 </button>
@@ -3146,7 +3148,7 @@ export default function AdminDashboard() {
             {payablesReport && (
               <div className="glass-panel rounded-3xl p-6">
                 <div className="mb-4 rounded-2xl border border-white/70 bg-white/60 p-4">
-                  <div className="grid grid-cols-2 md:grid-cols-[1fr_auto_auto_auto] items-center gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-[1fr_auto_auto_auto] items-center gap-3">
                     <div>
                       <p className="text-sm text-slate-600">
                         Period: {payablesReport.start_date} to {payablesReport.end_date}
@@ -3465,7 +3467,7 @@ export default function AdminDashboard() {
         >
           <div className="w-full max-w-4xl glass-panel rounded-3xl shadow-2xl flex flex-col max-h-[92vh]">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/30 shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 pt-6 pb-4 border-b border-white/30 shrink-0">
               <div>
                 <h3 className="text-2xl font-black text-slate-900">Add Employee Profile</h3>
                 <p className="text-sm text-slate-500 mt-0.5">Create employee + compensation/promotion profile in one step.</p>
@@ -3473,7 +3475,7 @@ export default function AdminDashboard() {
               <button
                 type="button"
                 onClick={() => { setShowOnboardingForm(false); setOnboardingForm(emptyOnboardingForm); setOnboardingEmailError(null); setOnboardingPasswordError(null); }}
-                className="px-4 py-2 rounded-xl bg-white/70 border border-white/70 text-slate-700 text-sm font-semibold hover:bg-white/90 transition"
+                className="px-4 py-2 rounded-xl bg-white/70 border border-white/70 text-slate-700 text-sm font-semibold hover:bg-white/90 transition self-start sm:self-auto whitespace-nowrap"
               >
                 Cancel
               </button>
