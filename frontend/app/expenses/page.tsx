@@ -14,7 +14,7 @@ const formatLocalDate = (date: Date) => {
 
 const getWeekStart = (date: Date) => {
   const d = new Date(date);
-  const day = d.getDay(); 
+  const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
@@ -30,7 +30,7 @@ interface ExpenseWeeklyRow {
   projectName: string;
   expenseType: string;
   projectId: number | null;
-  dayEntries: Record<string, { id?: number; amount: number } | null>; 
+  dayEntries: Record<string, { id?: number; amount: number } | null>;
   rowTotal: number;
   isNew?: boolean;
 }
@@ -67,7 +67,7 @@ export default function Expenses() {
 
   // Hide Project Confirmation state
   const [hideConfirmProject, setHideConfirmProject] = useState<Project | null>(null);
-  
+
   // Unhide Project Confirmation state - NEW
   const [unhideConfirmProject, setUnhideConfirmProject] = useState<Project | null>(null);
 
@@ -156,9 +156,9 @@ export default function Expenses() {
     try {
       const weekStr = formatLocalDate(anchor);
       const data = await employeeApi.getMyExpenses(weekStr);
-      
+
       const rowsMap = new Map<string, ExpenseWeeklyRow>();
-      
+
       (data.expenses || []).forEach((entry: any) => {
         const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.expense_type}`;
         if (!rowsMap.has(key)) {
@@ -189,7 +189,7 @@ export default function Expenses() {
   const handleDeleteRow = async (rowIdx: number) => {
     const row = weeklyRows[rowIdx];
     const hasEntries = Object.values(row.dayEntries).some(e => e !== null && e !== undefined);
-    
+
     setSaving(true);
     setError(null);
     try {
@@ -200,7 +200,7 @@ export default function Expenses() {
           }
         }
       }
-      
+
       const updated = [...weeklyRows];
       updated.splice(rowIdx, 1);
       setWeeklyRows(updated);
@@ -238,7 +238,7 @@ export default function Expenses() {
 
     try {
       const weekStr = formatLocalDate(weekAnchorDate);
-      
+
       if (amount === 0) {
         if (existingEntry && existingEntry.id) {
           await employeeApi.deleteExpense(existingEntry.id);
@@ -253,9 +253,9 @@ export default function Expenses() {
           amount,
           week_start_date: weekStr
         };
-        
+
         await employeeApi.saveExpense(saveData);
-        
+
         row.dayEntries[dateKey] = { id: existingEntry?.id, amount };
       }
 
@@ -362,12 +362,12 @@ export default function Expenses() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row gap-6 mb-6">
-          <div className="glass-panel flex-1 rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="glass-panel flex-1 rounded-3xl p-5 sm:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h2 className="text-2xl font-black text-slate-900">Expenses</h2>
-              <p className="text-slate-600">Log your weekly expenses by project</p>
+              <p className="text-slate-600 text-sm sm:text-base">Log your weekly expenses by project</p>
             </div>
-            <div className="text-right">
+            <div className="text-left md:text-right w-full md:w-auto">
               <p className="font-semibold text-slate-800">{user.name}</p>
               <p className="text-sm text-slate-500"><LiveClock /></p>
             </div>
@@ -386,19 +386,18 @@ export default function Expenses() {
           </div>
         )}
 
-        {/* Week Selector */}
-        <div className="flex justify-center items-center gap-4 mb-6">
+        <div className="flex flex-wrap justify-center items-center gap-3 mb-6">
           <button
             onClick={() => {
               const prev = new Date(weekAnchorDate);
               prev.setDate(prev.getDate() - 7);
               setWeekAnchorDate(prev);
             }}
-            className="p-2 rounded-xl bg-white/80 border border-slate-200 hover:bg-slate-50 transition shadow-sm"
+            className="order-2 sm:order-1 flex-1 sm:flex-initial p-2 rounded-xl bg-white/80 border border-slate-200 hover:bg-slate-50 transition shadow-sm text-sm sm:text-base text-center"
           >
             ◀ Previous Week
           </button>
-          <div className="glass-panel px-6 py-2 rounded-2xl font-bold text-slate-800 shadow-sm border border-white/60">
+          <div className="order-1 sm:order-2 w-full sm:w-auto text-center glass-panel px-6 py-2 rounded-2xl font-bold text-slate-800 shadow-sm border border-white/60">
             {formatDateShort(weekDates[0])} — {formatDateShort(weekDates[6])}
           </div>
           <button
@@ -407,7 +406,7 @@ export default function Expenses() {
               next.setDate(next.getDate() + 7);
               setWeekAnchorDate(next);
             }}
-            className="p-2 rounded-xl bg-white/80 border border-slate-200 hover:bg-slate-50 transition shadow-sm"
+            className="order-3 flex-1 sm:flex-initial p-2 rounded-xl bg-white/80 border border-slate-200 hover:bg-slate-50 transition shadow-sm text-sm sm:text-base text-center"
           >
             Next Week ▶
           </button>
@@ -484,7 +483,7 @@ export default function Expenses() {
                           );
                         })}
                         <td className="px-2 py-2 text-center font-bold text-emerald-700">
-${row.rowTotal.toFixed(2)}
+                          ${row.rowTotal.toFixed(2)}
                         </td>
                         <td className="px-2 py-2 text-center">
                           <button
@@ -512,11 +511,11 @@ ${row.rowTotal.toFixed(2)}
                     <td className="px-2 py-4 text-slate-800" colSpan={3}>Totals</td>
                     {dailyTotals.map((total, idx) => (
                       <td key={idx} className="px-1 py-4 text-center text-emerald-700">
-{total > 0 ? `${total.toFixed(2)}` : '-'}
+                        {total > 0 ? `${total.toFixed(2)}` : '-'}
                       </td>
                     ))}
                     <td className="px-2 py-4 text-center text-emerald-900 bg-emerald-50/50">
-${grandTotal.toFixed(2)}
+                      ${grandTotal.toFixed(2)}
                     </td>
                     <td className="px-2 py-4"></td>
                   </tr>
@@ -572,12 +571,12 @@ ${grandTotal.toFixed(2)}
             </div>
           )}
 
-          <div className="mt-6 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-2">
-            <div className="flex flex-col gap-1">
+          <div className="mt-6 flex flex-col md:flex-row justify-between items-start md:items-center text-xs text-slate-500 gap-3">
+            <div className="flex flex-col gap-1 text-left">
               <p className="font-semibold text-slate-700">💡 Tip: Expenses are automatically included in client invoices (always billable).</p>
               <p>* You can only edit entries for the last 14 days.</p>
             </div>
-<p className="text-right">All amounts in $. Step: $0.01 | Max: $999.99 per day</p>
+            <p className="text-left md:text-right w-full md:w-auto">All amounts in $.</p>
           </div>
         </div>
 
@@ -600,7 +599,7 @@ ${grandTotal.toFixed(2)}
                   />
                   {showProjectDropdown && filteredProjects.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-2 glass-panel border border-slate-200 rounded-xl shadow-xl z-10 max-h-60 overflow-y-auto">
-{filteredProjects.map(p => (
+                      {filteredProjects.map(p => (
                         <div
                           key={p.id}
                           onClick={() => selectProject(p)}
