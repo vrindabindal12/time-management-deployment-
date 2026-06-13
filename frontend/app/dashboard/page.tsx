@@ -384,12 +384,12 @@ export default function Dashboard() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row gap-6 mb-6">
-          <div className="glass-panel flex-1 rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="glass-panel flex-1 rounded-3xl p-5 sm:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h2 className="text-2xl font-black text-slate-900">Timesheet</h2>
-              <p className="text-slate-600">Log your working hours for the week</p>
+              <p className="text-slate-600 text-sm sm:text-base">Log your working hours for the week</p>
             </div>
-            <div className="text-right">
+            <div className="text-left md:text-right w-full md:w-auto">
               <p className="font-semibold text-slate-800">{user.name}</p>
               <p className="text-sm text-slate-500"><LiveClock /></p>
             </div>
@@ -415,19 +415,18 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Week Selector */}
-        <div className="flex flex-wrap justify-center items-center gap-4 mb-6">
+        <div className="flex flex-wrap justify-center items-center gap-3 mb-6">
           <button
             onClick={() => {
               const prev = new Date(weekAnchorDate);
               prev.setDate(prev.getDate() - 7);
               setWeekAnchorDate(prev);
             }}
-            className="p-2 rounded-xl bg-white/80 border border-slate-200 hover:bg-slate-50 transition shadow-sm"
+            className="order-2 sm:order-1 flex-1 sm:flex-initial p-2 rounded-xl bg-white/80 border border-slate-200 hover:bg-slate-50 transition shadow-sm text-sm sm:text-base text-center"
           >
             ◀ Previous Week
           </button>
-          <div className="glass-panel px-6 py-2 rounded-2xl font-bold text-slate-800 shadow-sm border border-white/60">
+          <div className="order-1 sm:order-2 w-full sm:w-auto text-center glass-panel px-6 py-2 rounded-2xl font-bold text-slate-800 shadow-sm border border-white/60">
             {formatDateShort(weekDates[0])} — {formatDateShort(weekDates[6])}
           </div>
           <button
@@ -436,7 +435,7 @@ export default function Dashboard() {
               next.setDate(next.getDate() + 7);
               setWeekAnchorDate(next);
             }}
-            className="p-2 rounded-xl bg-white/80 border border-slate-200 hover:bg-slate-50 transition shadow-sm"
+            className="order-3 flex-1 sm:flex-initial p-2 rounded-xl bg-white/80 border border-slate-200 hover:bg-slate-50 transition shadow-sm text-sm sm:text-base text-center"
           >
             Next Week ▶
           </button>
@@ -603,12 +602,12 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="mt-6 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-2">
-            <div className="flex flex-col gap-1">
+          <div className="mt-6 flex flex-col md:flex-row justify-between items-start md:items-center text-xs text-slate-500 gap-3">
+            <div className="flex flex-col gap-1 text-left">
               <p className="font-semibold text-slate-700">💡 Tip: Clicking anywhere on the screen after typing will automatically save your entry.</p>
               <p>* You can only edit entries for the last 14 days.</p>
             </div>
-            <p className="text-right">Entries older than 14 days or in the future are locked.</p>
+            <p className="text-left md:text-right w-full md:w-auto">Entries older than 14 days or in the future are locked.</p>
           </div>
         </div>
 
