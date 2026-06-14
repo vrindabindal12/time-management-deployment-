@@ -66,6 +66,9 @@ export default function Dashboard() {
   // Hide Project Confirmation state
   const [hideConfirmProject, setHideConfirmProject] = useState<Project | null>(null);
 
+  // Unhide Project Confirmation state
+  const [unhideConfirmProject, setUnhideConfirmProject] = useState<Project | null>(null);
+
   const router = useRouter();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -119,8 +122,9 @@ export default function Dashboard() {
     try {
       setSaving(true);
       await employeeApi.hideProject(projectId);
-      setProjects(prev => prev.filter(p => p.id !== projectId));
-      setFilteredProjects(prev => prev.filter(p => p.id !== projectId));
+      // Reload projects to get fresh hidden status
+      await loadProjects();
+      setFilteredProjects([]);
       setSuccess('Project hidden from your list');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -129,6 +133,29 @@ export default function Dashboard() {
     } finally {
       setSaving(false);
       setHideConfirmProject(null);
+    }
+  };
+
+  const handleUnhideProject = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    setUnhideConfirmProject(project);
+  };
+
+  const executeUnhideProject = async (projectId: number) => {
+    try {
+      setSaving(true);
+      await employeeApi.unhideProject(projectId);
+      // Reload projects to restore visibility
+      await loadProjects();
+      setFilteredProjects(prev => prev.filter(p => p.id !== projectId ? p : { ...p, hidden: false }));
+      setSuccess('Project unhidden and restored to normal');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Failed to unhide project:', err);
+      setError('Failed to unhide project');
+    } finally {
+      setSaving(false);
+      setUnhideConfirmProject(null);
     }
   };
 
@@ -634,22 +661,35 @@ export default function Dashboard() {
                         <div
                           key={p.id}
                           onClick={() => selectProject(p)}
-                          className="w-full text-left px-4 py-3 hover:bg-blue-50 transition border-b border-slate-50 last:border-0 flex justify-between items-center group cursor-pointer"
+                          className={`w-full text-left px-4 py-3 hover:bg-blue-50 transition border-b border-slate-50 last:border-0 flex justify-between items-center group cursor-pointer
+                            ${p.hidden ? 'opacity-50 text-gray-400' : ''}`}
                         >
                           <div>
-                            <div className="font-bold text-slate-800">{p.code}</div>
-                            <div className="text-xs text-slate-500">{p.name}</div>
+                            <div className={`font-bold ${p.hidden ? 'text-gray-500' : 'text-slate-800'}`}>{p.code}</div>
+                            <div className={`text-xs ${p.hidden ? 'text-gray-400' : 'text-slate-500'}`}>{p.name}</div>
                           </div>
-                          <button
-                            onClick={(e) => handleHideProject(e, p)}
-                            className="p-1.5 opacity-40 hover:opacity-100 hover:bg-red-50 hover:text-red-500 rounded-lg text-slate-400 transition ml-2"
-                            title="Hide from my list"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                              <line x1="18" y1="6" x2="6" y2="18"></line>
-                              <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {p.hidden ? (
+                              <button
+                                onClick={(e) => handleUnhideProject(e, p)}
+                                className="text-green-600 hover:text-green-800 p-1.5 rounded-lg hover:bg-green-50 transition ml-1"
+                                title="Unhide Project (✔)"
+                              >
+                                ✔
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => handleHideProject(e, p)}
+                                className="p-1.5 opacity-40 hover:opacity-100 hover:bg-red-50 hover:text-red-500 rounded-lg text-slate-400 transition ml-2"
+                                title="Hide from my list"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -749,6 +789,39 @@ export default function Dashboard() {
                     className="flex-1 bg-slate-800 text-white px-4 py-3 rounded-xl font-bold hover:bg-slate-900 transition shadow-lg shadow-slate-200"
                   >
                     Hide
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unhide Project Confirmation Modal */}
+        {unhideConfirmProject !== null && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="glass-panel w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-white/50 animate-in fade-in zoom-in duration-200">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6 9 17l-5-5"></path>
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">Unhide Project?</h3>
+                <p className="text-slate-600 mb-6 text-sm">
+                  Unhide <strong>{unhideConfirmProject.code}</strong> so it appears normally in your project list?
+                </p>
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={() => setUnhideConfirmProject(null)}
+                    className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => executeUnhideProject(unhideConfirmProject.id)}
+                    className="flex-1 bg-emerald-600 text-white px-4 py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-lg shadow-emerald-200"
+                  >
+                    Unhide ✔
                   </button>
                 </div>
               </div>
