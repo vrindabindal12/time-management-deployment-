@@ -3,173 +3,125 @@
 ## Prerequisites
 
 Make sure you have the following installed:
-- Python 3.8 or higher
-- Node.js 16 or higher
+- Python 3.10 or higher
+- Node.js 18 or higher
 - npm (comes with Node.js)
+
+---
 
 ## Quick Start
 
 ### Option 1: Using Start Scripts (Recommended)
+
+**On Windows:**
+Double-click or run:
+```bash
+start.bat
+```
 
 **On Mac/Linux:**
 ```bash
 chmod +x start.sh
 ./start.sh
 ```
+*These scripts will create python virtual environments, install dependencies for both folders, and start the development servers.*
 
-**On Windows:**
-```bash
-start.bat
-```
+---
 
 ### Option 2: Manual Setup
 
-**Terminal 1 - Backend:**
+**Terminal 1 - Backend (Flask API):**
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On Mac/Linux:
+source venv/bin/activate
+
+# Install dependencies & run
 pip install -r requirements.txt
 python app.py
 ```
 
-**Terminal 2 - Frontend:**
+**Terminal 2 - Frontend (Next.js):**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## Access the Application
+---
 
-Open your browser and go to:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+## Environment Variables
 
-## First Steps
+### 1. Backend (`backend/.env`)
+Create a `.env` file in the `backend/` directory:
+```env
+SECRET_KEY=generate-a-long-random-string-here
+ADMIN_EMAIL=admin@yourcompany.com
+ADMIN_PASSWORD=securetempadminpassword
+```
+*(Optionally configure `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD` for automated email notifications).*
 
-1. **Admin Login**
-   - Open http://localhost:3000
-   - You'll be redirected to login page
-   - Login with admin credentials from your backend `.env`:
-     - `ADMIN_EMAIL`
-     - `ADMIN_PASSWORD`
-   - You'll be redirected to the admin dashboard
+### 2. Frontend (`frontend/.env.local`)
+Create a `.env.local` file in the `frontend/` directory:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+```
 
-2. **⚠️ IMPORTANT: Change Admin Password**
-   - Click "Settings" in the admin dashboard
-   - Change the default password immediately
-   - Use a strong password (12+ characters recommended)
+---
 
-3. **Add Employees** (Admin only)
-   - In admin dashboard, click "Add New Employee"
-   - Enter name, email, and set a password
-   - Give the credentials to the employee
-   - Employee should change their password after first login
+## First Steps & Workflows
 
-4. **Employee Login**
-   - Employees go to http://localhost:3000
-   - Login with credentials provided by admin
-   - OR self-register at `/register`
-   - After login, go to Settings to change password
+### 1. Initial Admin Configuration
+1. Open the UI at **http://localhost:3000** (you will be redirected to `/login`).
+2. Log in using your configured `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+3. Go to **Settings** and update the admin password.
 
-5. **Punch In/Out** (Employee)
-   - In employee dashboard, click "Punch In"
-   - Work...
-   - Click "Punch Out" when done
-   - View your history in "View My History"
+### 2. Onboard Employees
+1. Navigate to the **Employees** tab in the Admin Dashboard.
+2. Click **Onboard Employee** and fill in details (Name, Email, Designation, Role, Start Date, Base Hourly Rate).
+3. The employee will receive an automated welcome email with a link to set their password.
 
-6. **View Reports** (Admin only)
-   - Admin can view any employee's history
-   - Generate full reports with statistics
-   - Monitor employee punch status
+### 3. Setup Clients and Projects
+1. Go to the **Clients** tab and create a new client (inputting code and geography).
+2. Go to **Projects** and create a project for that client. Select a contract type (e.g. `Fixed Fee`, `Time & Materials`), standard rates, is-billable status, and associated service lines. 
+3. The system automatically registers the project and generates a project code.
+
+### 4. Logging Hours (Employee View)
+1. Employees log in at **http://localhost:3000**.
+2. On the **Time Sheet** grid, click **+ Add Row**, select a project, and enter the task description.
+3. Type the hours worked under each weekday column (totals and grand totals recalculate in real-time). Clicking outside the input or tab-navigating auto-saves the entry.
+4. Note: Entries older than 14 days or in the future are locked automatically.
+5. In the **Expenses** tab, employees can add rows to report Travel, Food, and other costs per project.
+
+### 5. Reviewing Payables & Invoicing (Admin View)
+1. Go to the **Admin Panel** and run the **Client Invoice Report** for any client and date range. You can adjust invoice parameters and export to PDF or Excel.
+2. Go to the **Employee Payables Report** to review worked hours, apply non-billable rates, tick entries as paid/reviewed, and track employee compensation.
+
+---
 
 ## Troubleshooting
 
-### Backend Issues
+### Port 5000 is Busy (Backend Failures)
+If the Flask server says the port is already in use:
+* **Windows:**
+  ```powershell
+  # Find PID using port 5000
+  netstat -ano | findstr :5000
+  # Kill task by PID
+  taskkill /PID <PID> /F
+  ```
+* **Mac/Linux:**
+  ```bash
+  kill -9 $(lsof -t -i:5000)
+  ```
 
-**Port already in use:**
-```bash
-# Kill process on port 5000
-lsof -ti:5000 | xargs kill -9  # Mac/Linux
-netstat -ano | findstr :5000   # Windows (note the PID and use Task Manager)
-```
-
-**Module not found:**
-```bash
-pip install -r requirements.txt --force-reinstall
-```
-
-### Frontend Issues
-
-**Port already in use:**
-```bash
-# Kill process on port 3000
-lsof -ti:3000 | xargs kill -9  # Mac/Linux
-netstat -ano | findstr :3000   # Windows
-```
-
-**Dependencies error:**
-```bash
-rm -rf node_modules package-lock.json
-npm install
-```
-
-**API connection error:**
-- Make sure backend is running on port 5000
-- Check `.env.local` file has correct API URL
-- Try accessing http://localhost:5000/api/employees directly
-
-## Common Commands
-
-### Backend
-```bash
-# Activate virtual environment
-source venv/bin/activate  # Mac/Linux
-venv\Scripts\activate     # Windows
-
-# Install new package
-pip install package-name
-pip freeze > requirements.txt
-
-# Deactivate virtual environment
-deactivate
-```
-
-### Frontend
-```bash
-# Install new package
-npm install package-name
-
-# Build for production
-npm run build
-npm start
-
-# Clear cache
-rm -rf .next
-```
-
-## Database
-
-The SQLite database (`timetracking.db`) is automatically created in the `backend/` directory when you first run the application.
-
-**Reset database:**
-```bash
-cd backend
-rm timetracking.db
-python app.py  # Will recreate the database
-```
-
-## Development Tips
-
-1. **Auto-reload is enabled** for both frontend and backend
-2. **Check console logs** for errors in browser dev tools
-3. **Backend logs** appear in the terminal running Flask
-4. **Use API testing tools** like Postman or curl for testing endpoints
-
-## Need Help?
-
-- Check the main README.md for detailed documentation
-- Review API endpoints in the backend/app.py file
-- Inspect browser console for frontend errors
-- Check terminal output for backend errors
+### Reset Database
+To reset the SQLite database completely:
+1. Stop the backend server.
+2. Delete `backend/timetracking.db`.
+3. Restart the backend (`python app.py`). The tables and default admin will be re-created automatically.
