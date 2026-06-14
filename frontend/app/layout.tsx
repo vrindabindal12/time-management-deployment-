@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Time Tracking',
-  description: 'Employee time tracking system',
+  description: 'Employee Time Tracking System',
 }
 
 export default function RootLayout({
