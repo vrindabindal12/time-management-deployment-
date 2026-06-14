@@ -138,7 +138,7 @@ export default function Expenses() {
       await employeeApi.unhideProject(projectId);
       // Reload projects to restore visibility
       await loadProjects();
-      setFilteredProjects(prev => prev.filter(p => p.id !== projectId ? p : { ...p, hidden: false }));
+      setFilteredProjects(prev => prev.map(p => p.id === projectId ? { ...p, hidden: false } : p));
       setSuccess('Project unhidden and restored to normal');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
