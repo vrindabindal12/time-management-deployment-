@@ -129,6 +129,7 @@ export default function MyHistory() {
       {
         projectCode: string;
         projectName: string;
+        requester: string;
         task: string;
         dayHours: Record<string, number>;
         rowTotal: number;
@@ -137,11 +138,12 @@ export default function MyHistory() {
 
     weeklyData.work_entries.forEach((entry: any) => {
       const dateKey = entry.work_date;
-      const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.description || ''}`;
+      const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.requester || ''}||${entry.description || ''}`;
       if (!rowsByKey.has(key)) {
         rowsByKey.set(key, {
           projectCode: entry.project_code || '-',
           projectName: entry.project_name || '-',
+          requester: entry.requester || 'Not recorded',
           task: entry.description || '-',
           dayHours: {},
           rowTotal: 0,
@@ -154,7 +156,7 @@ export default function MyHistory() {
     });
 
     return Array.from(rowsByKey.values()).sort((a, b) =>
-      `${a.projectCode}-${a.projectName}-${a.task}`.localeCompare(`${b.projectCode}-${b.projectName}-${b.task}`)
+      `${a.projectCode}-${a.projectName}-${a.requester}-${a.task}`.localeCompare(`${b.projectCode}-${b.projectName}-${b.requester}-${b.task}`)
     );
   })();
 
@@ -325,6 +327,9 @@ export default function MyHistory() {
                       Project Name
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Requester
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Hours
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -338,7 +343,7 @@ export default function MyHistory() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {totalRecords === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                         No work entries found
                       </td>
                     </tr>
@@ -353,6 +358,9 @@ export default function MyHistory() {
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900">
                           {entry.project_name}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {entry.requester || 'Not recorded'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600">
                           {entry.hours_worked.toFixed(2)} hrs
@@ -471,6 +479,7 @@ export default function MyHistory() {
                   <tr className="bg-yellow-200">
                     <th className="px-3 py-2 text-left font-semibold">Project Code</th>
                     <th className="px-3 py-2 text-left font-semibold">Project Name</th>
+                    <th className="px-3 py-2 text-left font-semibold">Requester</th>
                     <th className="px-3 py-2 text-left font-semibold">Task performed</th>
                     {weekDates.map((d) => (
                       <th key={formatLocalDate(d)} className="px-3 py-2 text-center font-semibold whitespace-nowrap">
@@ -483,15 +492,16 @@ export default function MyHistory() {
                 <tbody>
                   {weeklyRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-6 text-center text-gray-500">
+                      <td colSpan={12} className="px-4 py-6 text-center text-gray-500">
                         No weekly entries found
                       </td>
                     </tr>
                   ) : (
                     weeklyRows.map((row, idx) => (
-                      <tr key={`${row.projectCode}-${row.projectName}-${idx}`} className="border-b border-gray-100">
+                      <tr key={`${row.projectCode}-${row.projectName}-${row.requester}-${idx}`} className="border-b border-gray-100">
                         <td className="px-3 py-2">{row.projectCode}</td>
                         <td className="px-3 py-2">{row.projectName}</td>
+                        <td className="px-3 py-2">{row.requester}</td>
                         <td className="px-3 py-2 align-top">
                           <span className="block whitespace-pre-line break-words max-w-[200px]" title={row.task}>{row.task}</span>
                         </td>
@@ -512,7 +522,7 @@ export default function MyHistory() {
                 {weeklyRows.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-100 font-semibold">
-                      <td className="px-3 py-2" colSpan={3}>Totals</td>
+                      <td className="px-3 py-2" colSpan={4}>Totals</td>
                       {weeklyDayTotals.map((total, idx) => (
                         <td key={idx} className="px-3 py-2 text-center">{total > 0 ? total.toFixed(1) : '-'}</td>
                       ))}

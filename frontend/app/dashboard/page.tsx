@@ -28,6 +28,7 @@ const formatDateShort = (date: Date) => {
 interface WeeklyRow {
   projectCode: string;
   projectName: string;
+  requester: string;
   task: string;
   projectId: number | null;
   dayEntries: Record<string, WorkEntry | null>; // dateKey -> WorkEntry
@@ -56,6 +57,7 @@ export default function Dashboard() {
   const [showAddRow, setShowAddRow] = useState(false);
   const [newRowProject, setNewRowProject] = useState<Project | null>(null);
   const [newRowTask, setNewRowTask] = useState('');
+  const [newRowRequester, setNewRowRequester] = useState('');
   const [projectSearch, setProjectSearch] = useState('');
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
@@ -182,11 +184,12 @@ export default function Dashboard() {
       
       const entries = data.work_entries || [];
       entries.forEach((entry) => {
-        const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.description || ''}`;
+        const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.requester || ''}||${entry.description || ''}`;
         if (!rowsMap.has(key)) {
           rowsMap.set(key, {
             projectCode: entry.project_code || '-',
             projectName: entry.project_name || '-',
+            requester: entry.requester || '',
             task: entry.description || '',
             projectId: entry.project_id,
             dayEntries: {},
@@ -201,11 +204,12 @@ export default function Dashboard() {
       // Pre-fill from previous week
       const prevEntries = prevData.work_entries || [];
       prevEntries.forEach((entry) => {
-        const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.description || ''}`;
+        const key = `${entry.project_code || '-'}||${entry.project_name || '-'}||${entry.requester || ''}||${entry.description || ''}`;
         if (!rowsMap.has(key)) {
           rowsMap.set(key, {
             projectCode: entry.project_code || '-',
             projectName: entry.project_name || '-',
+            requester: entry.requester || '',
             task: entry.description || '',
             projectId: entry.project_id,
             dayEntries: {},
@@ -294,6 +298,7 @@ export default function Dashboard() {
             work_date: dateKey,
             hours_worked: hours,
             description: row.task,
+            requester: row.requester,
             client_today: formatLocalDate(new Date())
           });
           row.dayEntries[dateKey] = created;
@@ -320,20 +325,29 @@ export default function Dashboard() {
   };
 
   const handleAddRow = () => {
-    if (!newRowProject || !newRowTask.trim()) {
-      setError('Project and Task are required');
+    if (!newRowProject) {
+      setError('Project is required');
+      return;
+    }
+    if (!newRowRequester.trim()) {
+      setError('Requester name is required.');
+      return;
+    }
+    if (!newRowTask.trim()) {
+      setError('Task is required');
       return;
     }
 
-    const key = `${newRowProject.code}||${newRowProject.name}||${newRowTask.trim()}`;
-    if (weeklyRows.some(r => `${r.projectCode}||${r.projectName}||${r.task}` === key)) {
-      setError('This project and task combination already exists in the grid');
+    const key = `${newRowProject.code}||${newRowProject.name}||${newRowRequester.trim()}||${newRowTask.trim()}`;
+    if (weeklyRows.some(r => `${r.projectCode}||${r.projectName}||${r.requester}||${r.task}` === key)) {
+      setError('This project, requester, and task combination already exists in the grid');
       return;
     }
 
     const newRow: WeeklyRow = {
       projectCode: newRowProject.code,
       projectName: newRowProject.name,
+      requester: newRowRequester.trim(),
       task: newRowTask.trim(),
       projectId: newRowProject.id,
       dayEntries: {},
@@ -347,6 +361,7 @@ export default function Dashboard() {
     // Reset add row state
     setNewRowProject(null);
     setNewRowTask('');
+    setNewRowRequester('');
     setProjectSearch('');
     setShowAddRow(false);
     setError(null);
@@ -486,6 +501,7 @@ export default function Dashboard() {
                 <tr className="bg-slate-50/80">
                   <th className="px-2 py-2 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[80px]">Project Code</th>
                   <th className="px-2 py-2 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[120px]">Project Name</th>
+                  <th className="px-2 py-2 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[120px]">Requester</th>
                   <th className="px-2 py-2 text-left font-bold text-slate-600 border-b border-slate-100 min-w-[140px]">Task performed</th>
                   {weekDates.map((date) => (
                     <th key={date.toISOString()} className="px-1 py-2 text-center font-bold text-slate-600 border-b border-slate-100 min-w-[55px]">
@@ -500,7 +516,7 @@ export default function Dashboard() {
               <tbody className="divide-y divide-slate-100/50">
                 {totalRows === 0 ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-12 text-center text-slate-400 italic">
+                    <td colSpan={13} className="px-4 py-12 text-center text-slate-400 italic">
                       No rows added for this week. Click "Add Row" to start logging.
                     </td>
                   </tr>
@@ -508,9 +524,10 @@ export default function Dashboard() {
                   paginatedRows.map((row, pIdx) => {
                     const rowIdx = startIndex + pIdx;
                     return (
-                      <tr key={`${row.projectCode}-${row.task}-${rowIdx}`} className="hover:bg-slate-50/40 transition">
+                      <tr key={`${row.projectCode}-${row.requester}-${row.task}-${rowIdx}`} className="hover:bg-slate-50/40 transition">
                         <td className="px-2 py-2 text-slate-700 font-medium">{row.projectCode}</td>
                         <td className="px-2 py-2 text-slate-600 text-xs truncate max-w-[120px]" title={row.projectName}>{row.projectName}</td>
+                        <td className="px-2 py-2 text-slate-600 text-xs truncate max-w-[120px]" title={row.requester}>{row.requester}</td>
                         <td className="px-2 py-2 text-slate-600 group align-top">
                           <span className="block whitespace-pre-line break-words max-w-[140px] text-xs" title={row.task}>{row.task}</span>
                         </td>
@@ -566,7 +583,7 @@ export default function Dashboard() {
               {totalRows > 0 && (
                 <tfoot className="bg-slate-50/50">
                   <tr className="font-bold border-t-2 border-slate-200">
-                    <td className="px-2 py-4 text-slate-800" colSpan={3}>Totals</td>
+                    <td className="px-2 py-4 text-slate-800" colSpan={4}>Totals</td>
                     {dailyTotals.map((total, idx) => (
                       <td key={idx} className="px-1 py-4 text-center text-blue-700">
                         {total > 0 ? total.toFixed(1) : '-'}
@@ -694,6 +711,18 @@ export default function Dashboard() {
                       ))}
                     </div>
                   )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Requester</label>
+                  <input
+                    type="text"
+                    value={newRowRequester}
+                    onChange={(e) => setNewRowRequester(e.target.value)}
+                    placeholder="Enter the name of the person who requested this work."
+                    className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/50"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Enter the name of the person who requested this work.</p>
                 </div>
 
                 <div>

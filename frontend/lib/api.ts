@@ -84,6 +84,7 @@ export interface WorkEntry {
   client_name: string | null;
   work_date: string;
   hours_worked: number;
+  requester: string | null;
   description: string;
   created_at: string;
   updated_at: string;
@@ -131,6 +132,7 @@ export interface ClientInvoiceRow {
   net_billable: number;
   task_performed: string;
   is_invoice_override: boolean;
+  requester?: string | null;
 }
 
 export interface ClientInvoiceProjectTotal {
@@ -201,6 +203,7 @@ export interface EmployeePayableRow {
   task_performed: string;
   is_paid?: boolean;
   is_non_billable?: boolean;
+  requester?: string | null;
 }
 
 export interface EmployeePayableTotal {
@@ -397,6 +400,7 @@ export const employeeApi = {
     client_today?: string;
     hours_worked: number;
     description: string;
+    requester: string;
   }): Promise<WorkEntry> => {
     const response = await api.post('/add-work', workData);
     return response.data;

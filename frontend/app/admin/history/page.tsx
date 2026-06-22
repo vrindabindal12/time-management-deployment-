@@ -31,6 +31,7 @@ export default function AdminHistory() {
     project_name: '',
     work_date: '',
     hours_worked: '',
+    requester: '',
     description: ''
   });
   
@@ -167,6 +168,7 @@ export default function AdminHistory() {
       project_name: entry.project_name,
       work_date: entry.work_date,
       hours_worked: entry.hours_worked.toString(),
+      requester: entry.requester || '',
       description: entry.description || ''
     });
     setShowEditModal(true);
@@ -279,6 +281,7 @@ export default function AdminHistory() {
           'Date',
           'Employee',
           'Project',
+          'Requester',
           'Hours',
           'Description',
           'Status',
@@ -289,13 +292,14 @@ export default function AdminHistory() {
             formatDate(entry.work_date),
             entry.employee_name || '-',
             entry.project_name || '-',
+            entry.requester || 'Not recorded',
             Number(entry.hours_worked || 0).toFixed(2),
             entry.description || '',
             entry.updated_by_admin ? 'Admin Edited' : 'Original',
           ]);
         });
         rows.push([]);
-        rows.push(['Total Hours', '', '', Number(workData.total_hours || 0).toFixed(2), '', '']);
+        rows.push(['Total Hours', '', '', '', Number(workData.total_hours || 0).toFixed(2), '', '']);
 
         downloadCsvFile('all_employees_work_history.csv', rows);
       } else {
@@ -439,10 +443,11 @@ export default function AdminHistory() {
                       <th className="w-[10%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Employee</th>
                     )}
                     <th className="w-[9%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Project</th>
-                    <th className="w-[10%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Code</th>
+                    <th className="w-[9%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Code</th>
                     <th className="w-[8%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Client</th>
-                    <th className="w-[7%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Hours</th>
-                    <th className="w-[28%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Description</th>
+                    <th className="w-[9%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Requester</th>
+                    <th className="w-[6%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Hours</th>
+                    <th className="w-[21%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Description</th>
                     <th className="w-[13%] px-2 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Status</th>
                     <th className="w-[7%] px-2 py-2.5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em]">Actions</th>
                   </tr>
@@ -450,7 +455,7 @@ export default function AdminHistory() {
                 <tbody>
                   {totalRecords === 0 ? (
                     <tr>
-                      <td colSpan={selectedEmployee === 'ALL' ? 9 : 8} className="px-5 py-16 text-center">
+                      <td colSpan={selectedEmployee === 'ALL' ? 10 : 9} className="px-5 py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-slate-400">
                           <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                             <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
@@ -509,6 +514,11 @@ export default function AdminHistory() {
                           <td className="px-2 py-2">
                             <span className="text-xs text-slate-600 break-words" title={entry.client_name || '—'}>
                               {entry.client_name || '—'}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2">
+                            <span className="text-xs text-slate-600 break-words" title={entry.requester || 'Not recorded'}>
+                              {entry.requester || 'Not recorded'}
                             </span>
                           </td>
                           <td className="px-2 py-2">
@@ -646,6 +656,12 @@ export default function AdminHistory() {
                       onChange={(e) => setEditForm({...editForm, hours_worked: e.target.value})}
                       className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.12em] mb-1.5">Requester</label>
+                  <div className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 text-sm text-slate-600">
+                    {editForm.requester || 'Not recorded'}
                   </div>
                 </div>
                 <div>

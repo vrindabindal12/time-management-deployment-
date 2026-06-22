@@ -38,8 +38,13 @@ export default function Header() {
     return null;
   }
 
-  const isBoth = isBothRole();
-  const isAdminUser = isAdmin();
+  const isBoth = user
+    ? (user.role === 'both' || user.role === 'admin' || user.role === 'superadmin' || user.is_admin)
+    : false;
+
+  const isAdminUser = user
+    ? (isBoth ? activeRole === 'admin' : (user.role === 'admin' || user.role === 'superadmin' || user.is_admin))
+    : false;
 
   const handleRoleSwitch = (role: 'admin' | 'employee') => {
     setActiveRole(role);

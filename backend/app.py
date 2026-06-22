@@ -290,6 +290,7 @@ class Punch(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by_admin = db.Column(db.Boolean, default=False)
     is_paid = db.Column(db.Boolean, default=False)  # New field for payables tracking
+    requester = db.Column(db.String(255), nullable=True)
     project = db.relationship('Project', backref='punches', lazy=True)
 
     def to_dict(self):
@@ -307,6 +308,7 @@ class Punch(db.Model):
             'invoice_discount': float(self.invoice_discount) if self.invoice_discount is not None else None,
             'payable_rate': float(self.payable_rate) if self.payable_rate is not None else None,
             'payable_designation': self.payable_designation,
+            'requester': self.requester,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
@@ -693,6 +695,7 @@ def build_export_rows(employee, work_entries):
             'Project Name': entry.project_name,
             'Project Code': entry.project_code or '',
             'Client Name': entry.project.client.name if entry.project else '',
+            'Requester': entry.requester or 'Not recorded',
             'Work Date': entry.work_date.isoformat() if entry.work_date else '',
             'Hours Worked': round(entry.hours_worked, 2),
             'Description': entry.description or '',
@@ -708,7 +711,7 @@ def create_csv_response(filename, rows):
     output = io.StringIO()
     fieldnames = [
         'ID', 'Employee Name', 'Employee Email', 'Project Name', 'Project Code', 'Client Name',
-        'Work Date', 'Hours Worked', 'Description', 'Updated By Admin', 'Payment Status',
+        'Requester', 'Work Date', 'Hours Worked', 'Description', 'Updated By Admin', 'Payment Status',
         'Created At', 'Updated At'
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -735,7 +738,7 @@ def create_excel_response(filename, rows):
 
     headers = [
         'ID', 'Employee Name', 'Employee Email', 'Project Name', 'Project Code', 'Client Name',
-        'Work Date', 'Hours Worked', 'Description', 'Updated By Admin', 'Payment Status',
+        'Requester', 'Work Date', 'Hours Worked', 'Description', 'Updated By Admin', 'Payment Status',
         'Created At', 'Updated At'
     ]
     worksheet.append(headers)
@@ -1873,7 +1876,6 @@ def add_work(current_user):
     project_code = (data.get('project_code') or '').strip()
     project_name = (data.get('project_name') or '').strip()
     description = (data.get('description') or '').strip()
-    
     # Determine how to get project info
     project_id = None
     if project_code:
@@ -1885,11 +1887,41 @@ def add_work(current_user):
         project_id = project.id
     elif not project_name:
         return jsonify({'error': 'Either project_name or project_code is required'}), 400
-    
+
+    # Determine target employee ID
+    employee_id = current_user.id
+    if current_user.is_admin and 'employee_id' in data:
+        try:
+            employee_id = int(data['employee_id'])
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid employee_id format'}), 400
+
+    target_emp = current_user
+    if employee_id != current_user.id:
+        target_emp = get_query(Employee, current_user).filter_by(id=employee_id).first()
+        if not target_emp:
+            return jsonify({'error': 'Employee not found'}), 404
+
     # Validate required fields
     if not data.get('hours_worked') or not data.get('work_date') or not description:
         return jsonify({'error': 'Description, hours worked, and work date are required'}), 400
     
+    # Requester validation based on role and target action
+    requester = (data.get('requester') or '').strip()
+    is_personal_admin_entry = current_user.is_admin and employee_id == current_user.id
+    
+    if is_personal_admin_entry:
+        if requester:
+            if len(requester) > 255:
+                return jsonify({'error': 'Requester name must be 255 characters or less.'}), 400
+        else:
+            requester = None
+    else:
+        if not requester:
+            return jsonify({'error': 'Requester name is required.'}), 400
+        if len(requester) > 255:
+            return jsonify({'error': 'Requester name must be 255 characters or less.'}), 400
+
     try:
         hours_worked = float(data['hours_worked'])
         if hours_worked <= 0 or hours_worked > 24:
@@ -1919,17 +1951,18 @@ def add_work(current_user):
     if work_date < oldest_allowed or work_date > today:
         return jsonify({'error': 'Work date must be within the last 14 days (including today)'}), 400
     
-    # Employee can only add work for themselves
+    # Create the time entry
     work_entry = Punch(
         organization_id=current_user.organization_id,
-        employee_id=current_user.id,
+        employee_id=employee_id,
         project_name=project_name,
         project_code=project_code if project_code else None,
         project_id=project_id,
         work_date=work_date,
         hours_worked=hours_worked,
+        requester=requester,
         description=description,
-        updated_by_admin=False
+        updated_by_admin=current_user.is_admin
     )
     
     # Auto-populate payable values based on date-aware compensation rules.
@@ -1938,7 +1971,7 @@ def add_work(current_user):
         work_entry.payable_rate = 0.0
         work_entry.payable_designation = 'Non-Billable'
     else:
-        resolved_rate, resolved_designation = get_employee_compensation_for_date(current_user, work_date)
+        resolved_rate, resolved_designation = get_employee_compensation_for_date(target_emp, work_date)
         work_entry.payable_rate = resolved_rate
         work_entry.payable_designation = resolved_designation
     
@@ -2051,6 +2084,15 @@ def edit_work(current_user, work_id):
         # if not description and work_entry.hours_worked > 0:
         #    return jsonify({'error': 'Description is required'}), 400
         work_entry.description = description
+    
+    if 'requester' in data:
+        if not current_user.is_admin:
+            requester = (data.get('requester') or '').strip()
+            if not requester:
+                return jsonify({'error': 'Requester name is required.'}), 400
+            if len(requester) > 255:
+                return jsonify({'error': 'Requester name must be 255 characters or less.'}), 400
+            work_entry.requester = requester
     
     if current_user.is_admin:
         work_entry.updated_by_admin = True
@@ -2399,7 +2441,8 @@ def _build_client_invoice_data(client, start_date, end_date):
             'gross_billable': gross_billable,
             'net_billable': net_billable,
             'task_performed': punch.description or '',
-            'is_invoice_override': False
+            'is_invoice_override': False,
+            'requester': punch.requester or 'Not recorded',
         })
 
     rows.sort(key=lambda r: (r['work_date'] or '', r['project_code'] or '', r['employee_name'] or ''))
@@ -3182,6 +3225,7 @@ def get_employee_payables_report(current_user):
             'task_performed': punch.description or '',
             'is_paid': punch.is_paid,
             'is_non_billable': non_billable,
+            'requester': punch.requester or 'Not recorded',
         })
 
     employee_totals = list(employee_totals_map.values())

@@ -1358,6 +1358,7 @@ export default function AdminDashboard() {
       'Employee',
       'Level',
       'Project Name',
+      'Requester',
       'Date',
       'Gross Rate',
       'Project Discount (%)',
@@ -1374,6 +1375,7 @@ export default function AdminDashboard() {
         row.employee_name,
         row.employee_designation,
         row.project_name,
+        row.requester || 'Not recorded',
         row.work_date,
         row.isExpense ? '-' : row.gross_rate.toFixed(2),
         row.isExpense ? '-' : row.discount.toFixed(2),
@@ -1404,6 +1406,7 @@ export default function AdminDashboard() {
       'Employee Code',
       'Level',
       'Project Name',
+      'Requester',
       'Date',
       'Rate',
       'Hours',
@@ -1418,6 +1421,7 @@ export default function AdminDashboard() {
         row.employee_code || '',
         row.employee_designation,
         row.project_name,
+        row.requester || 'Not recorded',
         row.work_date,
         row.rate.toFixed(2),
         row.hours.toFixed(2),
@@ -3005,6 +3009,7 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Employee</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Level</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Name</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Requester</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Date</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Gross Rate</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Discount</th>
@@ -3018,7 +3023,7 @@ export default function AdminDashboard() {
                     <tbody className="divide-y divide-slate-100">
                       {filteredInvoiceRows.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
+                          <td className="px-4 py-6 text-center text-slate-500" colSpan={12}>
                             No invoice entries found for the selected filters
                           </td>
                         </tr>
@@ -3036,6 +3041,7 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
                             <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.requester || 'Not recorded'}</td>
                             <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
                             <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : row.gross_rate.toFixed(2)}</td>
                             <td className="px-4 py-3 text-slate-700">{row.isExpense ? '-' : `${row.discount.toFixed(2)}%`}</td>
@@ -3281,6 +3287,7 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Name</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Level</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Project Name</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Requester</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Date</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Rate</th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600 uppercase tracking-[0.12em]">Hours</th>
@@ -3292,7 +3299,7 @@ export default function AdminDashboard() {
                     <tbody className="divide-y divide-slate-100">
                       {filteredPayablesRows.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
+                          <td className="px-4 py-6 text-center text-slate-500" colSpan={12}>
                             No payable entries found for the selected filters
                           </td>
                         </tr>
@@ -3325,6 +3332,7 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-slate-700">{row.employee_name}</td>
                             <td className="px-4 py-3 text-slate-700">{row.employee_designation}</td>
                             <td className="px-4 py-3 text-slate-700">{row.project_name}</td>
+                            <td className="px-4 py-3 text-slate-700">{row.requester || 'Not recorded'}</td>
                             <td className="px-4 py-3 text-slate-700">{row.work_date}</td>
                             <td className="px-4 py-3">
                               {row.is_non_billable ? (
