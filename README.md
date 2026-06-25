@@ -62,21 +62,35 @@ To prevent retroactive editing of financial records after billing cycles start:
 * Dates older than 14 days or in the future are automatically set to read-only/disabled on the grid inputs.
 * This policy is strictly validated on the frontend UI and enforced at the database layer in the Flask REST API.
 
+### 4. Secure Password Reset Flow
+To protect user accounts and prevent credential exploitation:
+* **Token Hashing:** Password reset requests generate a cryptographically secure random token using `secrets.token_urlsafe(32)`. The database only stores a SHA-256 hash of this token to prevent database leak vulnerabilities.
+* **Expiration:** Reset links contain the raw token, which expires in 30 minutes.
+* **Brute Force Defense:** The endpoint is rate-limited using a dual key configuration (remote IP address and lowercase email address).
+* **Information Leak Prevention:** The API returns a generic success message regardless of whether the email address exists in the system.
+
+### 5. Automated Welcome Email & Unified Access (Role Merging)
+To simplify onboarding while maintaining strict security:
+* **Account Setup:** When an Admin or Employee account is created, the system automatically commits the profile transaction and sends a welcome email containing a 30-minute expiring secure setup link.
+* **Email Uniqueness:** Uniqueness is enforced at the database level using a unique index on the lowercased email field.
+* **Role Merging:** Instead of creating duplicate user records for different roles, the system detects if the email already exists and merges the roles (e.g. upgrading an Employee to a combined `both` role status) and suppresses sending duplicate welcome emails.
+* **Resend Facility:** Authorized administrators can invalidate previous credentials and resend setup invites with fresh setup tokens.
+
 ---
 
 ## User Roles & Capabilities
 
-### 👑 Superadmin
+### Superadmin
 * Handles global configuration.
 * Manages multi-tenant organizations, edits branding/logos, and provisions new organization accounts.
 
-### 💼 Admin (Management & Operations)
+### Admin (Management & Operations)
 * **Onboarding & HR:** Creates employee accounts, updates active designations, and programs promotional hourly base rate timelines.
 * **Client & Portfolio Management:** Creates clients, configures projects, associates service lines, and sets project-specific hourly billing sheets.
 * **Billing Reports:** Generates Client Invoice Reports with customizable discounts, reviews worked hours, and exports professional PDF invoices or Excel summaries.
 * **Payables Review:** Reviews the Employee Payables Report, overrides individual work rates, processes payment approvals (paid ticks), and applies general non-billable rates for internal work.
 
-### 👥 Employee (Timesheet Logging)
+### Employee (Timesheet Logging)
 * Logs daily project hours on a simple, responsive **weekly timesheet grid**.
 * Auto-fills lines based on active projects and tasks carried over from the previous week.
 * Logs project-related business expenses (Travel, Food, Lodging, etc.) via the **Expenses Grid**.
