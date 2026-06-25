@@ -148,6 +148,22 @@ def handle_integrity_error(e):
 
 limiter = Limiter(app=app, key_func=get_remote_address, storage_uri='memory://')
 
+from flask_limiter import RateLimitExceeded
+
+@app.errorhandler(RateLimitExceeded)
+def handle_rate_limit_exceeded(e):
+    return jsonify({'error': 'Too many requests. Please try again later.'}), 429
+
+def forgot_password_email_key():
+    try:
+        data = request.get_json(silent=True) or {}
+        email = (data.get('email') or '').lower().strip()
+        if email:
+            return f"forgot_pwd:{email}"
+    except Exception:
+        pass
+    return get_remote_address()
+
 # Models
 def get_query(model, current_user=None, include_archived=False):
     query = model.query
@@ -220,6 +236,8 @@ class Employee(db.Model):
     profile_photo = db.Column(db.Text, nullable=True)
     password_reset_token = db.Column(db.String(100), nullable=True)
     password_reset_expires = db.Column(db.DateTime, nullable=True)
+    reset_password_token_hash = db.Column(db.String(64), nullable=True)
+    reset_password_expires_at = db.Column(db.DateTime, nullable=True)
     punches = db.relationship('Punch', backref='employee', lazy=True)
 
     def generate_password_reset_token(self):
@@ -589,8 +607,7 @@ Time Tracking System Team
         </a>
     </p>
     <p><strong>Important:</strong> This link will expire in 24 hours.</p>
-    <p>If the button doesn't work, copy and paste this link into your browser:</p>
-    <p><a href="{set_password_url}">{set_password_url}</a></p>
+   
     <br>
     <p>Best regards,<br>Time Tracking System Team</p>
 </body>
@@ -614,7 +631,7 @@ A password reset was requested for your account.
 Please click the link below to reset your password:
 {reset_url}
 
-This link will expire in 24 hours.
+This link will expire in 30 minutes.
 
 If you did not request a password reset, please ignore this email.
 
@@ -633,9 +650,8 @@ Time Tracking System Team
             Reset Password
         </a>
     </p>
-    <p><strong>Important:</strong> This link will expire in 24 hours.</p>
-    <p>If the button doesn't work, copy and paste this link into your browser:</p>
-    <p><a href="{reset_url}">{reset_url}</a></p>
+    <p><strong>Important:</strong> This link will expire in 30 minutes.</p>
+   
     <p>If you did not request this, please ignore this email.</p>
     <br>
     <p>Best regards,<br>Time Tracking System Team</p>
@@ -861,6 +877,26 @@ def ensure_password_reset_schema():
         db.session.commit()
     else:
         for col, col_type in [('password_reset_token', 'VARCHAR(100)'), ('password_reset_expires', 'TIMESTAMP')]:
+            try:
+                db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {col} {col_type}"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+
+def ensure_forgot_password_hash_schema():
+    """Add reset_password_token_hash/expires_at columns for existing databases."""
+    if DATABASE_URL.startswith('sqlite'):
+        existing = {
+            row[1]
+            for row in db.session.execute(text("PRAGMA table_info(employee)")).fetchall()
+        }
+        for col, col_type in [('reset_password_token_hash', 'TEXT'), ('reset_password_expires_at', 'DATETIME')]:
+            if col not in existing:
+                db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {col} {col_type}"))
+        db.session.commit()
+    else:
+        for col, col_type in [('reset_password_token_hash', 'VARCHAR(64)'), ('reset_password_expires_at', 'TIMESTAMP')]:
             try:
                 db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {col} {col_type}"))
                 db.session.commit()
@@ -1463,6 +1499,7 @@ if not os.environ.get('VERCEL'):
             ensure_employee_schema()
             ensure_role_schema()
             ensure_password_reset_schema()
+            ensure_forgot_password_hash_schema()
             ensure_employee_codes()
             ensure_punch_invoice_schema()
             ensure_project_rate_schema()
@@ -1627,50 +1664,84 @@ def login():
         'employee': employee.to_dict()
     }), 200
 
+@app.route('/api/auth/forgot-password', methods=['POST'])
 @app.route('/api/forgot-password', methods=['POST'])
-@limiter.limit("5 per minute")
+@limiter.limit("3 per hour", key_func=get_remote_address)
+@limiter.limit("3 per hour", key_func=forgot_password_email_key)
 def forgot_password():
+    import hashlib
     data = request.json or {}
     email = (data.get('email') or '').lower().strip()
     if not email:
         return jsonify({'error': 'Email is required'}), 400
 
     employee = Employee.query.filter_by(email=email).first()
-    # Always return success to avoid user enumeration
+    success_message = "If an account exists with this email, a password reset link has been sent."
+    
     if employee:
-        token = employee.generate_password_reset_token()
+        # Generate secure random token
+        raw_token = secrets.token_urlsafe(32)
+        # Hash token before storing it
+        hashed_token = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+        
+        employee.reset_password_token_hash = hashed_token
+        # Set token expiry to 30 minutes
+        employee.reset_password_expires_at = datetime.utcnow() + timedelta(minutes=30)
         db.session.commit()
-        send_password_reset_email(employee, token)
+        
+        # Send password reset email with raw token
+        send_password_reset_email(employee, raw_token)
 
-    return jsonify({'message': 'If that email exists in our system, a reset link has been sent.'}), 200
+    return jsonify({'message': success_message}), 200
 
 
+@app.route('/api/auth/reset-password', methods=['POST'])
 @app.route('/api/reset-password', methods=['POST'])
 def reset_password():
+    import hashlib
     data = request.json or {}
-    token = (data.get('token') or '').strip()
+    raw_token = (data.get('token') or '').strip()
     new_password = data.get('new_password') or ''
 
-    if not token or not new_password:
+    if not raw_token or not new_password:
         return jsonify({'error': 'Token and new password are required'}), 400
 
     pwd_error = validate_password_strength(new_password)
     if pwd_error:
         return jsonify({'error': pwd_error}), 400
 
-    employee = Employee.query.filter_by(password_reset_token=token).first()
-    if not employee:
-        return jsonify({'error': 'Invalid or expired reset token'}), 400
+    # Hash incoming token to match reset_password_token_hash
+    token_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
 
-    if employee.password_reset_expires < datetime.utcnow():
-        return jsonify({'error': 'Reset token has expired. Please request a new one.'}), 400
+    # 1. Look up by new hashed token
+    employee = Employee.query.filter_by(reset_password_token_hash=token_hash).first()
+    if employee:
+        if not employee.reset_password_expires_at or employee.reset_password_expires_at < datetime.utcnow():
+            return jsonify({'error': 'Reset token has expired. Please request a new one.'}), 400
+        
+        # Update user password
+        employee.set_password(new_password)
+        # Clear reset token and expiry after successful reset
+        employee.reset_password_token_hash = None
+        employee.reset_password_expires_at = None
+        db.session.commit()
+        return jsonify({'message': 'Password updated successfully. You can now log in.'}), 200
 
-    employee.set_password(new_password)
-    employee.password_reset_token = None
-    employee.password_reset_expires = None
-    db.session.commit()
+    # 2. Fall back to old plain text token (Welcome flow compatibility)
+    employee = Employee.query.filter_by(password_reset_token=raw_token).first()
+    if employee:
+        if not employee.password_reset_expires or employee.password_reset_expires < datetime.utcnow():
+            return jsonify({'error': 'Reset token has expired. Please request a new one.'}), 400
+        
+        # Update user password
+        employee.set_password(new_password)
+        # Clear welcome token
+        employee.password_reset_token = None
+        employee.password_reset_expires = None
+        db.session.commit()
+        return jsonify({'message': 'Password updated successfully. You can now log in.'}), 200
 
-    return jsonify({'message': 'Password updated successfully. You can now log in.'}), 200
+    return jsonify({'error': 'Invalid or expired reset token'}), 400
 
 @app.route('/api/work/<int:work_id>/payable-values', methods=['PUT'])
 @token_required
