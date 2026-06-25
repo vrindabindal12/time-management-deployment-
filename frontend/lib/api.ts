@@ -73,6 +73,13 @@ export interface Employee {
   has_set_password?: boolean;
   organization_name?: string | null;
   organization_logo?: string | null;
+  welcome_email_sent_at?: string | null;
+}
+
+export interface CreateEmployeeResponse {
+  welcome_email_sent: boolean;
+  employee: Employee;
+  message: string;
 }
 
 export interface WorkEntry {
@@ -347,7 +354,7 @@ export const employeeApi = {
     email: string,
     password: string,
     profileData: Partial<Employee> = {}
-  ): Promise<Employee> => {
+  ): Promise<CreateEmployeeResponse> => {
     const response = await api.post('/employees', { name, email, password, ...profileData });
     return response.data;
   },
@@ -372,7 +379,7 @@ export const employeeApi = {
     return response.data;
   },
 
-  resendWelcomeEmail: async (employeeId: number): Promise<{ message: string }> => {
+  resendWelcomeEmail: async (employeeId: number): Promise<{ message: string; welcome_email_sent: boolean }> => {
     const response = await api.post(`/employees/${employeeId}/resend-welcome`);
     return response.data;
   },

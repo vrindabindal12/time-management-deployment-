@@ -238,6 +238,7 @@ class Employee(db.Model):
     password_reset_expires = db.Column(db.DateTime, nullable=True)
     reset_password_token_hash = db.Column(db.String(64), nullable=True)
     reset_password_expires_at = db.Column(db.DateTime, nullable=True)
+    welcome_email_sent_at = db.Column(db.DateTime, nullable=True)
     punches = db.relationship('Punch', backref='employee', lazy=True)
 
     def generate_password_reset_token(self):
@@ -284,6 +285,7 @@ class Employee(db.Model):
             'profile_photo': self.profile_photo,
             'organization_name': self.organization.name if self.organization else None,
             'organization_logo': self.organization.logo if self.organization else None,
+            'welcome_email_sent_at': self.welcome_email_sent_at.isoformat() if self.welcome_email_sent_at else None,
             'has_set_password': self.password_reset_token is None
         }
 
@@ -573,49 +575,83 @@ def _send_email_async(app_instance, msg, recipient_email, email_type='email'):
     thread.start()
 
 
-def send_welcome_email(employee, reset_token):
-    set_password_url = f"{FRONTEND_URL}/reset-password?token={reset_token}&mode=welcome"
+def send_welcome_email(user, role, temporary_password=None):
+    import hashlib
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+    
+    user.reset_password_token_hash = token_hash
+    user.reset_password_expires_at = datetime.utcnow() + timedelta(minutes=30)
+    
+    try:
+        db.session.commit()
+    except Exception as db_exc:
+        db.session.rollback()
+        print(f"Failed to commit welcome email token: DB error")
+        return False
+        
+    set_password_url = f"{FRONTEND_URL}/reset-password?token={raw_token}"
+    
+    org_name = user.organization.name if (user.organization and user.organization.name) else None
+    org_suffix = f" for {org_name}" if org_name else ""
+    first_name = user.name.split()[0] if user.name else "User"
+    
+    if role == 'both':
+        message_role_part = f"Your Atlas account has been created with Administrator and Employee access{org_suffix}."
+        subject = "Welcome to Atlas — Set up your administrator account"
+    elif role == 'admin':
+        message_role_part = f"Your Administrator account has been created{org_suffix}."
+        subject = "Welcome to Atlas — Set up your administrator account"
+    else:  # employee
+        message_role_part = f"Your Employee account has been created{org_suffix}."
+        subject = "Welcome to Atlas — Set up your account"
+        
+    message_text = f"{message_role_part} Click the button below to set your password and access Atlas."
+    
+    body_text = f'''Welcome to Atlas, {first_name}!
 
-    msg = Message(
-        subject='Welcome to Time Tracking — Set Your Password',
-        recipients=[employee.email],
-        body=f'''Hello {employee.name},
+{message_text}
 
-Your account has been created on the Time Tracking System.
+Set your password: {set_password_url}
 
-Please click the link below to set your password and activate your account:
-{set_password_url}
+This secure link expires in 30 minutes. If you were not expecting this email, you can safely ignore it.
+'''
 
-This link will expire in 24 hours.
-
-If you did not expect this email, please contact your administrator.
-
-Best regards,
-Time Tracking System Team
-''',
-        html=f'''
+    body_html = f'''
 <html>
-<body>
-    <h2>Hello {employee.name},</h2>
-    <p>Your account has been created on the Time Tracking System.</p>
-    <p>Please click the button below to set your password:</p>
-    <p style="margin: 20px 0;">
-        <a href="{set_password_url}"
-           style="background-color: #4CAF50; color: white; padding: 12px 24px;
-                  text-decoration: none; border-radius: 4px; display: inline-block;">
-            Set Your Password
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <h2 style="color: #2c3e50;">Welcome to Atlas, {first_name}!</h2>
+    <p>{message_text}</p>
+    <p style="margin: 30px 0;">
+        <a href="{set_password_url}" 
+           style="background-color: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">
+            Set your password
         </a>
     </p>
-    <p><strong>Important:</strong> This link will expire in 24 hours.</p>
-   
-    <br>
-    <p>Best regards,<br>Time Tracking System Team</p>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+    <p style="font-size: 12px; color: #7f8c8d;">
+        This secure link expires in 30 minutes. If you were not expecting this email, you can safely ignore it.
+    </p>
 </body>
 </html>
 '''
-    )
 
-    _send_email_async(app, msg, employee.email, 'Welcome email')
+    msg = Message(
+        subject=subject,
+        recipients=[user.email],
+        sender=app.config.get('MAIL_DEFAULT_SENDER'),
+        body=body_text,
+        html=body_html
+    )
+    
+    try:
+        mail.send(msg)
+        user.welcome_email_sent_at = datetime.utcnow()
+        db.session.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to send welcome email: {str(e)}")
+        return False
 
 
 def send_password_reset_email(employee, reset_token):
@@ -885,23 +921,32 @@ def ensure_password_reset_schema():
 
 
 def ensure_forgot_password_hash_schema():
-    """Add reset_password_token_hash/expires_at columns for existing databases."""
+    """Add reset_password_token_hash/expires_at/welcome_email_sent_at columns and indexes."""
     if DATABASE_URL.startswith('sqlite'):
         existing = {
             row[1]
             for row in db.session.execute(text("PRAGMA table_info(employee)")).fetchall()
         }
-        for col, col_type in [('reset_password_token_hash', 'TEXT'), ('reset_password_expires_at', 'DATETIME')]:
+        for col, col_type in [('reset_password_token_hash', 'TEXT'), ('reset_password_expires_at', 'DATETIME'), ('welcome_email_sent_at', 'DATETIME')]:
             if col not in existing:
                 db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {col} {col_type}"))
+        try:
+            db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_email_lower ON employee(lower(email))"))
+        except Exception:
+            pass
         db.session.commit()
     else:
-        for col, col_type in [('reset_password_token_hash', 'VARCHAR(64)'), ('reset_password_expires_at', 'TIMESTAMP')]:
+        for col, col_type in [('reset_password_token_hash', 'VARCHAR(64)'), ('reset_password_expires_at', 'TIMESTAMP'), ('welcome_email_sent_at', 'TIMESTAMP')]:
             try:
                 db.session.execute(text(f"ALTER TABLE employee ADD COLUMN {col} {col_type}"))
                 db.session.commit()
             except Exception:
                 db.session.rollback()
+        try:
+            db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_email_lower ON employee(lower(email))"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
 
 def generate_employee_code(employee_id):
@@ -1806,6 +1851,15 @@ def get_employees(current_user):
     employees = get_query(Employee, current_user).all()
     return jsonify([emp.to_dict() for emp in employees])
 
+def merge_roles(existing_role, requested_role):
+    if not existing_role:
+        return requested_role
+    if existing_role == 'both' or requested_role == 'both':
+        return 'both'
+    if existing_role != requested_role:
+        return 'both'
+    return existing_role
+
 @app.route('/api/employees', methods=['POST'])
 @token_required
 @admin_required
@@ -1823,13 +1877,39 @@ def create_employee(current_user):
     if pwd_error:
         return jsonify({'error': pwd_error}), 400
     
-    existing_employee = get_query(Employee, current_user).filter_by(email=email).first()
-    if existing_employee:
-        return jsonify({'error': 'Employee with this email already exists'}), 400
-
     role = (data.get('role') or 'employee').strip().lower()
     if role not in ('admin', 'employee', 'both'):
         return jsonify({'error': 'Invalid role. Must be admin, employee, or both'}), 400
+
+    existing_employee = Employee.query.filter_by(email=email).first()
+    if existing_employee:
+        merged_role = merge_roles(existing_employee.role or 'employee', role)
+        existing_employee.role = merged_role
+        existing_employee.is_admin = (merged_role in ('admin', 'both'))
+        
+        # If organization is not set, set it
+        if not existing_employee.organization_id:
+            existing_employee.organization_id = current_user.organization_id
+            
+        db.session.commit()
+        
+        role_label = 'Administrator' if role == 'admin' else ('Employee' if role == 'employee' else 'Administrator and Employee')
+        
+        email_sent = False
+        if not existing_employee.welcome_email_sent_at:
+            email_sent = send_welcome_email(existing_employee, merged_role)
+            if email_sent:
+                message = f"Existing user updated with {role_label} access. A welcome email was sent to {existing_employee.email}."
+            else:
+                message = f"Existing user updated with {role_label} access, but the welcome email could not be sent. You can resend it from the user profile."
+        else:
+            message = f"Existing user updated with {role_label} access. No new welcome email was sent."
+            
+        return jsonify({
+            'welcome_email_sent': email_sent,
+            'employee': existing_employee.to_dict(),
+            'message': message
+        }), 200
 
     employee = Employee(
         name=data['name'],
@@ -1853,12 +1933,18 @@ def create_employee(current_user):
         employee.employee_code = generate_employee_code(employee.id)
         db.session.commit()
 
-    # Send welcome email with password-set link
-    reset_token = employee.generate_password_reset_token()
-    db.session.commit()
-    send_welcome_email(employee, reset_token)
+    email_sent = send_welcome_email(employee, role)
     
-    return jsonify(employee.to_dict()), 201
+    if email_sent:
+        msg = f"Profile created. A welcome email was sent to {employee.email}."
+    else:
+        msg = f"Profile created, but the welcome email could not be sent. You can resend it from the user profile."
+        
+    return jsonify({
+        'welcome_email_sent': email_sent,
+        'employee': employee.to_dict(),
+        'message': msg
+    }), 201
 
 @app.route('/api/employees/<int:employee_id>/role', methods=['PUT'])
 @token_required
@@ -4034,17 +4120,44 @@ def unhide_project(current_user, project_id):
         db.session.commit()
     return jsonify({'message': 'Project restored to dropdown'}), 200
 
+def handle_resend_welcome(current_user, user_id):
+    employee = get_query(Employee, current_user).filter_by(id=user_id).first()
+    if not employee:
+        return jsonify({'error': 'Employee not found'}), 404
+        
+    # Invalidate previous tokens
+    employee.password_reset_token = None
+    employee.password_reset_expires = None
+    employee.reset_password_token_hash = None
+    employee.reset_password_expires_at = None
+    db.session.commit()
+    
+    success = send_welcome_email(employee, employee.role or 'employee')
+    
+    if success:
+        return jsonify({
+            'welcome_email_sent': True,
+            'message': f'Welcome email sent successfully to {employee.email}.'
+        }), 200
+    else:
+        return jsonify({
+            'welcome_email_sent': False,
+            'error': 'Failed to send welcome email. Please try again later.'
+        }), 500
+
+@app.route('/api/users/<int:user_id>/resend-welcome-email', methods=['POST'])
+@token_required
+@admin_required
+@limiter.limit("5 per minute")
+def resend_user_welcome_email(current_user, user_id):
+    return handle_resend_welcome(current_user, user_id)
+
 @app.route('/api/employees/<int:employee_id>/resend-welcome', methods=['POST'])
 @token_required
 @admin_required
+@limiter.limit("5 per minute")
 def resend_employee_welcome(current_user, employee_id):
-    employee = get_query(Employee, current_user).filter_by(id=employee_id).first()
-    if not employee:
-        return jsonify({'error': 'Employee not found'}), 404
-    reset_token = employee.generate_password_reset_token()
-    db.session.commit()
-    send_welcome_email(employee, reset_token)
-    return jsonify({'message': f'Welcome email resent to {employee.email}'}), 200
+    return handle_resend_welcome(current_user, employee_id)
 
 
 

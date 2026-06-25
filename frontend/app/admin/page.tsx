@@ -479,14 +479,16 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      await employeeApi.createEmployee(employeeForm.name, employeeForm.email, employeeForm.password, {
+      const response = await employeeApi.createEmployee(employeeForm.name, employeeForm.email, employeeForm.password, {
         reporting_manager: toNullableText(employeeForm.reporting_manager),
       });
+      setSuccess(response.message);
       setEmployeeForm({ name: '', email: '', password: '', reporting_manager: '' });
       setShowAddEmployeeForm(false);
       await loadEmployees();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create employee');
+      clearError();
     } finally {
       setLoading(false);
     }
@@ -521,17 +523,8 @@ export default function AdminDashboard() {
       return;
     }
 
-    const emailExists = employees.some(
-      (emp) => emp.email.toLowerCase() === onboardingForm.email.trim().toLowerCase()
-    );
-    if (emailExists) {
-      setOnboardingEmailError('This email is already registered to an existing account.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      await employeeApi.createEmployee(
+      const response = await employeeApi.createEmployee(
         onboardingForm.name.trim(),
         onboardingForm.email.trim(),
         onboardingForm.password,
@@ -559,6 +552,7 @@ export default function AdminDashboard() {
         }
       );
 
+      setSuccess(response.message);
       setOnboardingForm(emptyOnboardingForm);
       setShowOnboardingForm(false);
       setOnboardingEmailError(null);
@@ -674,6 +668,7 @@ export default function AdminDashboard() {
     try {
       await employeeApi.resendWelcomeEmail(employeeId);
       setResendWelcomeSuccessId(employeeId);
+      setSuccess('Welcome email sent successfully.');
       setTimeout(() => setResendWelcomeSuccessId(null), 3000);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to resend welcome email');
@@ -1903,7 +1898,7 @@ export default function AdminDashboard() {
                               : 'bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200'
                               }`}
                           >
-                            {resendingWelcomeId === employee.id ? 'Sending...' : resendWelcomeSuccessId === employee.id ? '\u2713 Sent!' : 'Resend Welcome'}
+                            {resendingWelcomeId === employee.id ? 'Sending...' : resendWelcomeSuccessId === employee.id ? '\u2713 Sent!' : 'Resend welcome email'}
                           </button>
                         )}
                         <button
