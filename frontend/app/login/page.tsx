@@ -46,7 +46,7 @@ export default function Login() {
       <div className="mx-auto grid max-w-5xl grid-cols-1 items-stretch gap-6 lg:grid-cols-[1.05fr_1fr]">
         <section className="glass-panel rounded-3xl border border-white/70 p-7 sm:p-10">
           <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-700">Welcome Back</p>
-          <h1 className="mt-3 text-4xl font-black leading-tight text-slate-900 sm:text-5xl">Time Tracking</h1>
+          <h1 className="mt-3 text-4xl font-black leading-tight text-slate-900 sm:text-5xl">Atlas</h1>
           <p className="mt-4 max-w-md text-slate-600">
             Sign in to continue managing teams, projects, invoices, and daily work with one elegant workspace.
           </p>

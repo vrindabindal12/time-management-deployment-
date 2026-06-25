@@ -658,7 +658,7 @@ def send_password_reset_email(employee, reset_token):
     reset_url = f"{FRONTEND_URL}/reset-password?token={reset_token}"
 
     msg = Message(
-        subject='Reset Your Password - Time Tracking System',
+        subject='Reset Your Password - Atlas',
         recipients=[employee.email],
         body=f'''Hello {employee.name},
 
