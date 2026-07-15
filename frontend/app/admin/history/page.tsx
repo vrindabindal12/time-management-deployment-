@@ -236,7 +236,9 @@ export default function AdminHistory() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString();
   };
 
   const downloadCsvFile = (filename: string, rows: string[][]) => {

@@ -113,7 +113,9 @@ export default function MyHistory() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString();
   };
 
   const weekDates = Array.from({ length: 7 }, (_, idx) => {
