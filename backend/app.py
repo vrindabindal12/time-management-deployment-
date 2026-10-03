@@ -90,9 +90,11 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
 
 # Database configuration
 DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///' + os.path.join(basedir, 'timetracking.db'))
-# Fix Heroku PostgreSQL URL format
+# Fix Heroku / Render PostgreSQL URL format & driver resolution
 if DATABASE_URL.startswith('postgres://'):
-    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql+psycopg2://', 1)
+elif DATABASE_URL.startswith('postgresql://') and not DATABASE_URL.startswith('postgresql+'):
+    DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg2://', 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
