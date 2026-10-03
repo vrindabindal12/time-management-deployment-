@@ -328,7 +328,9 @@ export default function Expenses() {
   const isDateEditable = (date: Date) => {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
-    return d >= oldestAllowed && d <= today;
+    // Allow September 2026 (2026-09-01 to 2026-09-30) as well as the 14-day window
+    const isSeptember2026 = d >= new Date(2026, 8, 1) && d <= new Date(2026, 8, 30);
+    return (d >= oldestAllowed || isSeptember2026) && d <= today;
   };
 
   const dailyTotals = weekDates.map(date => {
@@ -574,7 +576,7 @@ export default function Expenses() {
           <div className="mt-6 flex flex-col md:flex-row justify-between items-start md:items-center text-xs text-slate-500 gap-3">
             <div className="flex flex-col gap-1 text-left">
               <p className="font-semibold text-slate-700">💡 Tip: Expenses are automatically included in client invoices (always billable).</p>
-              <p>* You can only edit entries for the last 14 days.</p>
+              <p>* You can edit entries for the last 14 days or September 2026.</p>
             </div>
             <p className="text-left md:text-right w-full md:w-auto">All amounts in $.</p>
           </div>

@@ -21,6 +21,7 @@ class AddWorkValidationTests(unittest.TestCase):
         self.client = self.app.test_client()
 
         with self.app.app_context():
+            backend_app.db.session.remove()
             backend_app.db.drop_all()
             backend_app.db.create_all()
 
@@ -33,6 +34,7 @@ class AddWorkValidationTests(unittest.TestCase):
             admin.set_password(backend_app.ADMIN_PASSWORD)
             backend_app.db.session.add(admin)
             backend_app.db.session.commit()
+            backend_app.db.session.remove()
 
         self.admin_headers = self._login(backend_app.ADMIN_EMAIL, backend_app.ADMIN_PASSWORD)
         self.auth_headers = self._register_and_login()
@@ -46,7 +48,8 @@ class AddWorkValidationTests(unittest.TestCase):
         return {'Authorization': f'Bearer {token}'}
 
     def _register_and_login(self):
-        email = f"user_{date.today().isoformat()}@test.local"
+        import uuid
+        email = f"user_{uuid.uuid4().hex}@test.local"
         register_response = self.client.post(
             '/api/employees',
             json={
@@ -57,8 +60,8 @@ class AddWorkValidationTests(unittest.TestCase):
             },
             headers=self.admin_headers
         )
-        print("REGISTER RESP:", register_response.status_code, register_response.data.decode('utf-8'))
-        self.employee_id = register_response.get_json()['id']
+        resp_json = register_response.get_json()
+        self.employee_id = resp_json['employee']['id'] if 'employee' in resp_json else resp_json['id']
 
         return self._login(email, 'Password123!')
 
@@ -196,6 +199,21 @@ class AddWorkValidationTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('hours', response.get_json()['error'].lower())
+
+    def test_september_2026_entry_allowed(self):
+        response = self.client.post(
+            '/api/add-work',
+            json={
+                'project_name': 'Alpha',
+                'work_date': '2026-09-05',
+                'hours_worked': 8,
+                'description': 'September work entry',
+                'requester': 'John Doe'
+            },
+            headers=self.auth_headers
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()['work_date'], '2026-09-05')
 
     def test_export_my_work_csv(self):
         self._add_work_entry()
@@ -433,6 +451,7 @@ class PromotionRatePayablesTests(unittest.TestCase):
         self.client = self.app.test_client()
 
         with self.app.app_context():
+            backend_app.db.session.remove()
             backend_app.db.drop_all()
             backend_app.db.create_all()
 
@@ -445,6 +464,7 @@ class PromotionRatePayablesTests(unittest.TestCase):
             admin.set_password(backend_app.ADMIN_PASSWORD)
             backend_app.db.session.add(admin)
             backend_app.db.session.commit()
+            backend_app.db.session.remove()
 
         self.admin_headers = self._login(backend_app.ADMIN_EMAIL, backend_app.ADMIN_PASSWORD)
 
@@ -464,7 +484,8 @@ class PromotionRatePayablesTests(unittest.TestCase):
         }
         create_resp = self.client.post('/api/employees', json=payload, headers=self.admin_headers)
         self.assertEqual(create_resp.status_code, 201)
-        employee = create_resp.get_json()
+        resp_data = create_resp.get_json()
+        employee = resp_data.get('employee', resp_data)
         return employee, self._login(email, 'Password123!')
 
     def _add_work(self, headers, work_date, hours=8.0):
