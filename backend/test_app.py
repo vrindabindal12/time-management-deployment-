@@ -12,6 +12,7 @@ os.environ.setdefault('ADMIN_PASSWORD', secrets.token_urlsafe(16))
 
 import app as backend_app
 backend_app.app.config['TESTING'] = True
+backend_app.app.config['MAIL_SUPPRESS_SEND'] = True
 backend_app.limiter.enabled = False
 
 
